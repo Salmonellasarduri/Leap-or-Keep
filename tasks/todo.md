@@ -247,3 +247,27 @@ SPEC.md v1.1 準拠の1ラン完走可能な index.html を、セルフプレイ
 
 ## Oracle gaps
 - 轢断ローラーの「誘い込み」が初見で通じるか、女王戦の手数圧の体感(オーナー実プレイ待ち)
+
+---
+
+# Checkpoint v0.9 — 方針転換フェーズA: なばて名義でWeb公開+船長診断+X共有(2026-06-12)
+
+オーナー決定: 公開名義=なばて(@nabaaatee)、リポジトリpublic可、診断は軽口系「どんな船長か」。
+戦略: 売るゲーム→コンテンツエンジン(記事→Web→診断カード→X→記事)。フェーズA=人間ループ完成。
+
+## 出荷物
+1. **Web公開**: リポジトリpublic化 + GitHub Pages(https://salmonellasarduri.github.io/Leap-or-Keep/)。アートWebP化 34.2MB→2.14MB(tools/compress-art.mjs、元PNGはtmp/art-png退避・台帳から再生成可)
+2. **モバイルパス**: 盤面をビューポート内に収めるセル可変化(--cell:min(72px,calc((100vw-84px)/5)))、iPhone13実寸で盤383px<390px・タップ動作・全要素可読を確認
+3. **船長診断(3軸8型)**: captainType()純関数+テレメトリ6種(kills/undo/chooseRest/route)。全型褒めベース・図星はデータ由来・レア度%(静的推計、計100%)・サブ称号5種(伝説/轢断魔/鉄の契約者/九死一生/無傷の帰還者)・型図鑑8種(META.types)
+4. **共有**: X Web Intent(140字+結果URL+#LeapOrKeep)/canvas 1200×675カードPNG保存/?r=ステートレス結果URL→タイトルに受信バナー(比較の連鎖)
+5. README刷新(プレイURL+なばて名義+各リンク)、SPEC §9.6追加
+
+## 検証
+- sim 258件PASS(診断15件: 8型判定網羅・軸組合せ2^3・レア度合計100・サブ称号・カウンター配線)
+- 実ブラウザ: 診断パネル表示(海賊型+称号4つ)・カードPNG生成365KB(tmp/share-card.png)・intent URL・日本語base64ラウンドトリップ・受信バナー、pageerrorゼロ
+- 撮影: tmp/shot-shindan.png(伝説+診断カード)、tmp/mob-battle.png(モバイル)
+
+## 残(フェーズB以降)
+- B: エージェント用インターフェース(MCPサーバ化)+イナンナのプレイ→記事
+- C: CF Workers動的OG画像(オーナーのCloudflareアカウント要)、ランキング+HMAC署名
+- レア度%を実プレイ分布で更新(現状は設計推計)

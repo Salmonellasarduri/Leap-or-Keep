@@ -3,7 +3,8 @@ name: qa-lenses
 description: "Use when designing verification for a change: choosing test cases, deciding what proof is sufficient, reviewing whether checks cover the real risks, or when /debugging needs lens selection. Provides black-box QA lenses (boundary, state transition, regression, etc.), oracle discipline, risk-based prioritization, and complexity budgets."
 metadata:
   version: 1.0.0
-  origin: "Artificial Personality .agents/commands/_shared.md の QA Artifact Chain / Black-Box QA Knowledge 節を抽出・適応"
+  origin: "Artificial Personality .agents/commands/_shared.md の QA Artifact Chain / Black-Box QA Knowledge 節を抽出・適応。内容は JSTQB 系の公知テスト技法（境界値/状態遷移/デシジョンテーブル）が土台"
+  inspired-by: "ゲノムちゃん(RNA4219) 氏の記事『AIにテストケースを書かせているだけではない: manual-bb-test-harness の説明』https://zenn.dev/rna4219/articles/0c51e22473e3c8 を読んで着想（ブラックボックスQA知見の skill 化・リリースゲート判定）。関連OSS: https://github.com/RNA4219/manual-bb-test-harness / quality-evidence-graph / code-to-gate（MIT）。語彙・実装は独自に書き起こしたもので逐語移植ではない"
 ---
 
 # qa-lenses — 検証設計の道具箱

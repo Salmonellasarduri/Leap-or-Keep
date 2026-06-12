@@ -459,6 +459,41 @@ function shoot(s, targetId){
 }
 
 {
+  // 船長診断(3軸8型): レジストリ網羅+判定+サブ称号+カウンター
+  const keys=Object.keys(LK.CAPTAIN_TYPES);
+  ok(keys.length===8, "8 captain types");
+  const combos=new Set(keys.map(k=>{const t=LK.CAPTAIN_TYPES[k];return `${t.f}${t.r}${t.c}`;}));
+  ok(combos.size===8, "axis combos exhaustive (2^3)");
+  ok(keys.every(k=>{const t=LK.CAPTAIN_TYPES[k];return t.name&&t.title&&t.praise&&t.weak&&t.rarity>0;}), "all types fully written");
+  const totalRarity=keys.reduce((s,k)=>s+LK.CAPTAIN_TYPES[k].rarity,0);
+  ok(totalRarity===100, "rarity sums to 100%", "sum="+totalRarity);
+
+  function fakeRun(over){
+    const s=LK.newRun(1);
+    Object.assign(s.run,{kills:10,physKills:0,routeTotal:4,routeDanger:0,contracts:[],deployed:[],
+      undoCount:0,chooseRest:0,zone:3,totalRounds:20},over);
+    return s;
+  }
+  ok(LK.captainType(fakeRun({})).id==="merchant", "merchant: 砲・堅実・即興");
+  ok(LK.captainType(fakeRun({physKills:5})).id==="brawler", "brawler: +物理");
+  ok(LK.captainType(fakeRun({routeDanger:4})).id==="gambler", "gambler: +危険ルート");
+  ok(LK.captainType(fakeRun({undoCount:3})).id==="surveyor", "surveyor: +熟慮");
+  ok(LK.captainType(fakeRun({physKills:5,routeDanger:4})).id==="pirate", "pirate: 物理+危険");
+  ok(LK.captainType(fakeRun({physKills:5,undoCount:3})).id==="engineer", "engineer: 物理+熟慮");
+  ok(LK.captainType(fakeRun({routeDanger:4,undoCount:3})).id==="sniper", "sniper: 危険+熟慮");
+  ok(LK.captainType(fakeRun({physKills:5,routeDanger:4,undoCount:3})).id==="hunter", "hunter: 全部盛り");
+  const s2=fakeRun({physKills:9,kills:12});
+  s2.run.bossKilled=true; s2.run.win=true; s2.run.contracts=["heavy","swarm","fragile"];
+  const ct=LK.captainType(s2);
+  ok(ct.subs.includes("👑伝説")&&ct.subs.includes("💥轢断魔")&&ct.subs.includes("☠鉄の契約者"), "sub titles stack", JSON.stringify(ct.subs));
+  ok(typeof ct.jab==="string"&&ct.jab.length>0, "data-driven jab generated");
+  // カウンター配線
+  const s3=LK.newRun(5);
+  LK.chooseRoute(s3,"danger"); LK.chooseRoute(s3,"safe");
+  ok(s3.run.routeTotal===2&&s3.run.routeDanger===1, "route counters wired");
+}
+
+{
   // 全カード×両面スモークテスト: 全アクション種が最低1回実行できることを機械検証(網羅QA)
   console.log("== all-cards smoke test ==");
   function paramsFor(s,unit,spec){

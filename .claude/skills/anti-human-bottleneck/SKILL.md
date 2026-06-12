@@ -5,6 +5,9 @@ disable-model-invocation: true
 metadata:
   author: nyosegawa (adapted for Leap-or-Keep)
   version: 1.1.0
+  origin: https://github.com/nyosegawa/skills/tree/main/skills/anti-human-bottleneck
+  origin-article: https://nyosegawa.com/posts/claude-code-verify-command/
+  license: MIT (https://github.com/nyosegawa/skills)
 ---
 
 # Anti-Human-Bottleneck

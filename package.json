@@ -17,7 +17,8 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "playwright": "^1.60.0"
+    "playwright": "^1.60.0",
+    "sharp": "^0.35.1"
   },
   "private": "true"
 }

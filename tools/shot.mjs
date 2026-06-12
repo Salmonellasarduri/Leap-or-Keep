@@ -88,6 +88,14 @@ const SCENARIOS = {
     S.run.shipHp=5;
     for(const e of LK.enemies(S.enc)) e.alive=false;
     LK.pump(S); H.afterClear(); render();`,
+  // 船長診断カード(なばて公開ループの主役)
+  shindan: `
+    H.begin(); H.pickShip("bellyroll"); H.confirmLoad(); H.dismissHints();
+    const S=lkDebug().S;
+    Object.assign(S.run,{kills:12, physKills:9, routeTotal:3, routeDanger:3, undoCount:1, chooseRest:0,
+      zone:5, physKills:9, bonusValue:4, bossKilled:true, contracts:["heavy","minefield","norepair"]});
+    S.run.cargo=["starmap","annihil"]; S.run.relicsSeen=["starmap","annihil"]; S.run.shipHp=4;
+    LK.doKeep(S); render();`,
   "summary-best": `
     H.begin(); H.pickShip("vagrants"); H.confirmLoad(); H.dismissHints();
     const S=lkDebug().S;

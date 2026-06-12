@@ -19,6 +19,18 @@
 - `game-design-essence` — 西村裕『ルールデザインノート』(オーナー提供PDF)のエッセンスを汎用化(2026-06-11)。非線形性≒ゲーム性/多脚構造/順序選好ループ/勝利モジュール4類型/ジレンマ監査チェックリスト。**他プロジェクトへコピー可能な自己完結スキル**
 - `qa-lenses` `anti-human-bottleneck` 等は下記マイグレーション由来
 
+## 外部由来スキルの出典・ライセンス（再配布時の帰属）
+
+このリポジトリを public 化する場合、以下は外部由来のため著作権表示の保持が必要（各 SKILL.md の metadata にも記載済）。
+
+| Skill | 作者 | 出典 | ライセンス |
+|---|---|---|---|
+| `anti-human-bottleneck` | 逆瀬川ちゃん (@gyakuse) | https://github.com/nyosegawa/skills / https://nyosegawa.com/posts/claude-code-verify-command/ | MIT |
+| `ui-ux-pro-max` | Next Level Builder | https://github.com/nextlevelbuilder/ui-ux-pro-max-skill | MIT (Copyright (c) 2024 Next Level Builder) |
+| `qa-lenses` | 自家製（発想元: ゲノムちゃん/RNA4219 氏の記事） | 発想元: https://zenn.dev/rna4219/articles/0c51e22473e3c8 （manual-bb-test-harness の解説記事）。AP `.agents/commands/_shared.md` で独自に書き起こした節を抽出。内容は JSTQB 系の公知テスト技法ベースで、RNA4219 の3リポジトリと照合済＝逐語コピーではない | 自家製（公知技法ベース、着想クレジット記載） |
+
+> public 化前 TODO: MIT 2件は LICENSE 全文の同梱が必須要件。各スキルディレクトリ直下に upstream の LICENSE を置くか、リポジトリ THIRD_PARTY_LICENSES.md に集約する。
+
 ## スキップしたもの(理由)
 
 - **コマンド群のうち /design /strategy /strategy_deep /reviewing /implement**: Fableのプランモード・組み込み /code-review・通常の実装フローで代替できるためスキップ(2026-06-11判断)。ゴール契約の考え方自体は autonomous-milestone-runner と qa-lenses に吸収済み
