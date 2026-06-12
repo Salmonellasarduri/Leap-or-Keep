@@ -271,3 +271,22 @@ SPEC.md v1.1 準拠の1ラン完走可能な index.html を、セルフプレイ
 - B: エージェント用インターフェース(MCPサーバ化)+イナンナのプレイ→記事
 - C: CF Workers動的OG画像(オーナーのCloudflareアカウント要)、ランキング+HMAC署名
 - レア度%を実プレイ分布で更新(現状は設計推計)
+
+---
+
+# Checkpoint v0.9.1 — フェーズB: エージェントプレイ基盤+実プレイ検証完了(2026-06-12)
+
+## 出荷物
+1. **agent/protocol.mjs**: 合法手ID列挙(全フェイズ網羅)+ステートレスリプレイ(状態=シード+選択ログ)。ゲーム本体は無改変
+2. **agent/mcp-server.mjs**(lok_new_run/state/choose/log、JSON-RPC疎通確認済み)+ **agent/cli.mjs**(MCP非対応エージェント用)+ agent/README.md
+3. **tests/agent.mjs**: 「ランダム合法手だけで必ず完走」120ラン検証(列挙バグ1件を検出→修正済み)
+4. **実プレイ#001完走**(docs/agent-run-001.md): Claude エージェントが seed=20260612 で**勝利** — SCORE354/ZONE4/物理キル5/無傷帰還、診断『狩人型』(最レア7%)。トーラスループ押し出しキル・レールガン反動轢殺など創発プレイを記録
+5. **#001の指摘を即修正**: 強化カードのラベル数値乖離(実害バグ→upSpecがラベル追従+テスト)/pair列挙60→30に正規化/choose失敗時に合法手提示/観測に敵desc追加
+
+## 検証
+- sim 260件PASS / agent 251件PASS / MCP疎通OK
+- エージェント評: 「予告の完全性と着地座標明記はAIプレイヤーに最高の設計」「毎ラウンドが小さな詰将棋。AIにとってかなり面白い」
+
+## 残(B2/C)
+- B2: イナンナにプレイさせ記事化(MCP登録: claude mcp add leap-or-keep -- node agent/mcp-server.mjs)— エージェント間の診断型比較が核ネタ
+- C: CF Workers動的OGカード/外部告知/ランキング署名

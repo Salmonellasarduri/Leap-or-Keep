@@ -1391,10 +1391,11 @@ function upSpec(spec, up, def, half){
   if(!up) return spec;
   if(def && def.upDefs && def.upDefs[half]) return {...def.upDefs[half], lost:def.upDefs[half].lost??spec.lost, upgraded:true};
   const s={...spec, upgraded:true};
-  if(s.kind==="ram") s.n+=1; // 突進=移動も威力もn(単値)
-  else if(s.dmg) s.dmg+=1;
-  else if(["heal","shield","move","brake_move","push","pull","pull_all"].includes(s.kind)) s.n+=1;
-  else if(s.range) s.range+=1;
+  // ラベルの数値も実数値に追従させる(エージェント実プレイ#001指摘: 表示「移動1」で実態2は実害バグ)
+  if(s.kind==="ram"){ s.n+=1; s.label=s.label.split(String(spec.n)).join(String(s.n)); } // 単値=全出現箇所
+  else if(s.dmg){ s.dmg+=1; s.label=s.label.replace(String(spec.dmg), String(s.dmg)); }
+  else if(["heal","shield","move","brake_move","push","pull","pull_all"].includes(s.kind)){ s.n+=1; s.label=s.label.replace(String(spec.n), String(s.n)); }
+  else if(s.range){ s.range+=1; s.label=s.label.replace("射程"+spec.range, "射程"+s.range); }
   return s;
 }
 function cardSpec(state, c, half){ const d=defOf(c); return upSpec(d[half], c.up, d, half); }

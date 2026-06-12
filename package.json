@@ -9,16 +9,20 @@
   },
   "scripts": {
     "test": "node tests/sim.mjs 200",
+    "test:agent": "node tests/agent.mjs",
+    "mcp": "node agent/mcp-server.mjs",
     "shot": "node tools/shot.mjs all",
     "serve": "node tools/server.mjs 8322"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "なばて (nabaaatee)",
+  "license": "UNLICENSED",
   "type": "commonjs",
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "playwright": "^1.60.0",
-    "sharp": "^0.35.1"
+    "sharp": "^0.35.1",
+    "zod": "^4.4.3"
   },
   "private": "true"
 }
