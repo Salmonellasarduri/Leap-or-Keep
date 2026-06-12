@@ -16,7 +16,7 @@
   },
   "keywords": [],
   "author": "なばて (nabaaatee)",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "commonjs",
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

@@ -29,7 +29,7 @@
 | `ui-ux-pro-max` | Next Level Builder | https://github.com/nextlevelbuilder/ui-ux-pro-max-skill | MIT (Copyright (c) 2024 Next Level Builder) |
 | `qa-lenses` | 自家製（発想元: ゲノムちゃん/RNA4219 氏の記事） | 発想元: https://zenn.dev/rna4219/articles/0c51e22473e3c8 （manual-bb-test-harness の解説記事）。AP `.agents/commands/_shared.md` で独自に書き起こした節を抽出。内容は JSTQB 系の公知テスト技法ベースで、RNA4219 の3リポジトリと照合済＝逐語コピーではない | 自家製（公知技法ベース、着想クレジット記載） |
 
-> public 化前 TODO: MIT 2件は LICENSE 全文の同梱が必須要件。各スキルディレクトリ直下に upstream の LICENSE を置くか、リポジトリ THIRD_PARTY_LICENSES.md に集約する。
+> ~~public 化前 TODO: MIT 2件は LICENSE 全文の同梱が必須要件~~ → **2026-06-13 対応済**: リポジトリ直下 `THIRD_PARTY_LICENSES.md` に両 MIT 全文（Copyright (c) 2026 Sakasegawa / Copyright (c) 2024 Next Level Builder、gh api で原文取得）を同梱。repo は v0.9 で既に public のため、このファイルのコミットを最優先で。
 
 ## スキップしたもの(理由)
 
