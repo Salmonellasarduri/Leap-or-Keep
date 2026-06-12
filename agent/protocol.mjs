@@ -80,6 +80,12 @@ export function legalChoices(s) {
   }
   if (s.screen === "loadout") {
     add("loadout_default", "出撃(ロードアウト自動: プール先頭6枚)");
+    // #002イナンナ指摘: 展開遺物がプール末尾に入り、デフォルト編成だと一生手札に来ない
+    const pool = LK.cardsIn(s, "pool");
+    if (pool.length > 6 && pool.some(c => c.relicId || c.up)) {
+      const fresh = [...pool].sort((a, b) => ((a.relicId ? 0 : 1) + (a.up ? 0 : .5)) - ((b.relicId ? 0 : 1) + (b.up ? 0 : .5))).slice(0, 6);
+      add(`loadout:${fresh.map(c => c.uid).join(",")}`, `出撃(遺物・強化カード優先: ${fresh.map(c => LK.defOf(c).name + (c.up ? "+" : "")).join("/")})`);
+    }
     return out;
   }
 
@@ -200,6 +206,21 @@ export function legalChoices(s) {
   return out;
 }
 
+// 強制手の自動進行: 合法手が1つしかない=判断が存在しない → 自動で適用(プレイ時間短縮の核)
+// 適用したIDの配列を返す(リプレイ用に必ずログへ保存すること)
+export function autoForward(s, max = 30) {
+  const applied = [];
+  for (let i = 0; i < max; i++) {
+    if (s.run.over) break;
+    const cs = legalChoices(s);
+    if (cs.length !== 1) break;
+    const r = applyChoice(s, cs[0].id);
+    if (!r.ok) break;
+    applied.push(cs[0].id);
+  }
+  return applied;
+}
+
 function kCombos(arr, k) {
   if (k <= 0) return [[]];
   const out = [];
@@ -280,8 +301,16 @@ export function observe(s) {
     return L.join("\n");
   }
   L.push(`ZONE ${run.zone}/5《${LK.ZONE_NAMES[run.zone - 1]}》第${run.encIdx + 1}戦域 / 旗艦HP${(enc && LK.unitById(enc, "ship")) ? LK.unitById(enc, "ship").hp : run.shipHp ?? "?"} / 残カード${LK.aliveCards(s).length}枚(=寿命) / カーゴ価値${LK.cargoValue(s)}`);
+  if (s.screen === "loadout") {
+    const pool = LK.cardsIn(s, "pool");
+    L.push("出撃前 — プール: " + pool.map(c => `${c.uid}=${LK.defOf(c).name}${c.up ? "+" : ""}${c.relicId ? "◆" : ""}`).join(" "));
+    L.push("(loadout:<uid6つカンマ区切り> で自由編成も可)");
+    return L.join("\n");
+  }
   if (s.screen !== "battle" || !enc) { L.push(`画面: ${s.screen}`); return L.join("\n"); }
-  L.push(`ラウンド${enc.round} フェイズ:${enc.phase}${enc.flareRow !== null && enc.flareRow !== undefined ? ` ☀フレア予告:y=${enc.flareRow}行が次R頭に1ダメ` : ""}`);
+  L.push(`ラウンド${enc.round} フェイズ:${enc.phase}${enc.flareRow !== null && enc.flareRow !== undefined ? ` ☀フレア予告:y=${enc.flareRow}行が次R頭に1ダメ` : ""}${LK.cardsIn(s, "hand").length <= 2 && enc.phase === "player" ? " ⚠手札残少 — 尽きると強制休息(1枚永久ロスト+そのラウンド無防備)" : ""}`);
+  if (enc.container && !enc.container.taken)
+    L.push(`箱=漂流コンテナ@(${enc.container.x},${enc.container.y}): ユニットが乗れば価値+2。⚠敵全滅で戦域即終了=回収はその前に`);
   // 盤面(x→右, y→下, トーラス=端はループ)
   const G = LK.CONFIG.GRID;
   const grid = Array.from({ length: G }, () => Array(G).fill("・"));

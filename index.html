@@ -2780,7 +2780,7 @@ function renderBattle(app){
     for(const g of ghosts) if(g.key===key) inner+=`<span class="dghost ${g.boom?"boom":""}" >${g.icon}<i class="darr">${g.ch}</i></span>`;
     if(enc.container && !enc.container.taken && enc.container.x===x && enc.container.y===y){
       inner+=`<span class="container-item">📦</span>`;
-      if(!cellTT.length) cellTT.push("📦 <b>漂流コンテナ</b>: ユニットが乗れば回収 — 売却価値+2(移動でもドリフトでも)");
+      if(!cellTT.length) cellTT.push("📦 <b>漂流コンテナ</b>: ユニットが乗れば回収 — 売却価値+2(移動でもドリフトでも)。<b>敵を全滅させる前に</b>踏むこと — 掃討完了と同時に戦域は終わる");
     }
     if(enc.well && enc.well.x===x && enc.well.y===y){
       cls+=" gravwell";

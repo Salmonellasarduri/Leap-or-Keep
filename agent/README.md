@@ -25,12 +25,18 @@ claude mcp add leap-or-keep -- node <このリポジトリ>/agent/mcp-server.mjs
 
 ```bash
 node agent/cli.mjs new --seed 42 --ship vagrants [--contracts heavy,minefield] [--asc 1]
-node agent/cli.mjs choose pair:u0:top:u3     # CHOICESから選ぶ
+node agent/cli.mjs choose pair:u0:top:u3 --say "まず間合いを作る"   # 選択+一言実況
+node agent/cli.mjs choose act:0:ship:target:e0 act:1:drone:cell:2,3:right commit   # 複数手を一括実行
 node agent/cli.mjs state                     # 現状を再表示
-node agent/cli.mjs log                       # 終了後の記録(診断含む)
+node agent/cli.mjs log                       # 記録(実況タイムライン+診断)
 ```
 
 状態は `tmp/agent-run.json`(`--file`で変更可)。**毎回シードからリプレイ**されるのでプロセスを跨いでも安全。
+
+**高速化と実況**(実プレイ#001の反省):
+- **自動進行(⏩)**: 合法手が1つしかない強制フェイズ(慣性解決・敵ターン・戦域クリア確認など)は自動で消化される — エージェントは判断ポイントだけ見ればいい
+- **バッチ実行**: choose に複数IDを渡すと順に適用(途中で不正になれば停止し、そこまでは保存)
+- **`--say "一言"`**: その判断への一言コメントを記録。`log` の実況タイムライン(💬)に手と一緒に並ぶ — 配信・記事素材
 
 ## 主な選択IDの形式
 
