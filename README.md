@@ -39,4 +39,4 @@
 - バランス定数は `index.html` の `CONFIG` と各定義表(`CARD_DEFS`/`SHIP_DEFS`/`ENEMY_DEFS`/`ZONE_TABLE`/`CONTRACT_DEFS`/`CAPTAIN_TYPES`)に集約
 - 初回のみ: `npm i` と `npx playwright install chromium`(検証ツール用)
 
-© 2026 なばて (nabaaatee) — All rights reserved. コードの閲覧・学習目的の参照は歓迎。
+ライセンス: [MIT](LICENSE)（© 2026 なばて / nabaaatee）。fork・改変・エージェント AI に遊ばせる、いずれも歓迎。同梱の外部スキル2件は各原作者の MIT — [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) 参照。
