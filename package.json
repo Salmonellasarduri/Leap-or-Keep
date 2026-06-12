@@ -1,0 +1,23 @@
+{
+  "name": "leap-or-keep",
+  "version": "1.0.0",
+  "description": "宇宙版カード型ローグライク。死んだ文明の遺物を回収する深宇宙サルベージャーとなり、「もう1ゾーン深く跳ぶか、戦利品を持って帰るか」を選び続ける。Gloomhavenリスペクトのカード消耗システム(カード=行動=寿命)+ Into the Breach式の敵行動予告 + 宇宙ならではの慣性(ドリフト)。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node tests/sim.mjs 200",
+    "shot": "node tools/shot.mjs all",
+    "serve": "node tools/server.mjs 8322"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "playwright": "^1.60.0"
+  },
+  "private": "true"
+}

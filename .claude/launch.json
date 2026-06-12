@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lok-static",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/server.mjs", "8322"],
+      "port": 8322
+    }
+  ]
+}

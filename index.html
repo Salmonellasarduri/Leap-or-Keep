@@ -1,0 +1,3660 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leap or Keep — One more leap.</title>
+<style>
+:root{
+  --bg:#070b14; --bg2:#0d1426; --panel:#101a30; --panel2:#16233f;
+  --line:#23365c; --txt:#dce6f5; --dim:#7d8fb0;
+  --cyan:#39d0ff; --amber:#ffb347; --red:#ff5566; --green:#56e39f;
+  --move:#2a4a7f; --fight:#7f2a3a; --gold:#ffd700;
+  font-size:15px;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{background:radial-gradient(ellipse at 50% -20%, #0e1830 0%, var(--bg) 60%); color:var(--txt);
+  font-family:"Yu Gothic UI","Hiragino Sans","Meiryo",system-ui,sans-serif; min-height:100vh;}
+#app{max-width:1180px; margin:0 auto; padding:10px 14px;}
+button{cursor:pointer; font-family:inherit; color:var(--txt); background:var(--panel2);
+  border:1px solid var(--line); border-radius:8px; padding:8px 14px; font-size:0.95rem;}
+button:hover{border-color:var(--cyan); background:#1b2c50;}
+button:focus-visible{outline:2px solid var(--cyan); outline-offset:2px;}
+button:disabled{opacity:.4; cursor:not-allowed;}
+button.primary{background:#173a5e; border-color:var(--cyan); font-weight:700;}
+button.danger{border-color:var(--red);}
+h1,h2{letter-spacing:.06em;}
+.muted{color:var(--dim); font-size:.85rem;}
+
+/* icons */
+.ic{width:15px; height:15px; vertical-align:-3px; stroke:currentColor; fill:none;
+  stroke-width:2; stroke-linecap:round; stroke-linejoin:round; display:inline-block;}
+.ic.big{width:20px; height:20px; vertical-align:-5px;}
+.statline{display:flex; gap:7px; align-items:center; justify-content:center; flex-wrap:wrap; font-weight:700;}
+.statline .num{font-size:.95em;}
+/* unit svg & idle animations */
+.usvg{width:48px; height:48px; display:block;}
+/* トンマナ規約(SPEC §10.7): 敵=赤 / ハザード=信号色(岩=灰・機雷=警告イエロー)+破線で二重符号化 / 戦利品=金 */
+.unit.hazard{background:#1a1a22; border:2px dashed #8a8aa0;}
+.unit.hazard.mine{background:#2a2208; border:2px dashed #ffb347;}
+/* 重力渦: セル地形(中立=紫系。敵=赤/味方=緑/中立=灰・橙の色規約 §10.7) */
+.cell.gravwell{background:radial-gradient(circle, #2a1838 0%, #150b22 70%); box-shadow:inset 0 0 14px #7b4dff44;}
+.wellswirl{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-size:1.5rem; opacity:.8; animation:wellspin 5s linear infinite; pointer-events:none;}
+@keyframes wellspin{from{transform:rotate(0deg);}to{transform:rotate(-360deg);}}
+.unit .usvg .flame{animation:flame .5s infinite alternate; transform-origin:50% 80%;}
+@keyframes flame{from{transform:scaleY(.55); opacity:.7;}to{transform:scaleY(1.15); opacity:1;}}
+.unit .usvg .blink{animation:blink 1.6s infinite;}
+@keyframes blink{0%,72%,100%{opacity:1}80%,92%{opacity:.15}}
+.unit .usvg .tent{animation:sway 2.4s ease-in-out infinite alternate; transform-origin:50% 30%;}
+.unit .usvg .tent.t2{animation-delay:.4s} .unit .usvg .tent.t3{animation-delay:.9s}
+@keyframes sway{from{transform:rotate(-7deg)}to{transform:rotate(7deg)}}
+.unit .usvg .eye{animation:eyepulse 2.2s ease-in-out infinite;}
+@keyframes eyepulse{0%,100%{opacity:.65}50%{opacity:1}}
+.unit.charging .usvg .eye{animation:eyecharge .5s infinite alternate; filter:drop-shadow(0 0 6px var(--amber));}
+@keyframes eyecharge{from{opacity:.7}to{opacity:1}}
+.unit.hitfx{animation:hitfx .4s;}
+@keyframes hitfx{0%{filter:brightness(3) saturate(0);}100%{filter:none;}}
+/* fx layer */
+#fx{position:absolute; inset:0; pointer-events:none; z-index:30; overflow:visible;}
+.fxfloat{position:absolute; font-weight:900; font-size:1rem; transform:translate(-50%,-50%);
+  animation:fxfloat 1s ease-out forwards; text-shadow:0 0 6px #000, 0 0 2px #000; white-space:nowrap;}
+.fxfloat.bad{color:var(--red);} .fxfloat.good{color:var(--green);} .fxfloat.dim{color:var(--dim);} .fxfloat.warn{color:var(--amber);}
+@keyframes fxfloat{0%{opacity:0; margin-top:0;}15%{opacity:1;}100%{opacity:0; margin-top:-34px;}}
+.fxp{position:absolute; width:7px; height:7px; border-radius:2px; background:var(--amber);
+  transform:translate(-50%,-50%); animation:fxp .65s ease-out forwards;}
+@keyframes fxp{0%{opacity:1; translate:0 0; scale:1;}100%{opacity:0; translate:var(--dx) var(--dy); scale:.3;}}
+.fxring{position:absolute; width:18px; height:18px; border-radius:50%; border:3px solid var(--amber);
+  transform:translate(-50%,-50%); animation:fxring .5s ease-out forwards; pointer-events:none;}
+@keyframes fxring{0%{opacity:1; scale:.4; border-width:6px;}100%{opacity:0; scale:4.5; border-width:1px;}}
+.fxstamp.big{font-size:2rem; color:#ffd700; text-shadow:0 0 16px #ffd70088, 2px 2px 0 #000;}
+.fxconf{position:absolute; width:8px; height:12px; border-radius:2px; animation:fxconf 1.4s ease-in forwards; pointer-events:none;}
+@keyframes fxconf{0%{opacity:1; transform:translateY(0) rotate(0);}100%{opacity:.1; transform:translateY(480px) rotate(560deg);}}
+/* ボス */
+.bossbar{margin:2px auto 6px; max-width:520px; position:relative; height:20px; background:#1a0a10;
+  border:1px solid var(--red); border-radius:10px; overflow:hidden;}
+.bossbar .fill{height:100%; background:linear-gradient(90deg,#7a1525,#ff5566); transition:width .5s;}
+.bossbar .nm{position:absolute; inset:0; text-align:center; font-size:.72rem; font-weight:800; color:#fff;
+  text-shadow:0 0 4px #000; line-height:20px; letter-spacing:.1em;}
+.warnband{background:repeating-linear-gradient(45deg,#3a0a12 0 18px,#1a0508 18px 36px); border:2px solid var(--red);
+  border-radius:12px; padding:26px 30px; text-align:center; animation:warnflash 1s infinite;}
+@keyframes warnflash{0%,100%{box-shadow:0 0 16px #ff556644;}50%{box-shadow:0 0 44px #ff5566aa;}}
+.warnband h1{color:var(--red); letter-spacing:.4em; font-size:2rem; margin-bottom:8px;}
+.cell.firing{animation:firing .45s;}
+@keyframes firing{0%{background:#ff5566aa;}100%{}}
+.fxstamp{position:absolute; transform:translate(-50%,-50%) rotate(-6deg); font-weight:900; font-size:1.35rem;
+  color:var(--gold); text-shadow:0 0 10px #000, 2px 2px 0 #000; letter-spacing:.06em; white-space:nowrap;
+  animation:fxstamp .9s ease-out forwards; z-index:40;}
+@keyframes fxstamp{0%{opacity:0; scale:2.2;}18%{opacity:1; scale:1;}75%{opacity:1;}100%{opacity:0; scale:1.05;}}
+#board.shake{animation:bshake .35s;}
+@keyframes bshake{0%,100%{translate:0 0}20%{translate:5px -4px}40%{translate:-6px 3px}60%{translate:4px 4px}80%{translate:-3px -3px}}
+.container-item{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-size:1.6rem; pointer-events:none; filter:drop-shadow(0 0 8px var(--gold)); animation:eyepulse 1.8s infinite;}
+/* 方向選択矢印(トーラスで2方向が同マスに着くとき) */
+.dirpick{position:absolute; inset:0; display:flex; align-items:center; justify-content:space-around; z-index:8;}
+.dirpick button{padding:2px 8px; font-size:1.05rem; background:#0c1a30ee; border-color:var(--cyan);}
+/* 3D俯瞰時: preserve-3dでは奥行きがz-indexに勝つ — 直立ユニットに覆われないよう矢印もビルボード化して前へ(ラム方向選択が押せないバグの修正) */
+#board.tilt .dirpick{transform:rotateX(calc(var(--tilt) * -1)) translateZ(34px); transform-origin:50% 92%;}
+/* tooltip */
+#tt{position:fixed; z-index:200; display:none; max-width:300px; background:#0a1222f2;
+  border:1px solid var(--cyan); border-radius:8px; padding:8px 10px; font-size:.78rem;
+  line-height:1.55; color:var(--txt); pointer-events:none; box-shadow:0 4px 18px #000a;}
+#tt b{color:var(--amber);} #tt .kill{color:var(--red); font-weight:800;}
+[data-tt]{cursor:help;}
+button[data-tt],.half[data-tt],.unit[data-tt],.cell[data-tt],.pick[data-tt]{cursor:pointer;}
+
+/* header */
+#hud{display:flex; align-items:center; gap:18px; padding:8px 4px; flex-wrap:wrap;}
+#hud .zone{font-weight:800; color:var(--amber); font-size:1.05rem; white-space:nowrap;}
+.lifebar{display:flex; gap:3px; align-items:center;}
+.lifebar .seg{width:14px; height:20px; border-radius:3px; border:1px solid var(--line);}
+.seg.hand{background:var(--cyan);} .seg.discard{background:#1f5e74;}
+.seg.reserve{background:#27406e;} .seg.pool{background:#27406e;}
+.seg.lost{background:#1a1020; border-color:#3a2030; position:relative;}
+.seg.lost::after{content:"×"; color:#5a2a3a; position:absolute; inset:0; text-align:center; font-size:11px; line-height:18px;}
+#cargo{display:flex; gap:6px; align-items:center;}
+.cargochip{background:var(--panel); border:1px solid var(--gold); color:var(--gold);
+  border-radius:6px; padding:2px 8px; font-size:.8rem;}
+
+/* layout */
+#battle{display:grid; grid-template-columns: 1fr 300px; gap:14px; align-items:start;}
+#boardwrap{display:flex; flex-direction:column; align-items:center; gap:8px;}
+:root{--cell:92px; --tilt:34deg;}
+/* ===== 強調の文法(SPEC §10.5) =====
+   .cue=今クリックすべき一次対象(明滅) / .sub-cue=任意の二次対象(静かな点線) /
+   ⛔=不可+理由 / 固定アウトライン=選択済み */
+@keyframes cuepulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.45)}}
+.cue{animation:cuepulse 1.3s ease-in-out infinite;}
+/* セルはfilter禁止(preserve-3dが死んで直立ユニットが潰れる) — 背景/枠線で明滅 */
+@keyframes cellcue{0%,100%{background-color:#10324a; border-color:#39d0ff88;}50%{background-color:#17486e; border-color:var(--cyan);}}
+.cell.cue{animation:cellcue 1.3s ease-in-out infinite;}
+@keyframes subpulse{0%,100%{outline-color:#56e39f33}50%{outline-color:#56e39faa}}
+.sub-cue{outline:2px dashed #56e39f55; outline-offset:2px; animation:subpulse 2.4s infinite;}
+@keyframes softcue{0%,100%{box-shadow:inset 0 0 0 0 transparent}50%{box-shadow:inset 0 0 12px #39d0ff33}}
+.cue-soft{animation:softcue 2s ease-in-out infinite;}
+/* 星空(2層パララックス) */
+#vig{position:fixed; inset:0; pointer-events:none; z-index:60;
+  background:radial-gradient(ellipse at 50% 42%, transparent 55%, #00000055 100%);}
+#stars1,#stars2{position:fixed; inset:-50% 0 0 0; pointer-events:none; z-index:-3;}
+/* 大判アート層(art/が無ければ透明のまま=劣化動作) */
+#zonebg{position:fixed; inset:0; pointer-events:none; z-index:-2;
+  background-size:cover; background-position:center; opacity:0; transition:opacity 1.2s;
+  filter:brightness(.45) saturate(.9);}
+#zonebg.on{opacity:.66;}
+#titlehero{position:fixed; inset:0; pointer-events:none; z-index:-2;
+  background-size:cover; background-position:center 30%; opacity:0; transition:opacity 1s;}
+#titlehero.on{opacity:.7; animation:kenburns 36s ease-in-out infinite alternate;}
+@keyframes kenburns{from{transform:scale(1);}to{transform:scale(1.07);}}
+#titlehero::after{content:""; position:absolute; inset:0;
+  background:linear-gradient(180deg,#070b1488 0%,transparent 35%,#070b14ee 88%);}
+.relicart{width:200px; aspect-ratio:1; object-fit:cover; border-radius:10px; float:right;
+  margin:0 0 10px 14px; border:1px solid var(--gold); box-shadow:0 0 18px #ffd70033;}
+.shipart{width:100%; height:110px; object-fit:cover; border-radius:8px; margin-bottom:8px;
+  border:1px solid var(--line);}
+#stars1{background-image:radial-gradient(1px 1px at 22% 31%, #ffffff99, transparent),
+  radial-gradient(1px 1px at 64% 12%, #aaccff88, transparent),
+  radial-gradient(1.5px 1.5px at 83% 57%, #ffffffaa, transparent),
+  radial-gradient(1px 1px at 41% 78%, #ffddaa77, transparent);
+  background-size:340px 340px; animation:stardrift 120s linear infinite;}
+#stars2{background-image:radial-gradient(1px 1px at 10% 60%, #ffffff55, transparent),
+  radial-gradient(1px 1px at 55% 40%, #88aaff55, transparent),
+  radial-gradient(1px 1px at 90% 85%, #ffffff44, transparent);
+  background-size:220px 220px; animation:stardrift 60s linear infinite;}
+@keyframes stardrift{from{transform:translateY(0)}to{transform:translateY(340px)}}
+#boardwrap{perspective:1050px;}
+#board{display:grid; gap:5px; background:var(--bg2); padding:10px; border-radius:14px;
+  border:1px solid hsl(var(--zh,215) 50% 38%); position:relative;
+  box-shadow:0 0 26px hsl(var(--zh,215) 70% 50% / .14);}
+/* ===== 俯瞰ジオラマモード =====
+   盤は倒し、ユニットは立てる(ロックマンエグゼ式ビルボード)。タイルに厚み、足元に影、奥に霞 */
+#board.tilt{transform:rotateX(var(--tilt)); transform-style:preserve-3d; margin-top:-14px;}
+#board.tilt .cell{transform-style:preserve-3d; transition:transform .15s;
+  background:linear-gradient(180deg,#111d33,#0b1322 60%); /* 上面に光(エグゼ式の厚み表現) */
+  box-shadow:0 3px 0 -1px #0a1322, 0 7px 0 -1px #04080f, 0 10px 12px #000b;}
+#board.tilt .cell.sel-ok{transform:translateZ(10px);}
+#board.tilt .cell.threat{background:linear-gradient(180deg,#451526,#300d1c 60%);}
+#board.tilt .uinner{transform:rotateX(calc(var(--tilt) * -1)); transform-origin:50% 92%;}
+#board.tilt::after{content:""; position:absolute; inset:0; border-radius:14px; pointer-events:none;
+  background:linear-gradient(180deg,#0004,transparent 26%,transparent 80%,#0004);}
+#board.tilt .fxfloat,#board.tilt .fxstamp{transform:translate(-50%,-50%) rotateX(calc(var(--tilt) * -1));}
+.uinner{width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; position:relative;}
+.unit::before{content:""; position:absolute; bottom:1px; left:14%; width:72%; height:11px; border-radius:50%;
+  background:radial-gradient(ellipse, #000b 0%, transparent 70%); pointer-events:none;}
+.cell{width:var(--cell); height:var(--cell); background:#0b1322; border:1px solid #1b2a4a; border-radius:10px;
+  position:relative; display:flex; align-items:center; justify-content:center; transition:background .15s, box-shadow .15s;}
+.cell.sel-ok{background:#10324a; border-color:var(--cyan); cursor:pointer; box-shadow:inset 0 0 14px #39d0ff33;}
+.cell.sel-ok:hover{background:#15446a;}
+.cell.threat{background:#3a1020; border-color:var(--red);}
+.cell.charge{background:#3a2a10; border-color:var(--amber);}
+.cell.intent-move{outline:2px dashed #6a7da8; outline-offset:-4px;}
+.cell.hl{box-shadow:inset 0 0 0 3px var(--amber); }
+.cell.blockedhint{background:#16101a; cursor:help;}
+.cell.blockedhint::after{content:"⛔"; position:absolute; top:4px; left:6px; opacity:.5; font-size:.8rem;}
+.dmgnum{position:absolute; top:3px; right:5px; color:var(--red); font-weight:900; font-size:.85rem; text-shadow:0 0 4px #000;}
+.cell.charge .dmgnum{color:var(--amber);}
+.unit{width:78px; height:78px; border-radius:12px; position:relative; font-size:1.7rem; cursor:default;}
+.unit .nm{font-size:.6rem; color:var(--dim); line-height:1;}
+.unit.player{background:#10243f; border:2px solid var(--cyan);}
+.unit.enemy{background:#2a1018; border:2px solid var(--red);}
+.unit.pick{cursor:pointer; box-shadow:0 0 12px var(--cyan);}
+.unit.target{cursor:pointer; box-shadow:0 0 12px var(--red);}
+.unit.acting{animation:acting .7s infinite; z-index:5;}
+@keyframes acting{0%,100%{box-shadow:0 0 6px var(--red);}50%{box-shadow:0 0 26px var(--red);}}
+.unit.hl{box-shadow:0 0 0 3px var(--amber);}
+.unit.actorsel{outline:2px solid var(--green); outline-offset:2px;}
+.unit.actorsel::after{content:"操縦"; position:absolute; bottom:-10px; left:50%; transform:translateX(-50%);
+  font-size:.56rem; color:var(--green); background:#0c1526; padding:0 4px; border-radius:3px; border:1px solid var(--green);}
+.hp{display:flex; gap:2px;}
+.hp i{width:11px; height:11px; border-radius:2px; background:var(--green); display:inline-block; box-shadow:0 0 3px #0008;}
+.bestburst{color:var(--gold); font-weight:900; letter-spacing:.1em; animation:bestburst 1s ease-out, flash 1.4s 1s infinite;}
+@keyframes bestburst{0%{transform:scale(.3); opacity:0;}55%{transform:scale(1.35);}100%{transform:scale(1); opacity:1;}}
+.hp i.off{background:#26344f;}
+.hp i.sh{background:var(--cyan);}
+.drift{position:absolute; top:-10px; right:-10px; min-width:24px; height:24px; border-radius:12px;
+  background:var(--amber); border:1px solid #fff3; color:#231a05; font-size:15px; font-weight:900;
+  display:flex; align-items:center; justify-content:center; box-shadow:0 0 8px #ffb34788; padding:0 3px;}
+.badgeN{position:absolute; top:-9px; left:-9px; width:22px; height:22px; border-radius:50%;
+  background:#2a1018; border:1px solid var(--red); color:var(--red); font-size:12px; font-weight:800;
+  display:flex; align-items:center; justify-content:center;}
+/* ghosts */
+.dghost{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-size:1.5rem; opacity:.38; pointer-events:none; filter:saturate(.6);}
+.dghost .darr{position:absolute; top:4px; left:6px; font-style:normal; font-size:.9rem; color:var(--amber); opacity:1;}
+.dghost.boom{opacity:.8; font-size:1.2rem;}
+.mghost{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-size:1.4rem; opacity:.34; pointer-events:none;}
+.mghost .mN{position:absolute; bottom:4px; right:6px; font-size:.72rem; color:#aab8d8; opacity:1; font-weight:700;}
+.pvghost{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-size:1.6rem; opacity:.6; pointer-events:none; filter:drop-shadow(0 0 6px var(--cyan));}
+.pvghost2{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-size:1.3rem; opacity:.35; pointer-events:none;}
+.pvghost2 i{font-style:normal; position:absolute; top:4px; left:6px; color:var(--amber); font-size:.9rem; opacity:1;}
+.pvbrake{position:absolute; bottom:4px; left:6px; font-size:.66rem; color:var(--cyan);
+  border:1px solid var(--cyan); border-radius:4px; padding:0 4px; pointer-events:none; opacity:.9;}
+
+/* hand */
+#hand{display:flex; gap:10px; justify-content:center; padding:10px 0 4px; flex-wrap:wrap;}
+.card{width:148px; border:1px solid var(--line); border-radius:10px; background:var(--panel);
+  overflow:hidden; transition:transform .12s, box-shadow .12s; user-select:none;}
+.card .ttl{padding:5px 8px; font-size:.78rem; font-weight:700; background:#0c1526; text-align:center;
+  border-bottom:1px solid var(--line); min-height:2.2em; display:flex; align-items:center; justify-content:center;}
+.card .half{padding:7px 8px; font-size:.74rem; min-height:3.4em; cursor:pointer; line-height:1.35;}
+.card .half.top{background:linear-gradient(180deg,#16294a,#101d36); border-bottom:1px dashed #2a3c63;}
+.card .half.bot{background:linear-gradient(180deg,#33141d,#23101a);}
+.card .half:hover{filter:brightness(1.35);}
+.card .half.chosen{outline:2px solid var(--cyan); outline-offset:-2px; filter:brightness(1.3);}
+.card .half.faded{opacity:.35;}
+.card.locked{opacity:.45;}
+.card.relic-card .ttl{color:var(--gold);}
+.card.selcard{outline:2px solid var(--cyan); box-shadow:0 0 14px #39d0ff44;}
+.card .selmark{position:absolute; margin-top:-2px; color:var(--cyan); font-weight:900;}
+.tag{font-size:.62rem; color:var(--dim);}
+
+/* prompt bar / log */
+#prompt{margin-top:6px; text-align:center; min-height:2.4em; color:var(--amber); font-weight:600;}
+#prompt .sub{color:var(--dim); font-weight:400; font-size:.82rem;}
+#side{display:flex; flex-direction:column; gap:10px;}
+.panel{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 12px;}
+.panel h3{font-size:.85rem; color:var(--cyan); margin-bottom:6px; letter-spacing:.08em;}
+#log{height:190px; overflow-y:auto; font-size:.76rem; line-height:1.55; color:#aebcd8;}
+#log .warn{color:var(--amber);} #log .bad{color:var(--red);} #log .good{color:var(--green);}
+.intent{font-size:.76rem; padding:6px 7px; border:1px solid var(--line); border-radius:8px; margin-bottom:6px;
+  background:var(--bg2); line-height:1.5;}
+.intent:hover{border-color:var(--amber);}
+.intent b{color:var(--txt);}
+.intent .what{color:var(--dim);}
+.intent .atk{color:var(--red);} .intent .chg{color:var(--amber);}
+.intent.dead{opacity:.35; text-decoration:line-through;}
+.legend{font-size:.72rem; color:var(--dim); line-height:1.7;}
+.legend .sw{display:inline-block; width:11px; height:11px; border-radius:3px; vertical-align:-1px; margin-right:3px;}
+.banner{color:var(--cyan); font-size:.82rem; text-align:center; min-height:1.2em;}
+
+/* overlay/modal */
+#overlay{position:fixed; inset:0; background:#04060ccc; display:flex; align-items:center;
+  justify-content:center; z-index:50; backdrop-filter:blur(2px);}
+.modal{background:var(--panel); border:1px solid var(--cyan); border-radius:14px; padding:22px 26px;
+  max-width:780px; width:min(92vw,780px); max-height:88vh; overflow-y:auto; box-shadow:0 0 40px #39d0ff22;}
+.modal h2{color:var(--amber); margin-bottom:10px; font-size:1.15rem;}
+.modal .opts{display:flex; gap:12px; margin-top:14px; flex-wrap:wrap;}
+.cardpick{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;}
+.cardpick .pick{border:1px solid var(--line); border-radius:8px; padding:6px 10px; cursor:pointer;
+  background:var(--panel2); font-size:.8rem;}
+.cardpick .pick:hover{border-color:var(--red); background:#3a1525;}
+.cardpick .pick.on{border-color:var(--cyan); background:#143052;}
+.scale{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin:14px 0; position:relative; z-index:1;}
+.scale .pan{background:var(--bg2); border-radius:12px; padding:16px;}
+.scale .pan h4{font-size:1.02rem; margin-bottom:10px; letter-spacing:.06em;}
+.scale .keep{border:1px solid #56e39f66; box-shadow:inset 0 0 30px #56e39f12, 0 0 18px #56e39f22;}
+.scale .leap{border:1px solid #ff556677; box-shadow:inset 0 0 30px #ff556614, 0 0 18px #ff556633;}
+.scale .keep h4{color:var(--green);} .scale .leap h4{color:var(--red);}
+.scale li{font-size:.84rem; margin-left:1.2em; margin-bottom:5px;}
+.lkwm{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-size:5.2rem; font-weight:900; color:#ffffff07; letter-spacing:.2em; pointer-events:none; z-index:0; white-space:nowrap;}
+.lkradio{color:var(--cyan); text-align:center; font-style:italic; margin:6px 0 2px;}
+.lkradio::before{content:"📻 "; font-style:normal;}
+.lkbtn{font-size:1.08rem; padding:12px 30px; font-weight:800;}
+.bigtitle{font-size:2.6rem; font-weight:900; letter-spacing:.12em; color:var(--cyan);
+  text-shadow:0 0 24px #39d0ff55; text-align:center;}
+.routebox{display:flex; gap:16px; margin-top:14px;}
+.routebox .rt{flex:1; background:var(--bg2); border:1px solid var(--line); border-radius:12px;
+  padding:14px; cursor:pointer; transition:border-color .15s;}
+.routebox .rt:hover{border-color:var(--cyan);}
+.routebox .rt.danger:hover{border-color:var(--red);}
+.routebox h4{margin-bottom:6px;}
+.flash{animation:flash 1.2s infinite;}
+@keyframes flash{0%,100%{opacity:1}50%{opacity:.45}}
+.relicbox{border:1px solid var(--gold); border-radius:10px; padding:12px; background:#1a1608; margin:10px 0;}
+.relicbox b{color:var(--gold);}
+table.sum{width:100%; border-collapse:collapse; font-size:.85rem; margin:8px 0;}
+table.sum td{border-bottom:1px solid var(--line); padding:5px 6px;}
+.hintlist{font-size:.92rem; line-height:2.0;}
+.hintlist b{color:var(--cyan);}
+
+/* loadout */
+#loadgrid{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;}
+#loadgrid .card{cursor:pointer; position:relative;}
+#loadgrid .card .half{cursor:help;}
+#loadgrid .card{padding-bottom:18px;}
+#loadgrid .card.selcard::after{content:"✓ 持っていく"; position:absolute; margin-top:2px;
+  left:50%; transform:translateX(-50%);
+  color:var(--cyan); font-size:.68rem; font-weight:800; background:#0c1526dd; padding:1px 7px; border-radius:4px;}
+
+@media (max-width:980px){
+  #battle{grid-template-columns:1fr;}
+  #side{flex-direction:row; flex-wrap:wrap;}
+  #side .panel{flex:1; min-width:240px;}
+  #log{height:140px;}
+}
+@media (max-width:620px){
+  :root{--cell:72px;}
+  .unit{width:60px; height:60px; font-size:1.1rem;}
+  .usvg{width:38px;height:38px;}
+  #side{flex-direction:column;}
+}
+.card.mini{width:118px;}
+.card.mini .ttl{font-size:.7rem; min-height:2em;}
+.card.mini .half{min-height:2.6em; font-size:.68rem; padding:5px 6px;}
+.card.mini.pickable{cursor:pointer;}
+.card.mini.pickable:hover{outline:2px solid var(--red); transform:translateY(-3px);}
+.half.lostact{background:linear-gradient(180deg,#3a1040,#240a2e)!important;}
+.pickgrid{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; justify-content:center;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="tt"></div>
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-move" viewBox="0 0 24 24"><path d="M3 12h16M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-brake" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M8 12h8"/></symbol>
+  <symbol id="i-attack" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
+  <symbol id="i-line" viewBox="0 0 24 24"><path d="M2 12h17M14 7l5 5-5 5M6 9v6M10 9v6"/></symbol>
+  <symbol id="i-burst" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></symbol>
+  <symbol id="i-multi" viewBox="0 0 24 24"><circle cx="8" cy="8" r="4"/><circle cx="16" cy="16" r="4"/><path d="M8 2v2M2 8h2M16 20v2M20 16h2"/></symbol>
+  <symbol id="i-push" viewBox="0 0 24 24"><path d="M7 6l6 6-6 6M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-pull" viewBox="0 0 24 24"><path d="M17 6l-6 6 6 6M11 6l-6 6 6 6"/></symbol>
+  <symbol id="i-heal" viewBox="0 0 24 24"><path d="M14.7 6.3a4.5 4.5 0 0 0-6.2 5.8L3 17.6 6.4 21l5.5-5.5a4.5 4.5 0 0 0 5.8-6.2l-3 3-2.3-2.3z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z"/></symbol>
+  <symbol id="i-salvage" viewBox="0 0 24 24"><path d="M7 3v8a5 5 0 0 0 10 0V3M5 3h4M15 3h4M9 19l3 3 3-3"/></symbol>
+  <symbol id="i-warp" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 8-8M20 12a8 8 0 0 1-8 8"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-ram" viewBox="0 0 24 24"><path d="M5 5l14 7-14 7zM21 9v6"/></symbol>
+  <symbol id="i-drift" viewBox="0 0 24 24"><path d="M3 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h13M13 12l3 0M3 16h7a2.5 2.5 0 1 1-2.5 2.5"/></symbol>
+  <symbol id="i-range" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" stroke-dasharray="2.5 3.5"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 12h12"/></symbol>
+</svg>
+<script>
+"use strict";
+/* ===== LOGIC-START ===== */
+const CONFIG = {
+  GRID: 5,   // 奇数: 偶数トーラス×偶数移動の方向縮退(L-011)を構造的に回避
+  SHIP_HP: 6,
+  DRONE_HP: 4,
+  HAND: 6,
+  DECK_CAP: 12,
+  ZONES: 5,
+  COLLISION_DMG: 1,
+};
+
+const DIRS = { up:{x:0,y:-1,ch:"↑"}, right:{x:1,y:0,ch:"→"}, down:{x:0,y:1,ch:"↓"}, left:{x:-1,y:0,ch:"←"} };
+const DIR_KEYS = ["up","right","down","left"];
+const OPP = { up:"down", down:"up", left:"right", right:"left" };
+
+const CARD_DEFS = {
+  c_burn:     {name:"デスロール・バーン", top:{kind:"move",n:2,label:"移動2(直線)"}, bottom:{kind:"attack",dmg:2,range:1,label:"攻撃2 射程1"}},
+  c_reverse:  {name:"フルリバース",       top:{kind:"brake_move",n:1,label:"制動+移動1(ドリフト消去)"}, bottom:{kind:"attack",dmg:1,range:2,label:"攻撃1 射程2"}},
+  c_salvo:    {name:"ゼロ距離斉射",       top:{kind:"move",n:1,label:"移動1(直線)"}, bottom:{kind:"attack",dmg:3,range:1,label:"攻撃3 射程1"}},
+  c_swarm:    {name:"ドローン・スウォーム", top:{kind:"move",n:2,label:"移動2(直線)"}, bottom:{kind:"attack",dmg:2,range:2,label:"攻撃2 射程2"}},
+  c_patch:    {name:"応急パッチ",         top:{kind:"brake_move",n:1,label:"制動+移動1(ドリフト消去)"}, bottom:{kind:"heal",n:2,label:"修理2(HP回復)"}},
+  c_repulsor: {name:"リパルサー・ブラスト", top:{kind:"move",n:1,label:"移動1(直線)"}, bottom:{kind:"push",n:2,dmg:0,range:1,label:"隣接敵を2マス押し飛ばす(ドリフト付与)"}},
+  c_railgun:  {name:"狙撃レールガン",     top:{kind:"move",n:1,label:"移動1(直線)"},
+    bottom:{kind:"pierce",dmg:2,range:3,label:"貫通2 直線射程3(敵味方無差別)・反動ドリフト"},
+    upDefs:{bottom:{kind:"pierce",dmg:2,range:3,noRecoil:true,label:"貫通2 直線射程3・無反動"}}},
+  c_evade:    {name:"回避機動",           top:{kind:"move",n:2,label:"移動2(直線)"}, bottom:{kind:"shield",n:2,label:"シールド2(このラウンド)"},
+    upDefs:{bottom:{kind:"shield",n:2,brake:true,label:"シールド2+制動"}}},
+  c_ram:      {name:"ラムアタック",       top:{kind:"ram",n:2,label:"突進2: 直線上の標的に2ダメージして停止"}, bottom:{kind:"attack",dmg:1,range:1,label:"攻撃1 射程1"}},
+  // アンロック候補プール(初期デッキ外)
+  c_leap2:    {name:"リックレス・リープ", top:{kind:"move",n:3,label:"移動3(直線)"}, bottom:{kind:"attack",dmg:2,range:1,label:"攻撃2 射程1"}},
+  c_tractor:  {name:"トラクター・ビーム", top:{kind:"move",n:1,label:"移動1(直線)"}, bottom:{kind:"pull",n:2,range:2,label:"射程2の敵を引き寄せ(ドリフトを自分向きに)"},
+    upDefs:{bottom:{kind:"attack_pull",dmg:1,n:2,range:2,label:"攻撃1+引き寄せ2(直線射程2)"}}},
+  c_overburn: {name:"オーバーバーン",     top:{kind:"move",n:4,selfDmg:1,label:"移動4(直線)・自分に1ダメージ"}, bottom:{kind:"attack",dmg:2,range:1,label:"攻撃2 射程1"}},
+  c_flak:     {name:"弾幕散布",           top:{kind:"move",n:1,label:"移動1(直線)"}, bottom:{kind:"attack_all",dmg:1,range:1,label:"攻撃1 周囲1マスの全敵"}},
+  c_scrap:    {name:"スクラップ回収",     top:{kind:"move",n:2,label:"移動2(直線)"}, bottom:{kind:"salvage",label:"消耗カード1枚を手札に回収"}},
+  c_debris:   {name:"デブリ・シールド",   top:{kind:"brake_move",n:0,label:"制動(ドリフト消去)"}, bottom:{kind:"shield",n:2,label:"シールド2(このラウンド)"}},
+  c_harpoon:  {name:"ハープーン・ボルト", top:{kind:"move",n:1,label:"移動1(直線)"}, bottom:{kind:"attack_pull",dmg:1,n:1,range:2,label:"攻撃1+引き寄せ(直線射程2)"}},
+  c_ramblast: {name:"衝角ブラスト",       top:{kind:"move",n:2,label:"移動2(直線)"}, bottom:{kind:"attack_push",dmg:1,n:2,range:1,label:"攻撃1+2マス突き飛ばし(隣接)"}},
+  c_bomb:     {name:"自爆ドローン",       top:{kind:"move",n:2,label:"移動2(直線)"}, bottom:{kind:"attack_all",dmg:3,range:1,lost:true,label:"攻撃3 周囲全対象 🔥ロスト"}},
+  c_lastline: {name:"最終防衛線",         top:{kind:"brake_move",n:1,label:"制動+移動1"}, bottom:{kind:"shield",n:4,lost:true,label:"シールド4 🔥ロスト"}},
+  c_minelayer:{name:"機雷散布",           top:{kind:"move",n:2,label:"移動2(直線)"}, bottom:{kind:"spawnhaz",haz:"mine",count:2,lost:true,label:"隣接空きマスに機雷2個 🔥ロスト"}},
+  c_decoy:    {name:"デコイ岩塊",         top:{kind:"move",n:1,label:"移動1(直線)"}, bottom:{kind:"spawnhaz",haz:"debris",count:1,label:"隣接空きマスに岩塊1個"}},
+  c_execute:  {name:"トドメ砲",           top:{kind:"move",n:1,label:"移動1(直線)"}, bottom:{kind:"execute",dmg:1,bonus:2,range:2,label:"攻撃1 射程2(傷ついた敵には+2)"}},
+  c_gravshot: {name:"重力子弾",           top:{kind:"brake_move",n:1,label:"制動+移動1"}, bottom:{kind:"setdrift",dmg:1,range:2,label:"攻撃1+ドリフト書換(直線射程2)"}},
+  // レリック展開カード
+  c_fusion:   {name:"フュージョン・バースト", relic:true, top:{kind:"move",n:3,label:"移動3(直線)"}, bottom:{kind:"attack",dmg:3,range:2,label:"攻撃3 射程2"}},
+  c_warp:     {name:"星図ジャンプ",       relic:true, top:{kind:"warp",label:"任意の空きマスへワープ(制動)"}, bottom:{kind:"attack",dmg:1,range:3,label:"攻撃1 射程3"}},
+  c_phase:    {name:"位相変移",           relic:true, top:{kind:"move",n:2,phase:true,label:"移動2(ユニット通過可)"}, bottom:{kind:"setdrift",range:2,label:"射程2の敵のドリフトを任意方向に設定"}},
+  c_nano:     {name:"ナノリペア",         relic:true, top:{kind:"brake_move",n:1,label:"制動+移動1"}, bottom:{kind:"heal",n:3,shield:1,label:"修理3+シールド1"}},
+  c_anchor:   {name:"グラビティ・アンカー", relic:true, top:{kind:"brake_move",n:2,label:"制動+移動2"}, bottom:{kind:"pull_all",n:1,range:2,label:"射程2の全敵を1マス引き寄せ"}},
+  c_annihilate:{name:"殲滅プロトコル",    relic:true, top:{kind:"move",n:2,label:"移動2(直線)"}, bottom:{kind:"attack_multi",dmg:2,range:2,count:2,label:"攻撃2 射程2・最大2体"}},
+};
+const START_DECK = ["c_burn","c_bomb","c_reverse","c_salvo","c_swarm","c_patch","c_repulsor","c_railgun","c_evade","c_ram"];
+
+// 船体クラス(ビルド個性の起点 — StSのキャラクター選択に相当)
+const SHIP_DEFS = [
+  {id:"vagrants", name:"ヴァグランツ", sub:"標準サルベージ艦", cost:0, hp:8, droneHp:4,
+   color:"#39d0ff",
+   passive:"なし(全性能が基準値)",
+   passiveDesc:"癖がなく、すべての戦術が一通りこなせる。最初の相棒。",
+   deck:START_DECK},
+  {id:"bellyroll", name:"ベリーロール", sub:"装甲衝角艦", cost:15, hp:10, droneHp:3,
+   color:"#ffb347",
+   passive:"物理マスター: 衝突/激突で自軍は無傷・与ダメ+1",
+   passiveDesc:"ぶつかるために生まれた船。機雷も岩も敵も、すべては「ぶつける物」。",
+   deck:["c_ram","c_ram","c_ramblast","c_repulsor","c_burn","c_bomb","c_patch","c_evade","c_swarm","c_reverse"]},
+  {id:"astra", name:"アストラ", sub:"長距離砲撃艦", cost:30, hp:7, droneHp:4,
+   color:"#d8b6ff",
+   passive:"精密照準: 攻撃系の射程+1 — ただし船体が脆い(HP7)",
+   passiveDesc:"届かない間合いから削り切る。触らせなければ負けない — 触られなければ。",
+   deck:["c_railgun","c_railgun","c_harpoon","c_salvo","c_swarm","c_burn","c_evade","c_patch","c_reverse","c_bomb"]},
+];
+function shipDef(id){ return SHIP_DEFS.find(s=>s.id===id)||SHIP_DEFS[0]; }
+
+// アセンション(深淵レベル): 勝つたびに次が解放される再挑戦の梯子
+const ASC_DEFS = [
+  {lv:0, name:"標準", desc:"基準難易度"},
+  {lv:1, name:"深淵I", desc:"全敵HP+1"},
+  {lv:2, name:"深淵II", desc:"+リープの燃料がカード2枚になる"},
+  {lv:3, name:"深淵III", desc:"+ゾーン3以降、全敵の攻撃+1"},
+];
+function fuelCost(state){ return (state.run.asc>=2 ? 2 : 1) + (hasContract(state.run,"throttle")?1:0); }
+
+// ---- 航行契約(アークナイツ危機契約の翻訳): リスクの自己申告 = 自分の苦手だけ避けて盛れる ----
+// 設計原則: 全タグ直交(詰み合成なし)、実利は倍率で線形、名誉(称号)は高リスクのみ
+const CONTRACT_DEFS=[
+  {id:"heavy",     icon:"🛡", name:"重装編成", desc:"全ての敵HP+1", counter:"火力押しを罰する — 物理キルは素通しだ"},
+  {id:"swarm",     icon:"📯", name:"増援協定", desc:"各戦域の敵が1体増える", counter:"手数勝負 — 同士討ちと爆発で間引け"},
+  {id:"throttle",  icon:"⛽", name:"過給機関", desc:"ジャンプ燃料がカード+1枚", counter:"寿命が縮む — 深く跳ぶか、早く帰るか"},
+  {id:"norepair",  icon:"🚫", name:"補給封鎖", desc:"整備ドックの「補給」が使えない", counter:"回復は物理キルの装甲板だけ — ぶつけて生きろ"},
+  {id:"minefield", icon:"☄️", name:"機雷宙域", desc:"各戦域に機雷+2", counter:"罠だらけ — だが罠はあんたの武器でもある"},
+  {id:"fragile",   icon:"🩹", name:"老朽船体", desc:"出撃時の旗艦HP-2", counter:"被弾1点が重い — 完璧な盤面操作を"},
+];
+function hasContract(run,id){ return !!(run.contracts&&run.contracts.includes(id)); }
+function contractMult(run){ return 1+0.2*((run.contracts||[]).length); }
+const UNLOCK_POOL = [
+  {defId:"c_tractor", cost:3}, {defId:"c_gravshot", cost:4}, {defId:"c_harpoon", cost:5},
+  {defId:"c_execute", cost:6}, {defId:"c_leap2", cost:8}, {defId:"c_ramblast", cost:9},
+  {defId:"c_decoy", cost:10}, {defId:"c_flak", cost:12}, {defId:"c_minelayer", cost:14},
+  {defId:"c_scrap", cost:16}, {defId:"c_overburn", cost:18}, {defId:"c_lastline", cost:20}, {defId:"c_debris", cost:22},
+];
+
+const RELIC_DEFS = [
+  {id:"nano",   name:"古代のナノ修復槽",     value:2, rare:false, card:"c_nano",   desc:"銀色の槽の中で、何かがまだ脈打っている。"},
+  {id:"coil",   name:"不安定な位相コイル",   value:3, rare:false, card:"c_phase",  desc:"持っているだけで輪郭がにじむ。たぶん気のせいじゃない。"},
+  {id:"anchor", name:"重力子アンカー",       value:3, rare:false, card:"c_anchor", desc:"落ちない錨。むしろ周りが落ちてくる。"},
+  {id:"fusion", name:"ひび割れた融合炉",     value:3, rare:true,  card:"c_fusion", desc:"ひびの奥で恒星の欠片が燃えている。修理? 無理無理。"},
+  {id:"starmap",name:"死文明の星図",         value:4, rare:true,  card:"c_warp",   desc:"もう存在しない星々の地図。だが座標は今も生きている。"},
+  {id:"annihil",name:"殲滅プロトコル断片",   value:5, rare:true,  card:"c_annihilate", desc:"彼らが最後に作ったもの。彼らが滅びた理由かもしれない。"},
+];
+
+const ENEMY_DEFS = {
+  miner:    {name:"暴走採掘ドローン", icon:"🤖", hp:2, dmg:1, desc:"最寄りの獲物へ1歩近づき、隣接していれば殴る。単純。だが慣性で滑って勝手に間合いを詰めてくる"},
+  pirate:   {name:"宇宙海賊",        icon:"🏴‍☠️", hp:3, dmg:1, desc:"間合い2を保って撃つ。近づくと離れ、遠いと寄ってくる。直線武器か押し付けで詰めろ"},
+  jelly:    {name:"宙域クラゲ",      icon:"🪼", hp:3, dmg:1, desc:"↑→↓←の決まった巡回。本体の周囲1マス(触手)は敵味方問わず刺す — 敵を触手に押し込め"},
+  hunter:   {name:"ハンター機",      icon:"🛸", hp:2, dmg:1, desc:"速い。毎ターン2マス詰めてくる(+慣性)。先に撃つか、軌道上に罠を置け"},
+  sentinel: {name:"古代防衛機構",    icon:"👁️", hp:4, dmg:2, desc:"不動・ドリフトなし。1ラウンドかけて直線を充填(橙)し、次のラウンドにその列を焼き払う(敵味方問わず!)"},
+  // 新世代の敵語彙(各タイプ=プレイヤーの特定の「いつもの動き」を禁止または強制する)
+  warden:   {name:"装甲種カラパス",  icon:"🦀", hp:2, dmg:1, armor:true, desc:"分厚い甲殻が武器ダメージを1軽減。だが衝突・激突・爆発(物理)は素通しだ — 撃つな、ぶつけて割れ"},
+  splitter: {name:"分裂体ミトス",    icon:"🧬", hp:3, dmg:1, split:true, desc:"倒すと幼体2体に分裂して手数を喰う。機雷や渦のそばで割るか、幼体ごと薙ぎ払え"},
+  larva:    {name:"ミトス幼体",      icon:"✴️", hp:1, dmg:1, desc:"分裂体の欠片。1発で消えるが、群れると囓り殺される"},
+  mender:   {name:"修復網メンダー",  icon:"📡", hp:2, dmg:0, desc:"毎ターン、最も傷ついた敵をHP+1修復しながら逃げ回る。放置はジリ貧 — 何を置いても最優先で潰せ"},
+  blinker:  {name:"転移種ブリンカー", icon:"🔮", hp:2, dmg:1, desc:"位相転移で跳ぶ(慣性も衝突も無視)。間合い2から撃つ。転移先は予告される — 着地点を読んで罠を敷け"},
+  bomber:   {name:"自爆種ボムスポア", icon:"💣", hp:1, dmg:2, boom:true, desc:"歩く機雷。隣まで来ると自爆(周囲1マスに2ダメージ)。遠くで撃ち抜くか、押し返して敵の群れで爆ぜさせろ"},
+  // ボス3種(ランごとに正体が変わる — bossOf()が抽選): 戦い方が根本から違う
+  apex:     {name:"アポカリプス・コア", icon:"👁️", hp:14, dmg:2, boss:true, title:"中心墓所の主",
+    hint:"十字の射線を読め。機雷を産む — だが機雷は、こちらの武器にもなる。",
+    desc:"不動。十字に充填→焼却を繰り返し、合間に機雷を産み落とす。レーンを外し続けろ"},
+  juggernaut:{name:"グレイヴ・ローラー", icon:"🦏", hp:12, dmg:2, boss:true, armor:true, title:"墓所の轢断者",
+    hint:"照準→轢断の2拍子。装甲は銃を弾く — 機雷と岩の上へ誘い出して自滅させろ。",
+    desc:"装甲突進ボス。1ラウンドかけて照準(橙レーン)し、次のラウンドにそのレーンを轢断する(最初にぶつかった者に2、自分も軋む)。障害物が天敵"},
+  broodmother:{name:"マザー・ミトス", icon:"🦑", hp:10, dmg:0, boss:true, title:"増殖の女王",
+    hint:"群れを産みながら位相転移で逃げ回る。手数で溺れる前に、転移先を読んで追い詰めろ。",
+    desc:"自分では殴らない。毎ターン幼体や自爆種を産み付け、近づけば位相転移で逃げる。巣ごと焼く速度勝負"},
+  // ハザード(クリア条件に含まれない・撃てる・押せる)
+  debris:   {name:"岩塊",            icon:"🪨", hp:2, dmg:0, desc:"漂う岩。ぶつかれば双方1ダメージ。撃ち砕いて道を開けるか、敵を叩きつけろ"},
+  mine:     {name:"係留機雷",        icon:"☄️", hp:1, dmg:2, desc:"触れるな。壊れると周囲1マス全てに2ダメージ(誘爆あり)。敵を押し込む最高の罠"},
+};
+
+// [zone-1] = {e1, safe, danger, hz:[debris,mine], well:重力渦確率, flare:太陽フレア}
+// 敵タイプ=攻略法の語彙(アークナイツ式): 各ゾーンで「いつもの動き」をひとつずつ崩す
+const ZONE_TABLE = [
+  {e1:["miner","miner"],               safe:["miner","miner"],             danger:["miner","miner","bomber"],     hz:[1,0]},
+  {e1:["miner","warden"],              safe:["pirate","bomber","miner"],   danger:["warden","pirate","mender"],   hz:[1,1]},
+  {e1:["pirate","jelly","splitter"],   safe:["jelly","splitter"],          danger:["blinker","pirate","hunter"],  hz:[2,1], well:.5},
+  {e1:["hunter","warden","mender"],    safe:["jelly","blinker","bomber"],  danger:["sentinel","splitter","mender"], hz:[1,2], well:.5, flare:true},
+  // ゾーン5第2戦域は必ずボス(中心墓所の主)
+  {e1:["sentinel","blinker","splitter"], safe:["apex","bomber"],           danger:["apex","warden","mender"],     hz:[1,2], well:.35},
+];
+const ZONE_NAMES = ["残骸ベルト","海賊の墓場","囁きの星雲","沈黙の前哨","中心墓所"];
+
+// 開幕でプレイヤー(x=0列)のラップ1歩先(x=4の同行)を塞がない配置(デバッグ報告: 「ループ側に動けない」体感の原因)
+const ENEMY_SPAWNS = [[3,2],[4,0],[4,4],[2,2],[4,2],[3,0],[3,4],[2,0]];
+
+// ---- rng ----
+function mulberry32(seed){ let a = seed>>>0; return function(){ a|=0; a=(a+0x6D2B79F5)|0;
+  let t=Math.imul(a^(a>>>15),1|a); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }; }
+
+// ---- helpers ----
+const mod=(v,m)=>((v%m)+m)%m;
+const wrap=v=>mod(v,CONFIG.GRID);
+function tdelta(a,b){ const G=CONFIG.GRID; let d=mod(b-a,G); if(d>G/2) d-=G; return d; }
+function tdist(a,b){ return Math.abs(tdelta(a.x,b.x))+Math.abs(tdelta(a.y,b.y)); }
+function sameLine(a,b){ return a.x===b.x || a.y===b.y; }
+function lineDist(a,b){ if(a.x===b.x) return Math.abs(tdelta(a.y,b.y)); if(a.y===b.y) return Math.abs(tdelta(a.x,b.x)); return Infinity; }
+
+function aliveUnits(enc){ return enc.units.filter(u=>u.alive); }
+function unitAt(enc,x,y){ return enc.units.find(u=>u.alive && u.x===x && u.y===y) || null; }
+function players(enc){ return enc.units.filter(u=>u.alive && u.side==="player"); }
+function enemies(enc){ return enc.units.filter(u=>u.alive && u.side==="enemy"); }
+function targetables(enc){ return enc.units.filter(u=>u.alive && u.side!=="player"); } // 敵+ハザード(岩・機雷も撃てる/押せる)
+function unitById(enc,id){ return enc.units.find(u=>u.id===id); }
+function nearestPlayer(enc,u){ let best=null,bd=99; for(const p of players(enc)){ const d=tdist(u,p); if(d<bd){bd=d;best=p;} } return best; }
+function effDamage(t,dmg){ return Math.max(0,dmg-(t.shield||0)); }
+
+function cardsIn(state,loc){ return state.run.cards.filter(c=>c.loc===loc); }
+function aliveCards(state){ return state.run.cards.filter(c=>c.loc!=="lost"); }
+function cardByUid(state,uid){ return state.run.cards.find(c=>c.uid===uid); }
+function defOf(c){ return CARD_DEFS[c.defId]; }
+
+// ---- run setup ----
+function newRun(seed, deckDefIds, opts){
+  opts=opts||{};
+  const s = (seed===undefined||seed===null) ? Math.floor(Math.random()*1e9) : seed;
+  const ship = shipDef(opts.shipId);
+  const deck = (deckDefIds&&deckDefIds.length)? deckDefIds : ship.deck;
+  const state = {
+    seed:s, rand:mulberry32(s),
+    screen:"title",
+    run:{
+      zone:1, encIdx:0, route:null,
+      tutorial: !!opts.tutorial,
+      shipId: ship.id,
+      asc: Math.max(0, Math.min(3, opts.asc!==undefined?opts.asc:(opts.hard?1:0))),
+      contracts: (opts.contracts||[]).filter(id=>CONTRACT_DEFS.some(c=>c.id===id)),
+      daily: !!opts.daily,
+      freeChooseRest:0, extraMiner:false,
+      cards: deck.map((defId,i)=>({uid:"u"+i, defId, loc:"pool", up:false})),
+      nextUid: deck.length,
+      cargo:[], relicsSeen:[], deployed:[], bonusValue:0,
+      fuelBurnt:0, restCount:0, burnCount:0, totalRounds:0,
+      over:false, win:false, reason:null,
+      log:[],
+    },
+    enc:null,
+  };
+  if(hasContract(state.run,"fragile")) state.run.shipHp=Math.max(1,ship.hp-2); // 契約『老朽船体』
+  return state;
+}
+
+function log(state,msg,cls){ state.run.log.unshift({msg,cls:cls||"",t:state.run.totalRounds}); if(state.run.log.length>120) state.run.log.pop(); }
+
+// ---- encounter setup ----
+// ボスの正体はランごとに抽選(周回動機: 「今回の主はどいつだ」)。"apex"はテーブル上のプレースホルダ
+function bossOf(state){
+  if(!state.run.bossType){
+    const pool=["apex","juggernaut","broodmother"];
+    state.run.bossType=pool[Math.floor(state.rand()*pool.length)];
+  }
+  return state.run.bossType;
+}
+function encounterEnemyList(state){
+  const zt = ZONE_TABLE[state.run.zone-1];
+  const list = state.run.encIdx===0 ? zt.e1 : (state.run.route==="danger" ? zt.danger : zt.safe);
+  return list.map(t=> t==="apex" ? bossOf(state) : t);
+}
+
+function startEncounter(state, loadoutUids){
+  const run=state.run;
+  const pool=cardsIn(state,"pool");
+  const want=Math.min(CONFIG.HAND,pool.length);
+  let chosen = loadoutUids ? pool.filter(c=>loadoutUids.includes(c.uid)) : pool.slice(0,want);
+  if(chosen.length>want) chosen=chosen.slice(0,want);
+  if(chosen.length<want){ for(const c of pool){ if(chosen.length>=want) break; if(!chosen.includes(c)) chosen.push(c); } }
+  for(const c of pool) c.loc = chosen.includes(c) ? "hand" : "reserve";
+
+  let list = run.tutorial ? ["miner","miner"] : [...encounterEnemyList(state)];
+  if(run.extraMiner){ list.push("miner"); run.extraMiner=false; log(state,"墓標を荒らした報い — 採掘ドローンが嗅ぎつけてきた","bad"); }
+  if(hasContract(run,"swarm") && !run.tutorial){
+    list.push(list.find(t=>!ENEMY_DEFS[t].boss)||"miner"); // 契約『増援協定』: 同型1体追加(ボスは増えない)
+  }
+  const units=[];
+  // 船体はランを通して持ち越す(回復は応急パッチ/補給/残骸修理のみ — 「どうせ死なない」の根絶)
+  const sd=shipDef(run.shipId);
+  const shipHp=Math.max(1, Math.min(sd.hp, (run.shipHp??sd.hp) - (run.shipEventDmg||0))); run.shipEventDmg=0;
+  units.push({id:"ship", side:"player", type:"ship", name:"旗艦"+sd.name, icon:"🚀",
+    x:0,y:1, hp:shipHp, maxHp:sd.hp, drift:null, shield:0, alive:true});
+  const droneHp = (run.droneHp===0) ? Math.ceil(sd.droneHp/2) : Math.min(sd.droneHp, run.droneHp??sd.droneHp);
+  units.push({id:"drone", side:"player", type:"drone", name:"随伴機R-6", icon:"🛰️",
+    x:1,y:3, hp:droneHp, maxHp:sd.droneHp, drift:null, shield:0, alive:true}); // 斜め配置で互いの直線を塞がない
+  const hardBonus = run.asc>=1?1:0;
+  const hasBoss = list.some(t=>ENEMY_DEFS[t].boss);
+  list.forEach((t,i)=>{
+    let [x,y]=ENEMY_SPAWNS[i];
+    if(ENEMY_DEFS[t].boss){ x=3; y=2; } // ボスは中央奥に鎮座
+    const d=ENEMY_DEFS[t];
+    const hp=d.hp + (state.run.zone>=5?1:0) + hardBonus + (hasContract(run,"heavy")?1:0);
+    const dmg=d.dmg + ((state.run.zone>=4&&(t==="pirate"||t==="hunter"))?1:0)
+      + ((run.asc>=3&&state.run.zone>=3)?1:0);
+    units.push({id:"e"+i, side:"enemy", type:t, name:d.name, icon:d.icon,
+      x,y, hp, maxHp:hp, dmg,
+      drift:null, shield:0, alive:true, charge:null, patIdx:Math.floor(state.rand()*4)});
+  });
+  // ハザード配置(岩・機雷): 中央帯の空きマスへ。制動と物理キルが輝く地形(L-016)
+  const zt=ZONE_TABLE[run.zone-1];
+  let hz=run.tutorial?[0,1]:[...(zt.hz||[0,0])];
+  if(hasContract(run,"minefield") && !run.tutorial) hz=[hz[0],hz[1]+2]; // 契約『機雷宙域』
+  const hzList=[...Array(hz[0]).fill("debris"),...Array(hz[1]).fill("mine")];
+  let hi=0;
+  for(const t of hzList){
+    let tries=0;
+    while(tries++<30){
+      const x=1+Math.floor(state.rand()*3), y=Math.floor(state.rand()*CONFIG.GRID);
+      if(units.some(u=>u.x===x&&u.y===y)) continue;
+      const d=ENEMY_DEFS[t];
+      units.push({id:"h"+(hi++), side:"hazard", type:t, name:d.name, icon:d.icon,
+        x,y, hp:d.hp, maxHp:d.hp, dmg:d.dmg, drift:null, shield:0, alive:true});
+      break;
+    }
+  }
+  // 回収コンテナ(サブ目標): 第2戦域に40%で出現。ユニットが乗れば価値+2
+  let container=null;
+  if(run.encIdx===1 && state.rand()<0.4){
+    let tries=0;
+    while(tries++<30){
+      const x=2+Math.floor(state.rand()*3), y=Math.floor(state.rand()*CONFIG.GRID);
+      if(units.some(u=>u.x===x&&u.y===y)) continue;
+      container={x,y,taken:false};
+      break;
+    }
+  }
+  // 重力渦(セル地形): 隣のユニットをラウンド頭に引き込む。渦上では慣性が消える
+  let well=null;
+  if(!run.tutorial && zt.well && state.rand()<zt.well){
+    let tries=0;
+    while(tries++<30){
+      const x=1+Math.floor(state.rand()*3), y=Math.floor(state.rand()*CONFIG.GRID);
+      if(units.some(u=>u.x===x&&u.y===y)) continue;
+      if(container&&container.x===x&&container.y===y) continue;
+      well={x,y};
+      break;
+    }
+  }
+  state.enc={ units, round:1, step:"intents", phase:null, intents:[], dmgQueue:[],
+    pending:null, awaitEnd:false, enemyIdx:null, driftMoves:0, fxQueue:[], crashSalvage:0,
+    container, well, flareRow:null, killStreak:0, bossIntro:hasBoss,
+    cleared:false };
+  if(well) log(state,"🌀 重力渦を検出 — 渦の隣で止まると引き込まれる。敵を放り込んで予定を狂わせろ。","warn");
+  if(hasBoss) log(state, "⚠ 警告: 桁外れのエネルギー反応 — 墓所の主が目を覚ます。", "bad");
+  log(state, `《${ZONE_NAMES[run.zone-1]}》 第${run.encIdx+1}戦域 — 警報!! 敵影${list.length}。仕事の時間だ。`, "warn");
+  pump(state);
+  return state;
+}
+
+// ---- fx queue (UIが描画時に消費。ロジックはDOMを知らない) ----
+function fx(state, ev){ const q=state.enc&&state.enc.fxQueue; if(!q) return; q.push(ev); if(q.length>60) q.shift(); }
+// トーラスの縁越え(ラップ)通知: UIは盤面横断スライドではなく「端から退場→反対側から入場」を描く
+function wrapNote(state,u,dirKey){
+  const enc=state.enc; if(!enc||!dirKey) return;
+  (enc.wrapFx=enc.wrapFx||[]).push({unitId:u.id, dir:dirKey});
+  if(enc.wrapFx.length>20) enc.wrapFx.shift();
+}
+
+// ---- drift ----
+function applyDrift(state){
+  const enc=state.enc;
+  enc.driftMoves=0;
+  for(const u of players(enc)) u.shield=0;
+  // 渦上のユニットは滑る前に慣性が消える(渦=タダで止まれる地形)
+  if(enc.well) for(const u of aliveUnits(enc)){
+    if(u.x===enc.well.x && u.y===enc.well.y && u.drift){
+      u.drift=null;
+      fx(state,{type:"float",x:u.x,y:u.y,text:"渦に固定",cls:"dim"});
+    }
+  }
+  const order=[...players(enc),...enemies(enc)];
+  for(const u of order){
+    if(!u.alive || !u.drift) continue;
+    const d=DIRS[u.drift];
+    const nx=wrap(u.x+d.x), ny=wrap(u.y+d.y);
+    const occ=unitAt(enc,nx,ny);
+    if(occ){
+      if(u.side==="player" && occ.side==="player"){
+        // 味方同士はバンプ: 停止のみ(テストプレイ調整: 自軍ドローン圧死が頻発したため)
+        log(state, `${u.name} が ${occ.name} に接触 — 慣性が殺された`);
+        fx(state,{type:"float",x:occ.x,y:occ.y,text:"接触",cls:"dim"});
+        u.drift=null;
+      } else {
+        // 敵が絡む衝突: 双方1ダメージ、双方ドリフト消滅
+        log(state, `衝突! ${u.name} が ${occ.name} に激突`, "bad");
+        u.drift=null; occ.drift=null;
+        fx(state,{type:"boom",x:nx,y:ny});
+        fx(state,{type:"float",x:nx,y:ny,text:"衝突!",cls:"bad"});
+        dealDamage(state, u, CONFIG.COLLISION_DMG, "衝突");
+        dealDamage(state, occ, CONFIG.COLLISION_DMG, "衝突");
+      }
+    } else {
+      if(u.x+d.x!==nx || u.y+d.y!==ny) wrapNote(state,u,u.drift); // 縁越えドリフト
+      u.x=nx; u.y=ny; enc.driftMoves++;
+    }
+  }
+  applyWellPull(state);
+  checkContainer(state);
+}
+
+// 重力渦: ラウンド頭(滑り解決後)、渦の隣にいるユニットを渦へ引き込む(慣性は消える)
+function applyWellPull(state){
+  const enc=state.enc, w=enc.well;
+  if(!w) return;
+  for(const u of [...players(enc),...enemies(enc)]){
+    if(!u.alive) continue;
+    if(u.x===w.x && u.y===w.y) continue;
+    if(tdist(u,w)===1 && !unitAt(enc,w.x,w.y)){
+      if(Math.abs(u.x-w.x)>1 || Math.abs(u.y-w.y)>1) wrapNote(state,u,dirBetween(u,w)); // 縁越え吸引
+      u.x=w.x; u.y=w.y; u.drift=null; enc.driftMoves++;
+      fx(state,{type:"float",x:u.x,y:u.y,text:"🌀吸引",cls:"warn"});
+      log(state,`${u.name} が重力渦に引き込まれた`,u.side==="player"?"bad":"good");
+    }
+  }
+}
+
+// ラウンド頭の慣性解決ビート(L-004): pumpはここで止まり、UI/シムが driftPhase を呼ぶ
+function driftPhase(state){
+  const enc=state.enc;
+  if(!enc||enc.step!=="drift") return {ok:false};
+  applyDrift(state);
+  enc.step="intents";
+  pump(state);
+  return {ok:true};
+}
+
+// ---- damage ----
+const PHYS_SRCS=["衝突","激突","機雷の爆発","自爆"]; // 「物理」= 装甲種カラパスを素通しする系
+function dealDamage(state, u, dmg, src){
+  if(!u.alive || dmg<=0) return;
+  // ベリーロール(装甲衝角艦)のパッシブ: 物理は通さない、物理で殴る
+  if((src==="衝突"||src==="激突") && state.run.shipId==="bellyroll"){
+    if(u.side==="player"){ fx(state,{type:"float",x:u.x,y:u.y,text:"装甲!",cls:"good"}); return; }
+    dmg+=1;
+  }
+  // 装甲種カラパス: 武器ダメージ-1、物理は素通し(対抗手段の強制 — 撃つな、ぶつけろ)
+  if(u.side!=="player" && (ENEMY_DEFS[u.type]||{}).armor && !PHYS_SRCS.includes(src)){
+    dmg-=1;
+    fx(state,{type:"float",x:u.x,y:u.y,text:"装甲!",cls:"dim"});
+    if(dmg<=0){ log(state,`${u.name}の甲殻が${src}を弾いた — 物理でぶつけろ`,"warn"); return; }
+  }
+  if(u.side==="player"){
+    state.enc.dmgQueue.push({unitId:u.id, dmg, src});
+    fx(state,{type:"hitflash",unitId:u.id});
+  } else {
+    const eff=effDamage(u,dmg); u.shield=Math.max(0,u.shield-dmg);
+    u.hp-=eff;
+    if(eff>0) fx(state,{type:"float",x:u.x,y:u.y,text:"-"+eff,cls:"bad"});
+    if(u.hp<=0){
+      u.alive=false;
+      fx(state,{type:"boom",x:u.x,y:u.y,big:true});
+      fx(state,{type:"shake"});
+      log(state, `${u.name} 撃破! 宇宙塵に還った。`, "good");
+      if((ENEMY_DEFS[u.type]||{}).boss){
+        state.run.bossKilled=true;
+        fx(state,{type:"boom",x:u.x,y:u.y,big:true});
+        fx(state,{type:"confetti"});
+        fx(state,{type:"stamp",x:u.x,y:u.y,big:true,text:`${ENEMY_DEFS[u.type].title}、沈黙。`});
+        log(state,"……静寂。文明を終わらせた怒りが、いま眠りについた。","good");
+      }
+      state.enc.killStreak=(state.enc.killStreak||0)+1;
+      if(state.enc.killStreak===2) fx(state,{type:"stamp",x:u.x,y:u.y,big:true,text:"DOUBLE KILL!"});
+      if(state.enc.killStreak>=3) fx(state,{type:"stamp",x:u.x,y:u.y,big:true,text:"RAMPAGE!!"});
+      // 機雷は死ぬとき周囲1マスの全ユニットを巻き込む(連鎖あり)
+      if(u.type==="mine"){
+        log(state, "機雷が誘爆! 周囲を薙ぎ払う", "bad");
+        fx(state,{type:"boom",x:u.x,y:u.y,big:true});
+        for(const c of neighborCells(u.x,u.y)){
+          const v=unitAt(state.enc,c.x,c.y);
+          if(v) dealDamage(state,v,2,"機雷の爆発");
+        }
+      }
+      // 自爆種ボムスポア: どんな死に方でも爆ぜる(歩く機雷 — 押し返して敵群で割れ)
+      if((ENEMY_DEFS[u.type]||{}).boom){
+        log(state, `${u.name}が爆散! 周囲を巻き込む`, "bad");
+        fx(state,{type:"boom",x:u.x,y:u.y,big:true});
+        for(const c of neighborCells(u.x,u.y)){
+          const v=unitAt(state.enc,c.x,c.y);
+          if(v) dealDamage(state,v,2,"自爆");
+        }
+      }
+      // 分裂体ミトス: 死ぬと幼体2体が隣の空きマスへ(手数を喰う — 割る場所を選べ)
+      if((ENEMY_DEFS[u.type]||{}).split){
+        const free=neighborCells(u.x,u.y).filter(c=>!unitAt(state.enc,c.x,c.y));
+        const n=Math.min(2,free.length);
+        for(let i=0;i<n;i++){
+          state.enc.summonSeq=(state.enc.summonSeq||0)+1;
+          const ld=ENEMY_DEFS.larva;
+          state.enc.units.push({id:"lv"+state.enc.summonSeq, side:"enemy", type:"larva", name:ld.name, icon:ld.icon,
+            x:free[i].x, y:free[i].y, hp:ld.hp, maxHp:ld.hp, dmg:ld.dmg, drift:null, shield:0, alive:true, charge:null, patIdx:0});
+          fx(state,{type:"float",x:free[i].x,y:free[i].y,text:"分裂!",cls:"bad"});
+        }
+        if(n) log(state, `${u.name}が裂けて幼体${n}体が這い出した…(次のラウンドから動く)`, "bad");
+      }
+      // クラッシュ・サルベージ: 物理(衝突/激突)で「敵」を破壊すると残骸からカード回収(多脚: 位置取り→寿命)
+      if(PHYS_SRCS.includes(src)&&u.side==="enemy"){
+        state.enc.crashSalvage=(state.enc.crashSalvage||0)+1;
+        state.run.physKills=(state.run.physKills||0)+1;
+        fx(state,{type:"stamp",x:u.x,y:u.y,big:true,text:state.run.physKills>=3?`物理キル ×${state.run.physKills}!!`:"物理キル!"});
+        log(state, `物理キル! ${u.name}の残骸から部品をサルベージできる`, "good");
+      }
+    }
+    else if(eff>0){ fx(state,{type:"hitflash",unitId:u.id}); log(state, `${u.name} に${eff}ダメージ (残HP${u.hp})`); }
+  }
+}
+
+function pendingDamage(state){ return state.enc && state.enc.dmgQueue.length ? state.enc.dmgQueue[0] : null; }
+
+function resolveDamage(state, mode, burnUid){
+  const enc=state.enc;
+  const q=enc.dmgQueue.shift();
+  if(!q) return {ok:false,msg:"no damage"};
+  const u=unitById(enc,q.unitId);
+  if(!u || !u.alive){ pump(state); return {ok:true}; }
+  const eff=Math.max(0,q.dmg-u.shield); u.shield=Math.max(0,u.shield-q.dmg);
+  if(eff<=0){ log(state,`${u.name} のシールドが${q.src}を弾いた`, "good"); pump(state); return {ok:true}; }
+  if(mode==="burn"){
+    const c=cardByUid(state,burnUid);
+    if(!c || (c.loc!=="hand"&&c.loc!=="discard")) return {ok:false,msg:"そのカードは燃やせない"};
+    c.loc="lost"; state.run.burnCount++;
+    log(state, `『${defOf(c).name}』を燃やして${q.src}(${eff}ダメージ)を無効化! カードは永遠に失われた…`, "warn");
+  } else {
+    u.hp-=eff;
+    log(state, `${u.name} が${q.src}で${eff}ダメージ (残HP${Math.max(0,u.hp)})`, "bad");
+    if(u.hp<=0){
+      u.alive=false;
+      if(u.id==="ship"){ runOver(state,false,"ship"); return {ok:true}; }
+      state.run.droneWasLost=true;
+      log(state, `${u.name} 大破! 次の戦域で応急復帰する`, "bad");
+    }
+  }
+  pump(state);
+  return {ok:true};
+}
+
+function runOver(state,win,reason){
+  const run=state.run;
+  run.over=true; run.win=win; run.reason=reason;
+  state.screen="summary";
+  if(win) log(state,"帰還ジャンプ完了。母港の灯りが見える。","good");
+  else log(state, reason==="ship" ? "船体崩壊。最後の通信はノイズに溶けた。" : "全カード喪失。船はもう、漂うだけの棺だ。", "bad");
+}
+
+// ---- intents (enemy AI) ----
+function stepDirToward(enc,u,p,avoid){
+  const dx=tdelta(u.x,p.x), dy=tdelta(u.y,p.y);
+  const opts=[];
+  if(Math.abs(dx)>=Math.abs(dy)){ if(dx!==0) opts.push(dx>0?"right":"left"); if(dy!==0) opts.push(dy>0?"down":"up"); }
+  else { if(dy!==0) opts.push(dy>0?"down":"up"); if(dx!==0) opts.push(dx>0?"right":"left"); }
+  for(const k of opts){
+    const d=DIRS[k], nx=wrap(u.x+d.x), ny=wrap(u.y+d.y);
+    if(!unitAt(enc,nx,ny) && !avoid.has(nx+","+ny)) return {dir:k,x:nx,y:ny};
+  }
+  return null;
+}
+function stepDirAway(enc,u,p,avoid){
+  let best=null,bd=tdist(u,p);
+  for(const k of DIR_KEYS){
+    const d=DIRS[k], nx=wrap(u.x+d.x), ny=wrap(u.y+d.y);
+    if(unitAt(enc,nx,ny)||avoid.has(nx+","+ny)) continue;
+    const nd=tdist({x:nx,y:ny},p);
+    if(nd>bd){ bd=nd; best={dir:k,x:nx,y:ny}; }
+  }
+  return best;
+}
+function neighborCells(x,y){ return DIR_KEYS.map(k=>({x:wrap(x+DIRS[k].x), y:wrap(y+DIRS[k].y)})); }
+function rowCells(y){ const a=[]; for(let x=0;x<CONFIG.GRID;x++) a.push({x,y}); return a; }
+function colCells(x){ const a=[]; for(let y=0;y<CONFIG.GRID;y++) a.push({x,y}); return a; }
+
+// 近接の基本形(1歩詰めて隣接なら殴る): miner / warden / larva が共有
+function meleePlan(state,u,avoid){
+  const enc=state.enc, p=nearestPlayer(enc,u);
+  if(!p) return baseIntent(u);
+  const mv=stepDirToward(enc,u,p,avoid);
+  const pos=mv?{x:mv.x,y:mv.y}:u;
+  const it=baseIntent(u);
+  if(mv){ it.moveTo={x:mv.x,y:mv.y}; it.moveDir=mv.dir; avoid.add(mv.x+","+mv.y); }
+  if(tdist(pos,p)<=1){ it.attackCells=[{x:p.x,y:p.y}]; it.dmg=u.dmg; }
+  return it;
+}
+const ENEMY_AI = {
+  miner:    { plan: meleePlan },
+  warden:   { plan: meleePlan },
+  splitter: { plan: meleePlan },
+  larva:    { plan: meleePlan },
+  mender: { plan(state,u,avoid){
+    // 支援機: 逃げ回りつつ最も傷ついた敵を修復(優先目標の強制)
+    const enc=state.enc; const it=baseIntent(u);
+    const p=nearestPlayer(enc,u);
+    if(p){ const mv=stepDirAway(enc,u,p,avoid); if(mv){ it.moveTo={x:mv.x,y:mv.y}; it.moveDir=mv.dir; avoid.add(mv.x+","+mv.y); } }
+    const cands=enemies(enc).filter(e=>e.id!==u.id && e.hp<e.maxHp);
+    if(cands.length){
+      cands.sort((a,b)=>(a.hp/a.maxHp)-(b.hp/b.maxHp));
+      it.healTarget=cands[0].id;
+    }
+    return it;
+  }},
+  blinker: { plan(state,u,avoid){
+    // 転移種: 間合い2以内なら撃つ。遠ければ最寄りユニットの間合い2リングへ位相転移(慣性・衝突無視)
+    const enc=state.enc; const it=baseIntent(u);
+    const p=nearestPlayer(enc,u);
+    if(!p) return it;
+    if(tdist(u,p)<=2){ it.attackCells=[{x:p.x,y:p.y}]; it.dmg=u.dmg; return it; }
+    const ring=[];
+    for(let x=0;x<CONFIG.GRID;x++)for(let y=0;y<CONFIG.GRID;y++){
+      if(tdist({x,y},p)!==2) continue;
+      if(unitAt(enc,x,y)||avoid.has(x+","+y)) continue;
+      ring.push({x,y});
+    }
+    if(ring.length){
+      const c=ring[Math.floor(state.rand()*ring.length)];
+      it.moveTo=c; it.teleport=true; avoid.add(c.x+","+c.y);
+    }
+    return it;
+  }},
+  bomber: { plan(state,u,avoid){
+    // 自爆種: 1歩詰めて、隣接したら自爆(周囲1マス2ダメージ)
+    const enc=state.enc, p=nearestPlayer(enc,u);
+    const it=baseIntent(u);
+    if(!p) return it;
+    const mv=stepDirToward(enc,u,p,avoid);
+    const pos=mv?{x:mv.x,y:mv.y}:u;
+    if(mv){ it.moveTo={x:mv.x,y:mv.y}; it.moveDir=mv.dir; avoid.add(mv.x+","+mv.y); }
+    if(tdist(pos,p)<=1){ it.detonate=true; it.detonateAt={x:pos.x,y:pos.y}; it.attackCells=neighborCells(pos.x,pos.y); it.dmg=u.dmg; }
+    return it;
+  }},
+  hunter: { plan(state,u,avoid){
+    const enc=state.enc, p=nearestPlayer(enc,u);
+    if(!p) return baseIntent(u);
+    const it=baseIntent(u);
+    let cx=u.x, cy=u.y, dir=null;
+    for(let s=0;s<2;s++){
+      const mv=stepDirToward(enc,{x:cx,y:cy},p,avoid);
+      if(!mv) break;
+      cx=mv.x; cy=mv.y; dir=mv.dir;
+    }
+    if(dir){ it.moveTo={x:cx,y:cy}; it.moveDir=dir; avoid.add(cx+","+cy); }
+    const pos=it.moveTo||u;
+    if(tdist(pos,p)<=1){ it.attackCells=[{x:p.x,y:p.y}]; it.dmg=u.dmg; }
+    return it;
+  }},
+  pirate: { plan(state,u,avoid){
+    const enc=state.enc, p=nearestPlayer(enc,u);
+    if(!p) return baseIntent(u);
+    const d=tdist(u,p); const it=baseIntent(u);
+    let mv=null;
+    if(d<2) mv=stepDirAway(enc,u,p,avoid);
+    else if(d>2) mv=stepDirToward(enc,u,p,avoid);
+    else it.brake=true;
+    if(mv){ it.moveTo={x:mv.x,y:mv.y}; it.moveDir=mv.dir; avoid.add(mv.x+","+mv.y); }
+    const pos=mv?{x:mv.x,y:mv.y}:u;
+    if(tdist(pos,p)<=2){ it.attackCells=[{x:p.x,y:p.y}]; it.dmg=u.dmg; }
+    return it;
+  }},
+  jelly: { plan(state,u,avoid){
+    const enc=state.enc; const it=baseIntent(u);
+    const k=DIR_KEYS[(u.patIdx + enc.round) % 4];
+    const d=DIRS[k], nx=wrap(u.x+d.x), ny=wrap(u.y+d.y);
+    let pos={x:u.x,y:u.y};
+    if(!unitAt(enc,nx,ny) && !avoid.has(nx+","+ny)){ it.moveTo={x:nx,y:ny}; it.moveDir=k; avoid.add(nx+","+ny); pos={x:nx,y:ny}; }
+    it.attackCells=neighborCells(pos.x,pos.y); it.dmg=u.dmg; it.aura=true;
+    return it;
+  }},
+  sentinel: { plan(state,u){
+    const enc=state.enc; const it=baseIntent(u);
+    if(u.charge){ it.attackCells=u.charge.map(c=>({...c})); it.dmg=u.dmg; it.fire=true; }
+    else {
+      const p=nearestPlayer(enc,u);
+      if(p){
+        const cells=(Math.abs(tdelta(u.y,p.y))<=Math.abs(tdelta(u.x,p.x))) ? rowCells(p.y) : colCells(p.x);
+        it.chargeCells=cells.filter(c=>!(c.x===u.x&&c.y===u.y));
+      }
+    }
+    return it;
+  }},
+  apex: { plan(state,u){
+    // ボス: 十字充填→焼却の2拍子+合間に機雷を産む。不動。
+    const enc=state.enc; const it=baseIntent(u);
+    if(u.charge){ it.attackCells=u.charge.map(c=>({...c})); it.dmg=u.dmg; it.fire=true; return it; }
+    const p=nearestPlayer(enc,u);
+    if(p){
+      const cells=[...rowCells(p.y),...colCells(p.x)].filter(c=>!(c.x===u.x&&c.y===u.y));
+      const seen=new Set();
+      it.chargeCells=cells.filter(c=>{const k=c.x+","+c.y; if(seen.has(k))return false; seen.add(k); return true;});
+    }
+    // 機雷産卵(盤上の機雷3個まで)
+    const mines=enc.units.filter(x=>x.alive&&x.type==="mine").length;
+    if(mines<3){
+      const free=neighborCells(u.x,u.y).filter(c=>!unitAt(enc,c.x,c.y));
+      if(free.length) it.summon={...free[Math.floor(state.rand()*free.length)], type:"mine"};
+    }
+    return it;
+  }},
+  juggernaut: { plan(state,u){
+    // 轢断ボス: 照準(レーン橙予告)→翌ラウンドにレーンを突進。最初の障害物で止まり双方軋む — 機雷へ誘え
+    const enc=state.enc; const it=baseIntent(u);
+    const lane=dk=>{ const d=DIRS[dk]; const cells=[]; let x=u.x,y=u.y;
+      for(let i=1;i<CONFIG.GRID;i++){ x=wrap(x+d.x); y=wrap(y+d.y); cells.push({x,y}); } return cells; };
+    if(u.rushDir){ it.rush=u.rushDir; it.dmg=u.dmg; it.attackCells=lane(u.rushDir); return it; }
+    const p=nearestPlayer(enc,u);
+    if(p){ const dk=dirBetween(u,p); it.aimDir=dk; it.chargeCells=lane(dk); }
+    return it;
+  }},
+  broodmother: { plan(state,u,avoid){
+    // 増殖の女王: 殴らない。卵を産み(幼体≤3/自爆種≤1)、近づかれたら位相転移で距離3へ逃げる
+    const enc=state.enc; const it=baseIntent(u);
+    const larv=enc.units.filter(x=>x.alive&&x.type==="larva").length;
+    const bomb=enc.units.filter(x=>x.alive&&x.type==="bomber").length;
+    const free=neighborCells(u.x,u.y).filter(c=>!unitAt(enc,c.x,c.y)&&!avoid.has(c.x+","+c.y));
+    if(free.length){
+      const t=(enc.round%2===0 && bomb<1) ? "bomber" : (larv<3 ? "larva" : null);
+      if(t) it.summon={...free[Math.floor(state.rand()*free.length)], type:t};
+    }
+    const p=nearestPlayer(enc,u);
+    if(p && tdist(u,p)<=2){
+      const ring=[];
+      for(let x=0;x<CONFIG.GRID;x++)for(let y=0;y<CONFIG.GRID;y++){
+        if(unitAt(enc,x,y)||avoid.has(x+","+y)) continue;
+        if(players(enc).every(q=>tdist({x,y},q)>=3)) ring.push({x,y});
+      }
+      if(ring.length){ const c=ring[Math.floor(state.rand()*ring.length)]; it.moveTo=c; it.teleport=true; avoid.add(c.x+","+c.y); }
+    }
+    return it;
+  }},
+};
+function baseIntent(u){ return {unitId:u.id, moveTo:null, moveDir:null, brake:false, attackCells:[], chargeCells:null, dmg:0, fire:false, aura:false}; }
+
+function planIntents(state){
+  const enc=state.enc; enc.intents=[];
+  const avoid=new Set();
+  for(const u of enemies(enc)) enc.intents.push(ENEMY_AI[u.type].plan(state,u,avoid));
+}
+
+function execIntent(state, it){
+  const enc=state.enc;
+  const u=unitById(enc,it.unitId);
+  if(!u||!u.alive) return;
+  if(it.moveTo){
+    if(!unitAt(enc,it.moveTo.x,it.moveTo.y)){
+      if(it.teleport){
+        fx(state,{type:"float",x:u.x,y:u.y,text:"転移",cls:"dim"});
+        u.x=it.moveTo.x; u.y=it.moveTo.y; u.drift=null; // 位相転移は慣性を持たない
+        fx(state,{type:"float",x:u.x,y:u.y,text:"✦",cls:"warn"});
+      } else {
+        // 敵の歩行は最大2歩 — 生デルタが2を超えるのは縁越えのみ(G=5)
+        if(Math.abs(u.x-it.moveTo.x)>2 || Math.abs(u.y-it.moveTo.y)>2) wrapNote(state,u,it.moveDir);
+        u.x=it.moveTo.x; u.y=it.moveTo.y; u.drift=it.moveDir;
+      }
+    }
+    else { u.drift=null; }
+  }
+  if(it.brake) u.drift=null;
+  if(it.healTarget){
+    const t=unitById(enc,it.healTarget);
+    if(t&&t.alive&&t.hp<t.maxHp){
+      t.hp+=1;
+      fx(state,{type:"float",x:t.x,y:t.y,text:"+1修復",cls:"bad"});
+      log(state,`${u.name} が ${t.name} を修復した(HP${t.hp}) — 先に修復網を潰せ`,"bad");
+    }
+  }
+  if(it.summon){
+    const t=it.summon.type||"mine";
+    if(unitAt(enc,it.summon.x,it.summon.y)){
+      log(state,`${u.name} の産卵は妨害された — マスが塞がっている`,"good");
+    } else {
+      enc.summonSeq=(enc.summonSeq||0)+1;
+      const sd=ENEMY_DEFS[t];
+      const side=(t==="mine"||t==="debris")?"hazard":"enemy";
+      enc.units.push({id:"sm"+enc.summonSeq, side, type:t, name:sd.name, icon:sd.icon,
+        x:it.summon.x, y:it.summon.y, hp:sd.hp, maxHp:sd.hp, dmg:sd.dmg, drift:null, shield:0, alive:true, charge:null, patIdx:0});
+      fx(state,{type:"boom",x:it.summon.x,y:it.summon.y});
+      log(state,`${u.name} が${sd.name}を産み落とした…`,"bad");
+    }
+  }
+  if(it.aimDir) u.rushDir=it.aimDir;
+  if(it.chargeCells){
+    u.charge=it.chargeCells;
+    log(state, it.aimDir ? `${u.name} が照準 — 橙のレーンから退け、轢かれるぞ` : `${u.name} がエネルギー充填中… 直線上から退避せよ`, "warn");
+    return;
+  }
+  if(it.rush){
+    // 轢断突進: レーンを直進し、最初にぶつかった者に与ダメ — 自分も1軋む(障害物への誘導=攻略法)
+    const d=DIRS[it.rush]; u.rushDir=null; u.charge=null;
+    log(state,`${u.name} が轢断突進!!`,"bad");
+    fx(state,{type:"flash",cells:it.attackCells.map(c=>({...c})),beam:true});
+    fx(state,{type:"shake"});
+    for(let i=0;i<CONFIG.GRID-1;i++){
+      const nx=wrap(u.x+d.x), ny=wrap(u.y+d.y);
+      const occ=unitAt(enc,nx,ny);
+      if(occ){
+        log(state,`${u.name} が ${occ.name} を轢いた!`,"bad");
+        fx(state,{type:"boom",x:nx,y:ny,big:true});
+        dealDamage(state,occ,it.dmg,"激突");
+        dealDamage(state,u,1,"激突");
+        break;
+      }
+      if(u.x+d.x!==nx || u.y+d.y!==ny) wrapNote(state,u,it.rush);
+      u.x=nx; u.y=ny;
+    }
+    u.drift=null;
+    return;
+  }
+  if(it.detonate){
+    // 自爆: 予告位置に居る場合のみ(テレグラフ正直性 L-003 — 押しのけられたら空振り)
+    if(it.detonateAt && (u.x!==it.detonateAt.x || u.y!==it.detonateAt.y)){
+      log(state,`${u.name} の自爆装置が空転 — 予告地点からずらされた!`,"good");
+      return;
+    }
+    log(state,`${u.name} の自爆装置が作動!`,"bad");
+    fx(state,{type:"flash",cells:it.attackCells.map(c=>({...c}))});
+    dealDamage(state,u,9,"自壊"); // 自壊死が死亡時爆発(ENEMY_DEFS.boom)を起こし周囲を薙ぐ
+    return;
+  }
+  if(it.attackCells.length){
+    fx(state,{type:"flash",cells:it.attackCells.map(c=>({...c})),beam:!!it.fire});
+    for(const c of it.attackCells){
+      const v=unitAt(enc,c.x,c.y);
+      if(!v){
+        // 狙い撃ち(単体予告)の空振り=プレイヤーが回避した瞬間(L-003)
+        if(!it.aura && !it.fire) fx(state,{type:"float",x:c.x,y:c.y,text:"回避!",cls:"good"});
+        continue;
+      }
+      // 同士討ち解禁: 予告マスにいる者は敵味方問わず喰らう(誘導が戦術になる)
+      if(it.fire){ if(v.id!==u.id) dealDamage(state,v,it.dmg,u.name+"の主砲"); }
+      else if(v.id!==u.id){
+        if(v.side!=="player") log(state,`${u.name}の攻撃が${v.name}に当たった! 同士討ちだ`,"good");
+        dealDamage(state,v,it.dmg,u.name+"の攻撃");
+      }
+    }
+    if(it.fire){ u.charge=null; log(state,`${u.name} が直線を焼き払った!`,"bad"); }
+  }
+}
+
+// 敵フェイズを1体ずつ進める(UIアニメ用)。完了時 endcheck へ。
+function enemyStep(state){
+  const enc=state.enc;
+  if(!enc || enc.step!=="enemy") return {done:true};
+  if(enc.enemyIdx===null||enc.enemyIdx===undefined) enc.enemyIdx=0;
+  while(enc.enemyIdx < enc.intents.length){
+    const it=enc.intents[enc.enemyIdx++];
+    const u=unitById(enc,it.unitId);
+    if(!u||!u.alive) continue;
+    execIntent(state,it);
+    return {done:false, unitId:it.unitId};
+  }
+  enc.enemyIdx=null;
+  enc.step="endcheck";
+  pump(state);
+  return {done:true};
+}
+function enemyPhaseAll(state){ let g=0; while(g++<50){ if(enemyStep(state).done) break; } }
+function nextActingEnemy(state){
+  const enc=state.enc;
+  if(!enc||enc.step!=="enemy") return null;
+  const start=enc.enemyIdx||0;
+  for(let i=start;i<enc.intents.length;i++){
+    const u=unitById(enc,enc.intents[i].unitId);
+    if(u&&u.alive) return u.id;
+  }
+  return null;
+}
+
+// ---- 太陽フレア(Z4環境ギミック): 3の倍数ラウンドに行を予告→翌ラウンド頭に焼く(敵味方無差別) ----
+function scheduleFlare(state){
+  const enc=state.enc, zt=ZONE_TABLE[state.run.zone-1];
+  if(!zt.flare || state.run.tutorial || enc.flareRow!==null) return;
+  if(enc.round%3===0){
+    enc.flareRow=Math.floor(state.rand()*CONFIG.GRID);
+    log(state,`☀ 太陽フレア接近 — 次のラウンド頭、第${enc.flareRow+1}行を焼く(敵味方無差別)。退避するか、敵を置き去りにしろ`,"warn");
+  }
+}
+function fireFlare(state){
+  const enc=state.enc;
+  if(enc.flareRow===null||enc.flareRow===undefined) return;
+  const y=enc.flareRow; enc.flareRow=null;
+  log(state,`☀ 太陽フレア直撃! 第${y+1}行が焼かれた`,"bad");
+  fx(state,{type:"flash",cells:rowCells(y),beam:true});
+  for(const u of [...aliveUnits(enc)]){
+    if(u.y===y) dealDamage(state,u,1,"太陽フレア");
+  }
+}
+
+// ---- round pump ----
+function checkCleared(state){
+  const enc=state.enc;
+  if(!enc.cleared && enemies(enc).length===0){ enc.cleared=true; return true; }
+  return enc.cleared;
+}
+
+function takeSnapshot(state){
+  const enc=state.enc;
+  state._snap={
+    units: JSON.parse(JSON.stringify(enc.units)),
+    intents: JSON.parse(JSON.stringify(enc.intents)),
+    round: enc.round, cleared: enc.cleared, driftMoves: enc.driftMoves,
+    locs: state.run.cards.map(c=>c.loc),
+    logLen: state.run.log.length,
+  };
+}
+function canUndo(state){
+  return !!(state.enc && state._snap && state.enc.step==="player");
+}
+function undoTurn(state){
+  const enc=state.enc, s=state._snap;
+  if(!canUndo(state)) return {ok:false,msg:"今はやり直せない"};
+  enc.units=JSON.parse(JSON.stringify(s.units));
+  enc.intents=JSON.parse(JSON.stringify(s.intents));
+  enc.round=s.round; enc.cleared=s.cleared; enc.driftMoves=s.driftMoves;
+  enc.pending=null; enc.awaitEnd=false; enc.dmgQueue=[]; enc.fxQueue=[]; enc.wrapFx=[]; enc.crashSalvage=0;
+  state.run.cards.forEach((c,i)=>{ c.loc=s.locs[i]; });
+  if(state.run.log.length>s.logLen) state.run.log.splice(0, state.run.log.length-s.logLen);
+  log(state,"⟲ 航法コンピュータ巻き戻し — このターンをやり直す");
+  return {ok:true};
+}
+
+function pump(state){
+  const enc=state.enc;
+  for(;;){
+    if(state.run.over||!enc) return;
+    if(enc.dmgQueue.length){ enc.phase="damage"; return; }
+    if(enc.crashSalvage>0){ enc.phase="crashsalvage"; return; } // カード回収 or 船体修理(常に価値がある)
+    if(checkCleared(state)){ enc.phase="cleared"; return; }
+    switch(enc.step){
+      case "drift": enc.phase="drift"; return; // driftPhase() が進める(慣性解決ビート)
+      case "intents":
+        fireFlare(state); if(state.run.over) return;
+        planIntents(state);
+        scheduleFlare(state);
+        enc.step="upkeep"; break;
+      case "upkeep": {
+        const hand=cardsIn(state,"hand");
+        if(hand.length<2){
+          const discard=cardsIn(state,"discard");
+          if(hand.length+discard.length<2){ runOver(state,false,"exhausted"); return; }
+          enc.phase="rest"; enc.step="rest"; return;
+        }
+        enc.phase="player"; enc.step="player"; enc.pending=null; enc.awaitEnd=false;
+        takeSnapshot(state);
+        return;
+      }
+      case "rest": enc.phase="rest"; return;   // doRest が進める
+      case "player": enc.phase="player"; return; // UI が進める(crashsalvage等の割込み後に確実に復帰)
+      case "enemy": enc.phase="enemy"; return; // enemyStep / enemyPhaseAll が進める
+      case "endcheck": enc.round++; state.run.totalRounds++; enc.step="drift"; break;
+      default: return;
+    }
+  }
+}
+
+// ---- crash salvage ----
+function crashSalvagePick(state, uid){
+  const enc=state.enc;
+  if(!enc||enc.phase!=="crashsalvage") return {ok:false,msg:"not salvage phase"};
+  const c=cardByUid(state,uid);
+  if(!c||c.loc!=="discard") return {ok:false,msg:"消耗パイルから選んでください"};
+  c.loc="hand"; enc.crashSalvage--;
+  log(state,`残骸サルベージ — 『${defOf(c).name}』を手札に回収した`,"good");
+  pump(state);
+  return {ok:true};
+}
+
+// ---- rest (GH準拠: 成り行き=ランダム無償 / 自選=船HP-1) ----
+function doRest(state, mode, loseUid){
+  const enc=state.enc;
+  if(enc.step!=="rest") return {ok:false,msg:"not rest phase"};
+  for(const c of cardsIn(state,"discard")) c.loc="hand";
+  const hand=cardsIn(state,"hand");
+  let c;
+  if(mode==="choose"){
+    const ship=unitById(enc,"ship");
+    const free = state.run.freeChooseRest>0;
+    if(!free && ship.hp<=1) return {ok:false,msg:"船体が持たない — 成り行きに任せるしかない"};
+    c=cardByUid(state,loseUid);
+    if(!c||c.loc!=="hand") return {ok:false,msg:"手札から選んでください"};
+    if(free){ state.run.freeChooseRest--; log(state, `静かな祈りが効いた — 無償で『${defOf(c).name}』を選んで手放した。`, "warn"); }
+    else { ship.hp--; log(state, `船体を軋ませて選別(HP-1) — 『${defOf(c).name}』を手放した。`, "warn"); }
+  } else {
+    c=hand[Math.floor(state.rand()*hand.length)];
+    log(state, `成り行きの休息 — 『${defOf(c).name}』が宇宙に流れていった。`, "warn");
+  }
+  c.loc="lost"; state.run.restCount++;
+  if(cardsIn(state,"hand").length<2){ runOver(state,false,"exhausted"); return {ok:true}; }
+  enc.phase="enemy"; enc.step="enemy"; // 休息はターンを消費する
+  pump(state);
+  return {ok:true};
+}
+
+// ---- player actions ----
+function selectPair(state, aUid, aHalf, bUid){
+  const enc=state.enc;
+  if(enc.step!=="player") return {ok:false,msg:"not player phase"};
+  if(enc.pending) return {ok:false,msg:"already selected"};
+  if(aUid===bUid) return {ok:false,msg:"同じカードは選べない"};
+  const a=cardByUid(state,aUid), b=cardByUid(state,bUid);
+  if(!a||!b||a.loc!=="hand"||b.loc!=="hand") return {ok:false,msg:"手札のカードを選んでください"};
+  const bHalf = aHalf==="top" ? "bottom" : "top";
+  enc.pending=[{uid:aUid,half:aHalf,done:false},{uid:bUid,half:bHalf,done:false}];
+  return {ok:true};
+}
+
+function actionSpec(state, idx){
+  const p=state.enc.pending[idx];
+  return cardSpec(state, cardByUid(state,p.uid), p.half);
+}
+
+function moveOptions(state, unit, spec){
+  // 移動は「ちょうど n マス」直線(L-002)。途中閉塞は不可(phaseは通過可、終点占有は不可)。
+  const enc=state.enc; const out=[];
+  if(spec.n<=0) return out;
+  for(const k of DIR_KEYS){
+    const d=DIRS[k];
+    let x=unit.x, y=unit.y, blocked=false;
+    for(let i=1;i<=spec.n;i++){
+      x=wrap(x+d.x); y=wrap(y+d.y);
+      const occ=unitAt(enc,x,y);
+      if(occ && (!spec.phase || i===spec.n)){ blocked=true; break; }
+    }
+    if(!blocked) out.push({x,y,dir:k,steps:spec.n});
+  }
+  return out;
+}
+// 塞がれた方向の情報(「なぜ行けないか」を見せる — 見えない否定はバグに見える L-003/L-019)
+function moveBlocked(state, unit, spec){
+  const enc=state.enc; const out=[];
+  if(spec.n<=0) return out;
+  for(const k of DIR_KEYS){
+    const d=DIRS[k];
+    let x=unit.x, y=unit.y;
+    for(let i=1;i<=spec.n;i++){
+      x=wrap(x+d.x); y=wrap(y+d.y);
+      const occ=unitAt(enc,x,y);
+      if(occ && (!spec.phase || i===spec.n)){
+        out.push({x:wrap(unit.x+d.x), y:wrap(unit.y+d.y), dir:k, by:occ.name, at:i});
+        break;
+      }
+    }
+  }
+  return out;
+}
+function attackTargets(state, unit, spec){
+  const enc=state.enc;
+  // アストラ(砲撃艦)のパッシブ: 射程+1
+  const R=(spec.range||0) + ((unit.side==="player"&&state.run.shipId==="astra"&&spec.range)?1:0);
+  if(spec.kind==="attack"||spec.kind==="attack_multi"||spec.kind==="execute") return targetables(enc).filter(e=>tdist(unit,e)<=R);
+  if(spec.kind==="attack_line"||spec.kind==="pierce") return targetables(enc).filter(e=>sameLine(unit,e)&&lineDist(unit,e)<=R&&tdist(unit,e)>0);
+  if(spec.kind==="attack_all") return targetables(enc).filter(e=>tdist(unit,e)<=R);
+  if(spec.kind==="push"||spec.kind==="attack_push") return targetables(enc).filter(e=>tdist(unit,e)===1);
+  if(spec.kind==="pull"||spec.kind==="pull_all"||spec.kind==="setdrift"||spec.kind==="attack_pull")
+    return targetables(enc).filter(e=>sameLine(unit,e)&&lineDist(unit,e)<=R&&tdist(unit,e)>0);
+  return [];
+}
+
+// カード強化(+): 既定は主要数値+1。upDefs があれば「使い方が変わる」カスタム強化(StS式)
+function upSpec(spec, up, def, half){
+  if(!up) return spec;
+  if(def && def.upDefs && def.upDefs[half]) return {...def.upDefs[half], lost:def.upDefs[half].lost??spec.lost, upgraded:true};
+  const s={...spec, upgraded:true};
+  if(s.kind==="ram") s.n+=1; // 突進=移動も威力もn(単値)
+  else if(s.dmg) s.dmg+=1;
+  else if(["heal","shield","move","brake_move","push","pull","pull_all"].includes(s.kind)) s.n+=1;
+  else if(s.range) s.range+=1;
+  return s;
+}
+function cardSpec(state, c, half){ const d=defOf(c); return upSpec(d[half], c.up, d, half); }
+function applyUpgrade(state, uid){
+  if(uid){
+    const c=cardByUid(state,uid);
+    if(!c||c.up||c.loc==="lost") return {ok:false,msg:"そのカードは強化できない"};
+    c.up=true;
+    log(state,`『${defOf(c).name}』を強化(+) — 母船の整備班が唸りを上げた`,"good");
+  } else log(state,"強化を見送った。温存も戦略だ。");
+  state.screen="route";
+  return {ok:true};
+}
+// 整備ドックの択2: 補給(船体修理+随伴機全快)。強化との天秤(StSの焚き火)
+function applyResupply(state){
+  if(hasContract(state.run,"norepair")) return {ok:false,msg:"契約『補給封鎖』— 補給は使えない"};
+  const sd=shipDef(state.run.shipId);
+  state.run.shipHp=Math.min(sd.hp,(state.run.shipHp??sd.hp)+3);
+  state.run.droneHp=sd.droneHp;
+  log(state,`補給を受けた — 旗艦${state.run.shipHp}/${sd.hp}、随伴機は完全復帰。`,"good");
+  state.screen="route";
+  return {ok:true};
+}
+// 整備ドックの択3: 物資回収(売却価値+1)
+function applyScrapLoot(state){
+  state.run.bonusValue+=1;
+  log(state,"残骸から物資を回収 — 売却価値+1。","good");
+  state.screen="route";
+  return {ok:true};
+}
+// 残骸修理: サルベージ権でカード回収の代わりに船体+1(デッキ未周回でも腐らない)
+function crashSalvageRepair(state){
+  const enc=state.enc;
+  if(!enc||enc.phase!=="crashsalvage") return {ok:false,msg:"not salvage phase"};
+  const ship=unitById(enc,"ship");
+  ship.hp=Math.min(ship.maxHp,ship.hp+1);
+  enc.crashSalvage--;
+  log(state,`残骸の装甲板を船体に当てがった — 旗艦HP${ship.hp}`,"good");
+  fx(state,{type:"float",x:ship.x,y:ship.y,text:"+1🔧",cls:"good"});
+  pump(state);
+  return {ok:true};
+}
+
+// スコア(リプレイの物差し)
+function runScore(state){
+  const r=state.run;
+  const base = cargoValue(state)*10 + (r.zone-1)*25 + (r.win?100:0)
+    + aliveCards(state).length*3 + deployedStatus(state).filter(d=>d.alive).length*8
+    + (r.physKills||0)*12;
+  return Math.round(base*(1+0.25*r.asc)*contractMult(r));
+}
+// 敗北しても拾うものはある(アンロックドリップ — 失敗ランを無駄にしない)
+function lossCredits(state){
+  return Math.max(0,(state.run.zone-1)*2) + Math.floor(cargoValue(state)/3);
+}
+
+// ラム突進の到達マス(移動系と同じ「マスを選ぶ」UIに統一 — L-012)
+function ramOptions(state, unit, spec){
+  const enc=state.enc; const out=[];
+  for(const k of DIR_KEYS){
+    const d=DIRS[k];
+    let x=unit.x, y=unit.y, steps=0, hit=null;
+    for(let i=1;i<=spec.n;i++){
+      const nx=wrap(x+d.x), ny=wrap(y+d.y);
+      const occ=unitAt(enc,nx,ny);
+      if(occ){ if(occ.side!=="player") hit={x:nx,y:ny}; break; }
+      x=nx; y=ny; steps=i;
+    }
+    if(hit) out.push({x:hit.x,y:hit.y,dir:k,hit:true});
+    else if(steps>0) out.push({x,y,dir:k,hit:false});
+  }
+  return out;
+}
+
+function dirBetween(a,b){
+  const dx=tdelta(a.x,b.x), dy=tdelta(a.y,b.y);
+  if(Math.abs(dx)>=Math.abs(dy)) return dx>0?"right":(dx<0?"left":(dy>0?"down":"up"));
+  return dy>0?"down":"up";
+}
+
+function forcedMove(state, victim, dirKey, n){
+  const enc=state.enc; const d=DIRS[dirKey];
+  for(let i=0;i<n;i++){
+    const nx=wrap(victim.x+d.x), ny=wrap(victim.y+d.y);
+    const occ=unitAt(enc,nx,ny);
+    if(occ){
+      log(state,`${victim.name} が ${occ.name} に叩きつけられた!`,"good");
+      fx(state,{type:"boom",x:nx,y:ny});
+      dealDamage(state,victim,CONFIG.COLLISION_DMG,"激突");
+      dealDamage(state,occ,CONFIG.COLLISION_DMG,"激突");
+      victim.drift=null; if(occ.alive) occ.drift=null;
+      return;
+    }
+    if(victim.x+d.x!==nx || victim.y+d.y!==ny) wrapNote(state,victim,dirKey); // 縁越え押し/引き
+    victim.x=nx; victim.y=ny;
+  }
+  victim.drift=dirKey;
+}
+
+function execAction(state, idx, params){
+  const enc=state.enc;
+  if(enc.step!=="player"||!enc.pending) return {ok:false,msg:"not player phase"};
+  const p=enc.pending[idx];
+  if(!p||p.done) return {ok:false,msg:"invalid action"};
+  const spec=actionSpec(state,idx);
+  const unit=unitById(enc,params.unitId);
+  if(!unit||!unit.alive||unit.side!=="player") return {ok:false,msg:"ユニットを選んでください"};
+  const cardName=defOf(cardByUid(state,p.uid)).name;
+
+  switch(spec.kind){
+    case "move": case "brake_move": {
+      if(params.cell){
+        const opts=moveOptions(state,unit,spec);
+        const cands=opts.filter(o=>o.x===params.cell.x&&o.y===params.cell.y);
+        // トーラスでは複数方向が同じマスに着く(L-001)。方向指定があればそれを優先、曖昧なら拒否。
+        const hit = params.dir ? cands.find(o=>o.dir===params.dir)
+                  : (cands.length===1 ? cands[0] : null);
+        if(!hit){
+          if(spec.kind==="brake_move"&&params.cell.x===unit.x&&params.cell.y===unit.y){
+            unit.drift=null; // その場で制動のみ
+          }
+          else if(cands.length>1) return {ok:false,msg:"方向が2通りある — 矢印で選んでください"};
+          else return {ok:false,msg:"そこへは行けない"};
+        } else {
+          if(spec.kind==="brake_move") unit.drift=null;
+          const hd=DIRS[hit.dir], hs=hit.steps||spec.n;
+          if(hd && (unit.x+hd.x*hs!==hit.x || unit.y+hd.y*hs!==hit.y)) wrapNote(state,unit,hit.dir); // 縁越え移動
+          unit.x=hit.x; unit.y=hit.y;
+          unit.drift = spec.kind==="move" ? hit.dir : null;
+        }
+        if(spec.selfDmg) dealDamage(state,unit,spec.selfDmg,"オーバーバーンの熱");
+      } else if(spec.kind==="move"){ return {ok:false,msg:"移動先を選んでください"}; }
+      else { unit.drift=null; } // cell無しのbrake_move=制動のみ
+      log(state,`${unit.name}: 『${cardName}』${spec.label}`);
+      break;
+    }
+    case "ram": {
+      // 単値仕様: 突進力n = 移動距離も与ダメージもn(特殊効果つき移動)
+      const d=DIRS[params.dir]; if(!d) return {ok:false,msg:"突進先のマスを選んでください"};
+      let hit=false;
+      for(let i=0;i<spec.n;i++){
+        const nx=wrap(unit.x+d.x), ny=wrap(unit.y+d.y);
+        const occ=unitAt(enc,nx,ny);
+        if(occ){
+          if(occ.side!=="player"){ dealDamage(state,occ,spec.n,"激突"); unit.drift=null; hit=true; }
+          break;
+        }
+        if(unit.x+d.x!==nx || unit.y+d.y!==ny) wrapNote(state,unit,params.dir); // 縁越え突進
+        unit.x=nx; unit.y=ny;
+      }
+      if(!hit) unit.drift=params.dir;
+      log(state,`${unit.name}: 突進${spec.n}! ${hit?"標的に艦体を叩き込んだ":"空振り — 慣性だけが残った"}`);
+      break;
+    }
+    case "pierce": {
+      // 貫通射撃: 直線上の全ユニット(敵味方無差別・自分以外)を撃ち抜き、反動で後方ドリフト
+      const t=unitById(enc,params.targetId);
+      if(!t||!attackTargets(state,unit,spec).includes(t)) return {ok:false,msg:"同一直線上(射程内)の標的を選んでください"};
+      const dk=dirBetween(unit,t);
+      const d=DIRS[dk];
+      const cells=[];
+      let x=unit.x, y=unit.y;
+      for(let i=1;i<=spec.range;i++){
+        x=wrap(x+d.x); y=wrap(y+d.y);
+        cells.push({x,y});
+        const v=unitAt(enc,x,y);
+        if(v && v.id!==unit.id) dealDamage(state,v,spec.dmg,cardName);
+      }
+      fx(state,{type:"flash",cells,beam:true});
+      if(!spec.noRecoil){
+        unit.drift=OPP[dk];
+        log(state,`${unit.name}: 『${cardName}』フルパワー斉射 — 反動で後方へ流される!`,"warn");
+      } else log(state,`${unit.name}: 『${cardName}』安定化済み斉射`);
+      break;
+    }
+    case "attack_push": {
+      const t=unitById(enc,params.targetId);
+      if(!t||!attackTargets(state,unit,spec).includes(t)) return {ok:false,msg:"隣接する対象を選んでください"};
+      dealDamage(state,t,spec.dmg,cardName);
+      if(t.alive) forcedMove(state,t,dirBetween(unit,t),spec.n);
+      log(state,`${unit.name}: 『${cardName}』→ ${t.name} を撃ち飛ばした`);
+      break;
+    }
+    case "attack_pull": {
+      const t=unitById(enc,params.targetId);
+      if(!t||!attackTargets(state,unit,spec).includes(t)) return {ok:false,msg:"同一直線上の対象を選んでください"};
+      dealDamage(state,t,spec.dmg,cardName);
+      if(t.alive){
+        const dk=dirBetween(t,unit);
+        forcedMove(state,t,dk,Math.min(spec.n,Math.max(0,lineDist(unit,t)-1)));
+        if(t.alive) t.drift=dk;
+      }
+      log(state,`${unit.name}: 『${cardName}』→ ${t.name} に銛を打ち込んだ。来い!`);
+      break;
+    }
+    case "warp": {
+      if(!params.cell||unitAt(enc,params.cell.x,params.cell.y)) return {ok:false,msg:"空きマスを選んでください"};
+      unit.x=params.cell.x; unit.y=params.cell.y; unit.drift=null;
+      log(state,`${unit.name}: 死者の星図に従い、空間を跳んだ`,"warn");
+      break;
+    }
+    case "attack": case "attack_line": {
+      const t=unitById(enc,params.targetId);
+      if(!t||!attackTargets(state,unit,spec).includes(t)) return {ok:false,msg:"射程内の敵を選んでください"};
+      dealDamage(state,t,spec.dmg,cardName);
+      log(state,`${unit.name}: 『${cardName}』→ ${t.name}`);
+      break;
+    }
+    case "attack_all": {
+      const ts=attackTargets(state,unit,spec);
+      if(!ts.length) return {ok:false,msg:"射程内に敵がいない"};
+      for(const t of ts) dealDamage(state,t,spec.dmg,cardName);
+      log(state,`${unit.name}: 『${cardName}』— 周囲一掃!`);
+      break;
+    }
+    case "attack_multi": {
+      const ids=params.targetIds||[];
+      if(!ids.length) return {ok:false,msg:"対象を選んでください"};
+      if(ids.length>spec.count) return {ok:false,msg:"対象が多すぎる"};
+      const valid=attackTargets(state,unit,spec);
+      for(const id of ids){ const t=unitById(enc,id); if(!t||!valid.includes(t)) return {ok:false,msg:"射程外の敵が含まれている"}; }
+      for(const id of ids) dealDamage(state,unitById(enc,id),spec.dmg,cardName);
+      log(state,`${unit.name}: 『${cardName}』起動 — 古代の殺意が目覚める`);
+      break;
+    }
+    case "push": {
+      const t=unitById(enc,params.targetId);
+      if(!t||!attackTargets(state,unit,spec).includes(t)) return {ok:false,msg:"隣接する敵を選んでください"};
+      if(spec.dmg) dealDamage(state,t,spec.dmg,cardName);
+      if(t.alive) forcedMove(state,t,dirBetween(unit,t),spec.n);
+      log(state,`${unit.name}: 『${cardName}』→ ${t.name} を突き放した`);
+      break;
+    }
+    case "pull": {
+      const t=unitById(enc,params.targetId);
+      if(!t||!attackTargets(state,unit,spec).includes(t)) return {ok:false,msg:"同一直線上(射程内)の敵を選んでください"};
+      const dk=dirBetween(t,unit);
+      const dist=lineDist(unit,t);
+      forcedMove(state,t,dk,Math.min(spec.n,Math.max(0,dist-1)));
+      t.drift=dk;
+      log(state,`${unit.name}: 『${cardName}』→ ${t.name} を引き寄せた。落ちてこい`);
+      break;
+    }
+    case "pull_all": {
+      const ts=attackTargets(state,unit,spec);
+      if(!ts.length) return {ok:false,msg:"射程内に敵がいない"};
+      for(const t of ts){
+        const dk=dirBetween(t,unit);
+        forcedMove(state,t,dk,Math.min(spec.n,Math.max(0,lineDist(unit,t)-1)));
+        if(t.alive) t.drift=dk;
+      }
+      log(state,`${unit.name}: 『${cardName}』— 重力が牙を剥く`);
+      break;
+    }
+    case "setdrift": {
+      const t=unitById(enc,params.targetId);
+      if(!t||!attackTargets(state,unit,spec).includes(t)) return {ok:false,msg:"射程内の敵を選んでください"};
+      if(!DIRS[params.dir]) return {ok:false,msg:"方向を選んでください"};
+      if(spec.dmg) dealDamage(state,t,spec.dmg,cardName);
+      if(t.alive) t.drift=params.dir;
+      log(state,`${unit.name}: 『${cardName}』→ ${t.name} の慣性を書き換えた`);
+      break;
+    }
+    case "execute": {
+      // トドメ: 傷ついている敵に大ダメージ(コンボの締め)
+      const t=unitById(enc,params.targetId);
+      if(!t||!attackTargets(state,unit,spec).includes(t)) return {ok:false,msg:"射程内の対象を選んでください"};
+      const total=spec.dmg + (t.hp<t.maxHp?spec.bonus:0);
+      if(t.hp<t.maxHp) fx(state,{type:"float",x:t.x,y:t.y,text:"トドメ!",cls:"good"});
+      dealDamage(state,t,total,cardName);
+      log(state,`${unit.name}: 『${cardName}』→ ${t.name}(${total}ダメージ)`);
+      break;
+    }
+    case "spawnhaz": {
+      // 地形を作る: ビルド軸(物理派)の供給源
+      const free=neighborCells(unit.x,unit.y).filter(c=>!unitAt(enc,c.x,c.y));
+      if(!free.length) return {ok:false,msg:"隣接に空きマスがない"};
+      const d=ENEMY_DEFS[spec.haz];
+      let placed=0;
+      for(const c of free){
+        if(placed>=spec.count) break;
+        enc.summonSeq=(enc.summonSeq||0)+1;
+        enc.units.push({id:"ph"+enc.summonSeq, side:"hazard", type:spec.haz, name:d.name, icon:d.icon,
+          x:c.x, y:c.y, hp:d.hp, maxHp:d.hp, dmg:d.dmg, drift:null, shield:0, alive:true});
+        fx(state,{type:"boom",x:c.x,y:c.y});
+        placed++;
+      }
+      log(state,`${unit.name}: 『${cardName}』— ${d.name}×${placed}を展開した`);
+      break;
+    }
+    case "heal": {
+      unit.hp=Math.min(unit.maxHp,unit.hp+spec.n);
+      if(spec.shield) unit.shield+=spec.shield;
+      log(state,`${unit.name}: 『${cardName}』修理完了 (HP${unit.hp})`);
+      break;
+    }
+    case "shield": {
+      unit.shield+=spec.n;
+      if(spec.brake) unit.drift=null;
+      log(state,`${unit.name}: 『${cardName}』シールド展開(${unit.shield})${spec.brake?"+制動":""}`);
+      break;
+    }
+    case "salvage": {
+      const c=cardByUid(state,params.salvageUid);
+      if(!c||c.loc!=="discard") return {ok:false,msg:"消耗パイルから選んでください"};
+      c.loc="hand";
+      log(state,`${unit.name}: 『${cardName}』— ${defOf(c).name}を回収した`);
+      break;
+    }
+    default: return {ok:false,msg:"unknown action: "+spec.kind};
+  }
+  finishHalf(state,idx);
+  return {ok:true};
+}
+
+function fizzleAction(state, idx){
+  const enc=state.enc;
+  if(enc.step!=="player"||!enc.pending) return {ok:false,msg:"not player phase"};
+  const p=enc.pending[idx];
+  if(!p||p.done) return {ok:false,msg:"invalid"};
+  log(state,`『${defOf(cardByUid(state,p.uid)).name}』の${p.half==="top"?"上":"下"}側は不発 — 宇宙は広い、当てが外れることもある`);
+  finishHalf(state,idx,false);
+  return {ok:true};
+}
+
+function finishHalf(state,idx,used){
+  const enc=state.enc;
+  enc.pending[idx].done=true;
+  enc.pending[idx].used=(used!==false); // 不発ならロストアクションも燃えない
+  checkContainer(state);
+  // 勝利条件はイベント駆動で即時評価(L-015): 全滅したら残りの行動は不要
+  if(enemies(enc).length===0 && !state.run.over && enc.pending.some(p=>!p.done)){
+    log(state,"敵性反応消失 — 残りの行動は不要だ。","good");
+    for(const p of enc.pending) p.done=true;
+  }
+  if(enc.pending.every(p=>p.done)){
+    enc.awaitEnd=true;
+    if(enemies(enc).length===0 || state.run.over) commitTurn(state);
+  }
+}
+
+// プレイヤーターン確定 → 敵フェイズへ(ここまでは⟲やり直し可能)
+function commitTurn(state){
+  const enc=state.enc;
+  if(!enc||!enc.awaitEnd) return {ok:false,msg:"確定できる状態ではない"};
+  for(const p of enc.pending){
+    const c=cardByUid(state,p.uid);
+    if(c.loc!=="hand") continue;
+    const sp=defOf(c)[p.half];
+    if(sp.lost && p.used){
+      c.loc="lost";
+      fx(state,{type:"stamp",x:0,y:0,text:"🔥カードロスト"});
+      log(state,`『${defOf(c).name}』は燃え尽きた — ロストアクションの代償。`,"warn");
+    } else c.loc="discard";
+  }
+  enc.pending=null; enc.awaitEnd=false;
+  enc.killStreak=0;
+  enc.step="enemy";
+  pump(state);
+  return {ok:true};
+}
+
+// ---- encounter end / run flow ----
+function finishEncounter(state){
+  const run=state.run;
+  for(const c of state.run.cards) if(["hand","discard","reserve"].includes(c.loc)) c.loc="pool";
+  const ship=unitById(state.enc,"ship"), drone=unitById(state.enc,"drone");
+  run.shipHp = ship?ship.hp:run.shipHp;
+  run.droneHp = (drone&&drone.alive)?drone.hp:0;
+  state.enc=null; state._snap=null;
+  if(run.tutorial){ state.screen="tutorialdone"; return; }
+  if(run.encIdx===0){
+    run.encIdx=1;
+    // 第1戦域クリア報酬: カード強化(全強化済みならスキップ)
+    state.screen = aliveCards(state).some(c=>!c.up) ? "upgrade" : "route";
+  }
+  else { state.screen="relic"; state.pendingRelic=rollRelic(state); }
+}
+
+function chooseRoute(state, route){
+  state.run.route=route;
+  log(state, route==="danger" ? "危険ルート選択 — 深部信号が強い。良い遺物の匂いだ。" : "安全ルート選択 — 賢明だ。臆病とも言うが。", "warn");
+  state.screen="loadout";
+}
+
+function rollRelic(state){
+  const seen=new Set(state.run.relicsSeen);
+  let pool=RELIC_DEFS.filter(r=>!seen.has(r.id));
+  if(!pool.length) return null;
+  const wantRare = state.run.route==="danger" || (state.run.zone>=4 && state.rand()<0.5);
+  let sub=pool.filter(r=>r.rare===wantRare);
+  if(!sub.length) sub=pool;
+  return sub[Math.floor(state.rand()*sub.length)];
+}
+
+function resolveRelic(state, choice){
+  const r=state.pendingRelic;
+  if(r){
+    state.run.relicsSeen.push(r.id);
+    if(choice==="seal"){
+      state.run.cargo.push(r.id);
+      log(state,`『${r.name}』をカーゴに封印した。家まで持って帰るんだ。`,"good");
+    } else {
+      const uid="u"+(state.run.nextUid++);
+      state.run.cards.push({uid, defId:r.card, loc:"pool", relicId:r.id});
+      state.run.deployed.push(r.id);
+      log(state,`『${r.name}』を展開! 『${CARD_DEFS[r.card].name}』がデッキに加わった。売却価値は放棄した — カードを失えば、遺物ごと永遠に消える。`,"warn");
+    }
+  }
+  state.pendingRelic=null;
+  state.screen="leapkeep";
+}
+
+function canDeploy(state){ return aliveCards(state).length < CONFIG.DECK_CAP; }
+
+function doLeap(state, fuelUids){
+  const uids=Array.isArray(fuelUids)?fuelUids:[fuelUids];
+  const need=fuelCost(state);
+  if(uids.length!==need || new Set(uids).size!==uids.length) return {ok:false,msg:`燃料はカード${need}枚(深淵IIの代償)`};
+  const cs=uids.map(u=>cardByUid(state,u));
+  if(cs.some(c=>!c||c.loc==="lost")) return {ok:false,msg:"そのカードは使えない"};
+  for(const c of cs){ c.loc="lost"; state.run.fuelBurnt++; }
+  state.run.zone++; state.run.encIdx=0; state.run.route=null;
+  log(state,`『${cs.map(c=>defOf(c).name).join("』『")}』を燃料に変換 — ジャンプ! ${ZONE_NAMES[state.run.zone-1]}へ。`,"warn");
+  if(aliveCards(state).length<2){ runOver(state,false,"exhausted"); return {ok:true}; }
+  state.screen="loadout";
+  return {ok:true};
+}
+
+function doKeep(state){ runOver(state,true,"returned"); }
+
+function cargoValue(state){ return state.run.bonusValue + state.run.cargo.reduce((s,id)=>s+RELIC_DEFS.find(r=>r.id===id).value,0); }
+
+// 回収コンテナ: プレイヤーユニットが乗ったら回収(移動・ドリフトどちらでも)
+function checkContainer(state){
+  const enc=state.enc;
+  if(!enc||!enc.container||enc.container.taken) return;
+  const c=enc.container;
+  const u=players(enc).find(p=>p.x===c.x&&p.y===c.y);
+  if(u){
+    c.taken=true;
+    state.run.bonusValue+=2;
+    fx(state,{type:"stamp",x:c.x,y:c.y,text:"コンテナ回収! 価値+2"});
+    log(state,`${u.name} が漂流コンテナを回収 — 売却価値+2`,"good");
+  }
+}
+
+function unlocks(state){
+  const v=cargoValue(state);
+  return UNLOCK_POOL.map(u=>({...u, name:CARD_DEFS[u.defId].name, got:v>=u.cost}));
+}
+
+// 展開遺物の生死(展開=売却価値の放棄。カードがlostなら遺物も消滅)
+function deployedStatus(state){
+  return state.run.deployed.map(id=>{
+    const card=state.run.cards.find(c=>c.relicId===id);
+    return { id, relic:RELIC_DEFS.find(r=>r.id===id), alive: !!card && card.loc!=="lost" };
+  });
+}
+
+const LK = { CONFIG, CARD_DEFS, RELIC_DEFS, ENEMY_DEFS, ENEMY_AI, ZONE_TABLE, ZONE_NAMES, START_DECK, UNLOCK_POOL, DIRS, DIR_KEYS,
+  CONTRACT_DEFS, hasContract, contractMult,
+  newRun, startEncounter, pump, doRest, selectPair, actionSpec, execAction, fizzleAction,
+  pendingDamage, resolveDamage, finishEncounter, chooseRoute, resolveRelic, canDeploy, doLeap, doKeep,
+  moveOptions, attackTargets, cardsIn, aliveCards, cardByUid, defOf, cargoValue, unlocks,
+  unitAt, players, enemies, unitById, tdist, tdelta, wrap, encounterEnemyList, bossOf, log,
+  enemyStep, enemyPhaseAll, nextActingEnemy, commitTurn, undoTurn, canUndo, effDamage, driftPhase,
+  crashSalvagePick, deployedStatus,
+  SHIP_DEFS, ASC_DEFS, shipDef, fuelCost, runScore, lossCredits, cardSpec, upSpec, applyUpgrade, ramOptions, targetables, moveBlocked,
+  applyResupply, applyScrapLoot, crashSalvageRepair };
+if(typeof module!=="undefined") module.exports=LK;
+/* ===== LOGIC-END ===== */
+
+// ============================== UI ==============================
+let S=null;
+const UI={ mode:"idle", selA:null, actIdx:null, unitId:null, multi:[], loadout:[], loadoutTouched:false,
+  msg:"", acting:null, stepping:false, hintsSeen:false, restChoosing:false, deckSel:[], contractSel:[], sold:{}, fuelSel:[] };
+
+// ---------- メタ進行(M6: localStorage) ----------
+const META_KEY="lok_meta_v1";
+const META_DEFAULT={ credits:0, unlocked:[], installed:[], wins:0, runs:0, bestZone:0, bestValue:0,
+  bestScore:0, dailyBest:null, ships:["vagrants"], lastShip:"vagrants", ascension:0, maxAsc:0,
+  muted:false, tilt:true, fxLite:false, lastDeck:null, lastContracts:[], hard:false };
+let META={...META_DEFAULT};
+function loadMeta(){
+  try{ const raw=localStorage.getItem(META_KEY); if(raw) META={...META_DEFAULT, ...JSON.parse(raw)}; }catch(e){}
+}
+function saveMeta(){ try{ localStorage.setItem(META_KEY, JSON.stringify(META)); }catch(e){} }
+// 所持コレクション = 選択船体の基本デッキ + 購入アンロック + インストール済み遺物カード
+function collectionDefIds(shipId){
+  return [...shipDef(shipId||META.lastShip).deck, ...META.unlocked, ...META.installed.map(id=>RELIC_DEFS.find(r=>r.id===id).card)];
+}
+
+// ---------- WebAudio SE(依存ゼロの合成音) ----------
+let _ac=null;
+function sfx(kind, mul){
+  if(META.muted) return;
+  mul=mul||1;
+  try{
+    _ac=_ac||new (window.AudioContext||window.webkitAudioContext)();
+    const t=_ac.currentTime;
+    const def={
+      click:[660,.05,"square",.04], pick:[520,.06,"triangle",.05],
+      hit:[130,.12,"sawtooth",.09], boom:[55,.3,"square",.14],
+      salvage:[880,.12,"triangle",.07], warp:[440,.25,"sine",.08],
+      bad:[180,.2,"sawtooth",.08], good:[760,.1,"triangle",.06],
+    }[kind]||[440,.08,"sine",.05];
+    const [f0,dur,type,vol]=def;
+    const f=f0*mul;
+    const o=_ac.createOscillator(), g=_ac.createGain();
+    o.type=type; o.frequency.setValueAtTime(f,t);
+    if(kind==="boom"||kind==="hit") o.frequency.exponentialRampToValueAtTime(Math.max(30,f/3),t+dur);
+    if(kind==="warp"||kind==="salvage") o.frequency.exponentialRampToValueAtTime(f*2,t+dur);
+    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+    o.connect(g); g.connect(_ac.destination); o.start(t); o.stop(t+dur+.02);
+  }catch(e){}
+}
+const prevRects={};
+let pvEls=[];
+
+function resetUI(){ UI.mode="idle"; UI.selA=null; UI.actIdx=null; UI.unitId=null; UI.multi=[]; UI.msg=""; UI.restChoosing=false; }
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function attrEsc(html){ return String(html).replace(/&/g,"&amp;").replace(/"/g,"&quot;"); }
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+// ---------- tooltip texts ----------
+const KW={
+  move:"移動: 1方向へ一直線に、表記の数<b>きっかり</b>進む(途中で止まれない)。経路上にユニットがいるとその方向は選べない。盤の端は反対側にループ。",
+  drift:"🌀<b>慣性ドリフト</b>: 移動した者は次のラウンド開始時、同じ方向へ自動で1マス滑る(半透明の影=滑り先)。滑りたくなければ『制動』を使え。",
+  brake:"<b>制動</b>: 自分のドリフトを消す。次のラウンドは滑らない。精密な位置取りに。",
+  range:"射程: 縦横の合計マス数。端のループ越しでも数える(反対側の敵は意外と近い)。",
+  line:"直線: 自分と同じ行/列の敵だけが対象(ループ込み)。",
+  shield:"シールド: このラウンドの被ダメージを数値ぶん吸収。次のラウンド開始時に消える。",
+  push:"押し: 対象を直線に移動させ、その方向の<b>ドリフトを与える</b>。途中で誰かにぶつかると双方1ダメージ。敵同士をぶつけろ。",
+  pull:"引き: 対象を自分の手前まで引き、自分向きの<b>ドリフトを与える</b>。次のラウンド、奴はさらに滑ってくる——受け止める準備はいいか?",
+  collide:"衝突: ドリフトや押しで他ユニットにぶつかると、双方1ダメージ+ドリフト消滅(味方同士は無傷で停止)。",
+};
+function specTT(cardName, spec){
+  const L=[`<b>${esc(cardName)}</b> — ${esc(spec.label)}`];
+  switch(spec.kind){
+    case "move": L.push(KW.move); if(spec.phase)L.push("位相: 他ユニットを通り抜けられる(停止は空きマスのみ)。"); if(spec.selfDmg)L.push(`⚠ 使用後、自分が${spec.selfDmg}ダメージを受ける。`); L.push(KW.drift); break;
+    case "brake_move": L.push(KW.brake); if(spec.n>0)L.push(`制動後、きっかり${spec.n}マス移動できる(ドリフトを生まない=滑らず止まれる)。自分のマスをクリックすれば移動せず制動だけもできる。`); break;
+    case "ram": L.push(`突進${spec.n}: 直進し、最初にぶつかった標的に<b>${spec.n}ダメージ</b>して停止(突進力=移動距離=威力の単値)。何もいなければ全距離進んで滑る。`); break;
+    case "pierce": L.push(`貫通射撃: 直線上・射程内の<b>全ユニットを撃ち抜く(敵も岩も…味方も!)</b>。`,spec.noRecoil?"安定化済み — 反動なし。":"⚠ 反動: 撃った逆方向に自分がドリフトする。位置取りとセットで使え。",KW.line); break;
+    case "warp": L.push("ワープ: 任意の空きマスへ跳ぶ。ドリフトなし。"); break;
+    case "attack": L.push(KW.range); break;
+    case "attack_line": L.push(KW.line); break;
+    case "attack_all": L.push("周囲の射程内の敵<b>すべて</b>に命中。対象選択は不要。"); break;
+    case "attack_multi": L.push(KW.range,"敵を1体ずつクリックして選ぶ(同じ敵は1回まで)。"); break;
+    case "push": L.push(KW.push,KW.collide); break;
+    case "pull": case "pull_all": L.push(KW.pull,KW.collide); break;
+    case "attack_push": L.push("攻撃してから突き飛ばす。クラゲの触手・機雷・センチネルの射線へ押し込め。",KW.push,KW.collide); break;
+    case "attack_pull": L.push("攻撃してから引き寄せる。罠の上を引きずれ。",KW.pull,KW.collide); break;
+    case "setdrift": L.push((spec.dmg?`攻撃${spec.dmg}を与えてから`:"")+"対象のドリフト方向を書き換える。機雷へ、触手へ、仲間へ — 配達先は自由だ。",KW.collide); break;
+    case "execute": L.push(`HPが減っている対象には合計${spec.dmg+spec.bonus}ダメージ。<b>コンボの締め</b>に。無傷の相手には${spec.dmg}しか入らないピーキー砲。`,KW.range); break;
+    case "spawnhaz": L.push(spec.haz==="mine"?"隣接の空きマスに機雷を設置する。<b>自分も触れれば死ぬ</b>。敵の進路・ドリフト先に置け(物理ビルドの心臓)。":"隣接の空きマスに岩塊を置く。盾にも、敵を叩きつける壁にもなる。"); break;
+    case "heal": L.push("HPを回復(最大値まで)。船とドローンどちらに使うかは選べる。"); break;
+    case "shield": L.push(KW.shield); break;
+    case "salvage": L.push("消耗(discard)の山から1枚を手札に戻す。寿命の時計を少しだけ巻き戻す貴重な手段。"); break;
+  }
+  if(spec.lost) L.push("🔥<b>ロストアクション</b>: この側を使うと、このカードは消耗ではなく<b>永久ロスト</b>になる。寿命と引き換えの切り札。");
+  return attrEsc(L.join("<br>"));
+}
+function ic(id,cls){ return `<svg class="ic ${cls||""}"><use href="#${id}"/></svg>`; }
+// カード半分の表示をアイコン化(詳細はツールチップ。L-006「文字をアイコン化」)
+function labelHtml(spec){
+  const n=v=>`<span class="num">${v}</span>`;
+  switch(spec.kind){
+    case "move": return `<span class="statline">${ic("i-move")}${n(spec.n)}${spec.phase?ic("i-warp"):""}${spec.selfDmg?`<span style="color:var(--red)">${ic("i-attack")}${n(spec.selfDmg)}自</span>`:""}</span>`;
+    case "brake_move": return `<span class="statline">${ic("i-brake")}${spec.n>0?`${ic("i-move")}${n(spec.n)}`:""}</span>`;
+    case "ram": return `<span class="statline">${ic("i-ram")}${n(spec.n)}</span>`;
+    case "pierce": return `<span class="statline">${ic("i-line")}${n(spec.dmg)}${ic("i-range")}${n(spec.range)}${spec.noRecoil?"":`<span class="num" style="color:var(--amber)">${ic("i-drift")}</span>`}</span>`;
+    case "attack_push": return `<span class="statline">${ic("i-attack")}${n(spec.dmg)}${ic("i-push")}${n(spec.n)}</span>`;
+    case "attack_pull": return `<span class="statline">${ic("i-attack")}${n(spec.dmg)}${ic("i-pull")}${n(spec.n)}${ic("i-range")}${n(spec.range)}</span>`;
+    case "warp": return `<span class="statline">${ic("i-warp")}<span class="num">∗</span></span>`;
+    case "attack": return `<span class="statline">${ic("i-attack")}${n(spec.dmg)}${ic("i-range")}${n(spec.range)}</span>`;
+    case "attack_line": return `<span class="statline">${ic("i-line")}${n(spec.dmg)}${ic("i-range")}${n(spec.range)}</span>`;
+    case "attack_all": return `<span class="statline">${ic("i-burst")}${n(spec.dmg)}${ic("i-range")}${n(spec.range)}</span>`;
+    case "attack_multi": return `<span class="statline">${ic("i-multi")}${n(spec.dmg)}×${n(spec.count)}${ic("i-range")}${n(spec.range)}</span>`;
+    case "push": return `<span class="statline">${ic("i-push")}${n(spec.n)}${spec.dmg?`${ic("i-attack")}${n(spec.dmg)}`:""}</span>`;
+    case "pull": return `<span class="statline">${ic("i-pull")}${n(spec.n)}${ic("i-range")}${n(spec.range)}</span>`;
+    case "pull_all": return `<span class="statline">${ic("i-pull")}${n(spec.n)}<span class="num">全</span>${ic("i-range")}${n(spec.range)}</span>`;
+    case "setdrift": return `<span class="statline">${spec.dmg?`${ic("i-attack")}${n(spec.dmg)}`:""}${ic("i-drift")}${ic("i-range")}${n(spec.range)}</span>`;
+    case "execute": return `<span class="statline">${ic("i-attack")}${n(spec.dmg)}<span class="num" style="color:var(--red)">+${spec.bonus}傷</span>${ic("i-range")}${n(spec.range)}</span>`;
+    case "spawnhaz": return `<span class="statline"><span class="num">${spec.haz==="mine"?"☄️":"🪨"}×${spec.count}</span></span>`;
+    case "heal": return `<span class="statline">${ic("i-heal")}${n(spec.n)}${spec.shield?`${ic("i-shield")}${n(spec.shield)}`:""}</span>`;
+    case "shield": return `<span class="statline">${ic("i-shield")}${n(spec.n)}</span>`;
+    case "salvage": return `<span class="statline">${ic("i-salvage")}<span class="num">1</span></span>`;
+    default: return esc(spec.label);
+  }
+}
+// ユニットのインラインSVG(パーツアニメのため<use>でなく直接埋め込み)
+function unitSvg(u){
+  switch(u.type){
+    case "ship": {
+      const col=(S&&S.run)?shipDef(S.run.shipId).color:"#39d0ff";
+      return `<svg class="usvg" viewBox="0 0 48 48">
+      <path class="flame" d="M20 36 Q24 47 28 36 Q24 40 20 36Z" fill="#ffb347"/>
+      <path d="M24 4 L34 30 L24 26 L14 30 Z" fill="#9fdcff" stroke="${col}" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M14 30 L8 36 L17 33 M34 30 L40 36 L31 33" fill="none" stroke="${col}" stroke-width="2"/>
+      <circle cx="24" cy="17" r="3" fill="#0b2030" stroke="${col}" stroke-width="1.5"/></svg>`;
+    }
+    case "drone": return `<svg class="usvg" viewBox="0 0 48 48">
+      <path d="M24 12 L36 19 L36 31 L24 38 L12 31 L12 19 Z" fill="#28527f" stroke="#7fd4ff" stroke-width="2" stroke-linejoin="round"/>
+      <circle class="blink" cx="24" cy="25" r="4" fill="#39d0ff"/>
+      <path d="M24 12 V5" stroke="#7fd4ff" stroke-width="2"/><circle class="blink" cx="24" cy="4" r="2" fill="#ffb347"/></svg>`;
+    case "miner": return `<svg class="usvg" viewBox="0 0 48 48">
+      <rect x="14" y="15" width="20" height="18" rx="4" fill="#5a2a34" stroke="#ff5566" stroke-width="2"/>
+      <path d="M14 20 L4 25 M14 29 L4 25 M34 20 L44 25 M34 29 L44 25" stroke="#ff8866" stroke-width="2.5" fill="none"/>
+      <circle class="blink" cx="24" cy="22" r="3.5" fill="#ffd24a"/>
+      <path d="M18 33 v4 M24 33 v4 M30 33 v4" stroke="#ff5566" stroke-width="2"/></svg>`;
+    case "pirate": return `<svg class="usvg" viewBox="0 0 48 48">
+      <path d="M8 32 L24 8 L40 32 L24 26 Z" fill="#4a1f2c" stroke="#ff5566" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M24 8 L24 26" stroke="#ff5566" stroke-width="1.5"/>
+      <circle class="blink" cx="24" cy="20" r="2.8" fill="#ff5566"/>
+      <path d="M12 35 h6 M30 35 h6" stroke="#ff8866" stroke-width="2.5"/></svg>`;
+    case "jelly": return `<svg class="usvg" viewBox="0 0 48 48">
+      <path class="tent t1" d="M16 27 q-3 8 1 15" stroke="#d8b6ff" stroke-width="2.5" fill="none"/>
+      <path class="tent t2" d="M24 27 q0 9 0 16" stroke="#d8b6ff" stroke-width="2.5" fill="none"/>
+      <path class="tent t3" d="M32 27 q3 8 -1 15" stroke="#d8b6ff" stroke-width="2.5" fill="none"/>
+      <path d="M11 27 a13 13 0 0 1 26 0 Z" fill="#7a4fb0" stroke="#d8b6ff" stroke-width="2"/>
+      <circle cx="19" cy="21" r="2" fill="#f3e4ff"/><circle cx="28" cy="18" r="1.6" fill="#f3e4ff"/></svg>`;
+    case "apex": return `<svg class="usvg" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="20" fill="#12060c" stroke="#ff5566" stroke-width="3"/>
+      <circle cx="24" cy="24" r="14" fill="none" stroke="#ffd24a" stroke-width="1.6" stroke-dasharray="5 3"/>
+      <circle cx="24" cy="24" r="8.5" fill="none" stroke="#ff8866" stroke-width="1.4" stroke-dasharray="2 2"/>
+      <circle class="eye" cx="24" cy="24" r="6" fill="#ff5566"/><circle cx="24" cy="24" r="2.6" fill="#1a0205"/>
+      <path d="M24 2v6M24 40v6M2 24h6M40 24h6M8 8l4 4M36 36l4 4M40 8l-4 4M12 36l-4 4" stroke="#ff5566" stroke-width="2.4"/></svg>`;
+    case "sentinel": return `<svg class="usvg" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="17" fill="#1c0d12" stroke="#ff8866" stroke-width="2.5"/>
+      <circle cx="24" cy="24" r="10" fill="none" stroke="#ffb347" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <circle class="eye" cx="24" cy="24" r="5.5" fill="#ffd24a"/><circle cx="24" cy="24" r="2.3" fill="#5a1a10"/>
+      <path d="M24 5v4M24 39v4M5 24h4M39 24h4" stroke="#ff8866" stroke-width="2"/></svg>`;
+    case "hunter": return `<svg class="usvg" viewBox="0 0 48 48">
+      <path d="M6 24 L30 12 L26 24 L30 36 Z" fill="#5a2438" stroke="#ff5566" stroke-width="2" stroke-linejoin="round"/>
+      <circle class="blink" cx="16" cy="24" r="2.6" fill="#ff8866"/>
+      <path class="flame" d="M32 20 Q42 24 32 28 Q35 24 32 20Z" fill="#ffb347"/></svg>`;
+    case "juggernaut": return `<svg class="usvg" viewBox="0 0 48 48">
+      <path d="M8 34 L14 12 L34 12 L40 34 L34 42 L14 42 Z" fill="#3a1420" stroke="#ff5566" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M24 12 L24 2 M19 13 L16 5 M29 13 L32 5" stroke="#ff8866" stroke-width="2.5"/>
+      <path d="M12 36 h24 M13 39 h22" stroke="#ff5566" stroke-width="1.6"/>
+      <circle class="blink" cx="24" cy="26" r="4" fill="#ffd24a"/></svg>`;
+    case "broodmother": return `<svg class="usvg" viewBox="0 0 48 48">
+      <ellipse cx="24" cy="17" rx="15" ry="12" fill="#33102c" stroke="#ff66aa" stroke-width="2.5"/>
+      <path d="M12 26 Q10 36 6 42 M18 28 Q17 38 14 44 M24 29 Q24 39 24 45 M30 28 Q31 38 34 44 M36 26 Q38 36 42 42" fill="none" stroke="#ff66aa" stroke-width="2"/>
+      <circle class="blink" cx="19" cy="16" r="3" fill="#ffd24a"/><circle class="blink" cx="29" cy="16" r="3" fill="#ffd24a"/>
+      <circle cx="15" cy="23" r="2" fill="#ff8866"/><circle cx="33" cy="23" r="2" fill="#ff8866"/></svg>`;
+    case "debris": return `<svg class="usvg" viewBox="0 0 48 48">
+      <path d="M14 10 L34 8 L42 22 L36 38 L18 40 L8 28 Z" fill="#3a3144" stroke="#8a7aa8" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="20" cy="20" r="3" fill="#241e30"/><circle cx="31" cy="29" r="4" fill="#241e30"/><circle cx="27" cy="15" r="1.8" fill="#241e30"/></svg>`;
+    case "mine": return `<svg class="usvg" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="11" fill="#2a2008" stroke="#ffb347" stroke-width="2.5"/>
+      <path d="M24 6v7M24 35v7M6 24h7M35 24h7M11 11l5 5M32 32l5 5M37 11l-5 5M16 32l-5 5" stroke="#ffb347" stroke-width="2.5"/>
+      <circle class="blink" cx="24" cy="24" r="3.5" fill="#ffd24a"/></svg>`;
+    default: return `<span>${u.icon}</span>`;
+  }
+}
+function unitTT(u, extra){
+  const L=[];
+  if(u.side==="player"){
+    if(u.id==="ship") L.push(`<b>🚀 旗艦ヴァグランツ</b><br>HP ${u.hp}/${u.maxHp}${u.shield?` +🛡${u.shield}`:""}<br>あんたの命。これが落ちたらラン終了。`);
+    else L.push(`<b>🛰️ 随伴機R-6</b><br>HP ${u.hp}/${u.maxHp}${u.shield?` +🛡${u.shield}`:""}<br>消耗品の相棒。大破しても次の戦域でHP半分で復帰。盾にも囮にも使え。`);
+  } else {
+    const d=ENEMY_DEFS[u.type];
+    L.push(`<b>${d.icon} ${esc(u.name)}</b><br>HP ${u.hp}/${u.maxHp} / 攻撃${d.dmg}<br>${esc(d.desc)}`);
+  }
+  if(u.drift) L.push(`🌀 ドリフト中(${DIRS[u.drift].ch}): 次のラウンド開始時に1マス滑る`);
+  else L.push("ドリフトなし(静止)");
+  if(extra) L.push(`<span style="color:#56e39f">${extra}</span>`);
+  return attrEsc(L.join("<br>"));
+}
+
+// ---------- boot ----------
+function startGame(seed){
+  S=newRun(seed, null, {hard:META.hard});
+  S.screen="title";
+  UI.hintsSeen=false; UI.sold={}; UI.deckSel=[];
+  render();
+}
+
+// ---------- render dispatch ----------
+function render(){
+  const app=document.getElementById("app");
+  if(!S){ app.innerHTML=""; return; }
+  H.pvOff();
+  if(typeof updateArtLayers==="function") updateArtLayers();
+  if(S.screen==="title") return renderTitle(app);
+  if(S.screen==="hangar") return renderHangar(app);
+  if(S.screen==="shipselect") return renderShipSelect(app);
+  if(S.screen==="deckbuild") return renderDeckBuild(app);
+  if(S.screen==="upgrade") return renderUpgrade(app);
+  if(S.screen==="event") return renderEvent(app);
+  if(S.screen==="tutorialdone"){
+    app.innerHTML=`<div class="modal" style="margin:80px auto; text-align:center; border-color:var(--green);">
+      <h2 style="color:var(--green)">📚 訓練航行 修了</h2>
+      <p class="muted" style="line-height:2;">2枚プレイ、慣性、そして物理キル — 基本は叩き込んだ。<br>
+      本番は船体が持ち越しだ。慎重に、しかし大胆に。<br><b style="color:var(--txt)">深淵があんたを待ってる。</b></p>
+      <div class="opts" style="justify-content:center;"><button class="primary cue" onclick="H.toTitle()">出撃準備へ</button></div>
+    </div>`;
+    return;
+  }
+  if(S.screen==="loadout") return renderLoadout(app);
+  if(S.screen==="battle"){ renderBattle(app); flip(); drainFx(); maybeRunDriftPhase(); maybeRunEnemyPhase(); return; }
+  if(S.screen==="route") return renderRoute(app);
+  if(S.screen==="relic") return renderRelic(app);
+  if(S.screen==="leapkeep") return renderLeapKeep(app);
+  if(S.screen==="summary") return renderSummary(app);
+}
+
+function flip(){
+  // ラップ(縁越え)したユニットは盤面横断スライドではなく「端から退場→反対側から入場」を描く
+  const wraps={};
+  if(S&&S.enc&&S.enc.wrapFx) for(const w of S.enc.wrapFx.splice(0)) wraps[w.unitId]=w.dir;
+  document.querySelectorAll(".unit[data-uid]").forEach(el=>{
+    const uid=el.dataset.uid, r=el.getBoundingClientRect(), p=prevRects[uid];
+    if(p){
+      const dx=p.left-r.left, dy=p.top-r.top;
+      if((dx||dy) && wraps[uid]) wrapJumpAnim(el,p,r,wraps[uid]);
+      else if(dx||dy) el.animate([{transform:`translate(${dx}px,${dy}px)`},{transform:"none"}],{duration:340,easing:"ease-out"});
+    }
+    prevRects[uid]={left:r.left,top:r.top};
+  });
+}
+// 世界一周の2相アニメ: 旧位置のゴーストが縁の外へ消え、本体が反対の縁の外から滑り込む
+function wrapJumpAnim(el,p,r,dirKey){
+  const d=DIRS[dirKey], cs=r.width*1.1;
+  const g=el.cloneNode(true);
+  g.style.cssText=`position:fixed;left:${p.left}px;top:${p.top}px;width:${r.width}px;height:${r.height}px;margin:0;z-index:90;pointer-events:none;`;
+  document.body.appendChild(g);
+  g.animate([{transform:"none",opacity:.95},{transform:`translate(${d.x*cs}px,${d.y*cs}px) scale(.7)`,opacity:0}],
+    {duration:170,easing:"ease-in"}).onfinish=()=>g.remove();
+  el.animate([
+    {transform:`translate(${-d.x*cs}px,${-d.y*cs}px) scale(.7)`, opacity:0},
+    {transform:`translate(${-d.x*cs}px,${-d.y*cs}px) scale(.7)`, opacity:0, offset:.4},
+    {transform:"translate(0,0) scale(1)", opacity:1},
+  ],{duration:430,easing:"ease-out"});
+}
+
+function cellCenter(x,y,board){
+  const cell=document.querySelector(`[data-xy="${x},${y}"]`);
+  if(!cell) return null;
+  const cr=cell.getBoundingClientRect(), br=board.getBoundingClientRect();
+  return {x:cr.left-br.left+cr.width/2, y:cr.top-br.top+cr.height/2};
+}
+function drainFx(){
+  const enc=S&&S.enc; if(!enc||!enc.fxQueue||!enc.fxQueue.length) return;
+  const board=document.getElementById("board");
+  if(!board){ enc.fxQueue.length=0; return; }
+  let layer=document.getElementById("fx");
+  if(!layer){ layer=document.createElement("div"); layer.id="fx"; board.appendChild(layer); }
+  let stampN=0; // 同時スタンプは縦にずらす(重なり潰れ防止)
+  for(const ev of enc.fxQueue.splice(0)){
+    if(ev.type==="hitflash"){
+      const el=document.querySelector(`.unit[data-uid="${ev.unitId}"]`);
+      if(el){ el.classList.remove("hitfx"); void el.offsetWidth; el.classList.add("hitfx"); }
+      sfx("hit");
+      continue;
+    }
+    if(ev.type==="shake"){
+      if(!META.fxLite){ board.classList.remove("shake"); void board.offsetWidth; board.classList.add("shake"); }
+      continue;
+    }
+    if(ev.type==="confetti"){
+      if(META.fxLite) continue;
+      for(let i=0;i<44;i++){
+        const p=document.createElement("span"); p.className="fxconf";
+        p.style.left=(Math.random()*100)+"%"; p.style.top="-8px";
+        p.style.background=["var(--gold)","var(--cyan)","var(--red)","var(--green)","#fff"][i%5];
+        p.style.animationDelay=(Math.random()*0.5)+"s";
+        p.style.animationDuration=(1+Math.random()*0.9)+"s";
+        layer.appendChild(p); setTimeout(()=>p.remove(),2600);
+      }
+      continue;
+    }
+    if(ev.type==="stamp"){
+      const pos=cellCenter(ev.x,ev.y,board)||{x:board.clientWidth/2,y:board.clientHeight/2};
+      const el=document.createElement("div"); el.className="fxstamp"+(ev.big?" big":"");
+      el.textContent=ev.text; el.style.left=pos.x+"px"; el.style.top=(pos.y - 34*stampN++)+"px";
+      layer.appendChild(el); setTimeout(()=>el.remove(),1100);
+      sfx("salvage");
+      continue;
+    }
+    if(ev.type==="flash"){
+      for(const c of ev.cells){
+        const cell=document.querySelector(`[data-xy="${c.x},${c.y}"]`);
+        if(cell){ cell.classList.remove("firing"); void cell.offsetWidth; cell.classList.add("firing"); }
+      }
+      continue;
+    }
+    const pos=cellCenter(ev.x,ev.y,board); if(!pos) continue;
+    if(ev.type==="float"){
+      const el=document.createElement("div"); el.className="fxfloat "+(ev.cls||"");
+      el.textContent=ev.text; el.style.left=pos.x+"px"; el.style.top=pos.y+"px";
+      // ダメージ数字はダメージ量に比例して大きく(VS式)
+      const m=/^-(\d+)$/.exec(ev.text);
+      if(m) el.style.fontSize=(0.9+Math.min(3,+m[1])*0.28)+"rem";
+      layer.appendChild(el); setTimeout(()=>el.remove(),1100);
+    } else if(ev.type==="boom"){
+      // 大物撃破はヒットストップ(90msだけ世界が止まる)
+      if(ev.big && !META.fxLite){
+        const st=document.createElement("style"); st.textContent="*{animation-play-state:paused!important}";
+        document.head.appendChild(st); setTimeout(()=>st.remove(),90);
+      }
+      sfx("boom");
+      const ring=document.createElement("span"); ring.className="fxring";
+      ring.style.left=pos.x+"px"; ring.style.top=pos.y+"px";
+      if(ev.big){ ring.style.borderColor="var(--red)"; }
+      layer.appendChild(ring); setTimeout(()=>ring.remove(),520);
+      const n=ev.big?14:8;
+      for(let i=0;i<n;i++){
+        const p=document.createElement("span"); p.className="fxp";
+        const a=Math.random()*Math.PI*2, r=(ev.big?44:26)*(0.5+Math.random()*0.8);
+        p.style.setProperty("--dx",Math.cos(a)*r+"px");
+        p.style.setProperty("--dy",Math.sin(a)*r+"px");
+        p.style.left=pos.x+"px"; p.style.top=pos.y+"px";
+        if(Math.random()<0.5) p.style.background="var(--red)";
+        layer.appendChild(p); setTimeout(()=>p.remove(),720);
+      }
+    }
+  }
+}
+
+// ラウンド頭の慣性解決ビート(L-004)
+function maybeRunDriftPhase(){
+  if(!S.enc||S.enc.phase!=="drift"||UI.stepping||S.run.over) return;
+  UI.stepping=true;
+  (async()=>{
+    try{
+      const app=document.getElementById("app");
+      const had=aliveUnits(S.enc).some(u=>u.drift);
+      if(had) await sleep(300);
+      LK.driftPhase(S);
+      renderBattle(app); flip(); drainFx();
+      if(had) await sleep(640);
+    } finally {
+      UI.stepping=false;
+      render();
+    }
+  })();
+}
+
+function lifebarHtml(){
+  const cards=S.run.cards;
+  const segs=cards.map(c=>{
+    const cls=c.loc==="lost"?"lost":(c.loc==="hand"?"hand":(c.loc==="discard"?"discard":"reserve"));
+    return `<span class="seg ${cls}" data-tt="${attrEsc(`${esc(defOf(c).name)}<br>${{hand:"手札",discard:"消耗(休息で戻る)",reserve:"予備(この戦闘では使えない)",pool:"所持",lost:"<b>永久ロスト</b>"}[c.loc]||c.loc}`)}"></span>`;
+  }).join("");
+  return `<div class="lifebar" data-tt="${attrEsc("<b>寿命ゲージ</b>: カード=行動=命。<br>水色=手札 / 青=消耗・予備 / ×=永久ロスト。<br>全部失えば船は漂う棺。")}">${segs}</div>`;
+}
+function hudHtml(){
+  const alive=aliveCards(S).length;
+  const low=alive<=4?"flash":"";
+  const cargo=S.run.cargo.map(id=>{const r=RELIC_DEFS.find(r=>r.id===id);return `<span class="cargochip" data-tt="${attrEsc(esc(r.desc)+"<br>売却価値 "+r.value+" — 帰還すれば確定")}">◆${esc(r.name)}</span>`;}).join("") || `<span class="muted">カーゴ: 空</span>`;
+  const sd=shipDef(S.run.shipId);
+  const liveShip=S.enc&&unitById(S.enc,"ship");
+  const hullNow=liveShip?liveShip.hp:(S.run.shipHp??sd.hp);
+  const hullCls=hullNow<=2?"flash":"";
+  return `<div id="hud">
+    <span class="zone">ZONE ${S.run.zone}/${CONFIG.ZONES} 《${esc(ZONE_NAMES[S.run.zone-1])}》</span>
+    <span class="${hullCls}" style="color:${hullNow<=sd.hp/3?"var(--red)":"var(--txt)"}" data-tt="${attrEsc("旗艦の船体。<b>ゾーンをまたいで持ち越される</b>。回復は応急パッチ/補給/残骸修理のみ。0=ラン終了")}">🚀 ${hullNow}/${sd.hp}</span>
+    <span class="${low}" data-tt="${attrEsc("残りカード総数=寿命。休息・被弾無効化・リープ燃料で減る。")}">🂠 ${alive}枚</span>
+    ${(S.run.contracts||[]).length?`<span style="color:var(--amber)" data-tt="${attrEsc("航行契約: "+S.run.contracts.map(id=>{const c=CONTRACT_DEFS.find(x=>x.id===id);return c.icon+c.name+"("+c.desc+")";}).join("<br>")+"<br>スコア×"+contractMult(S.run).toFixed(1)+" / 帰還時 危険手当₢"+(S.run.contracts.length*2))}">☠${S.run.contracts.length} ×${contractMult(S.run).toFixed(1)}</span>`:""}
+    ${lifebarHtml()}
+    <div id="cargo">${cargo}</div>
+  </div>`;
+}
+
+// ---------- title ----------
+function renderTitle(app){
+  const coll=collectionDefIds();
+  app.innerHTML=`
+  <div style="text-align:center; padding-top:7vh;">
+    <div class="bigtitle">LEAP OR KEEP</div>
+    <p style="margin:10px 0 4px; color:var(--amber); letter-spacing:.2em;">— One more leap. —</p>
+    <p class="muted" style="max-width:560px;margin:18px auto; line-height:1.9; text-align:left;">
+      死んだ文明の遺物は、深宇宙でいちばん高く売れる。<br>
+      あんたは深宇宙サルベージャー。ボロ船と相棒のドローンで、墓場と化した星域に潜る。<br>
+      ゾーンを跳ぶたびに遺物は良くなり、敵は凶悪になる。<br>
+      <b style="color:var(--txt)">カードは行動であり、燃料であり、命だ。</b> 全部失えば、船は漂う棺になる。<br>
+      どこまで潜って、いつ帰る? — それだけが、この仕事の問いだ。
+    </p>
+    <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+      <button class="primary" style="font-size:1.1rem; padding:12px 38px;" onclick="H.begin()">出 撃</button>
+      <button onclick="H.tutorial()" data-tt="${attrEsc("3分の訓練航行。2枚プレイ・慣性・物理キルを実戦形式で覚える(戦績に影響なし)")}">📚 訓練航行</button>
+      <button onclick="H.hangar()" data-tt="${attrEsc("持ち帰った価値(クレジット)でカードを解放し、遺物をインストールする")}">🛠 格納庫 (₢${META.credits})</button>
+    </div>
+    ${(META.history&&META.history.length)?`<div class="panel" style="max-width:430px;margin:14px auto 0;padding:8px 14px;">
+      <h3 style="margin-bottom:4px;">🏆 戦績</h3>
+      ${META.history.map((h,i)=>`<div class="muted" style="display:flex;justify-content:space-between;font-size:.8rem;">
+        <span>${i+1}. ${h.legend?"👑":""}${h.win?"生還":"MIA"} Z${h.zone} ${esc(shipDef(h.ship).name)} ${esc(ASC_DEFS[h.asc]?.name||"")}${h.risk?` <span style="color:var(--amber)">☠${h.risk}</span>`:""}</span>
+        <b style="color:var(--gold)">${h.score}</b></div>`).join("")}
+    </div>`:""}
+    <p style="margin-top:14px;">
+      <button onclick="H.cycleAsc()" class="${META.ascension>0?"danger":""}" data-tt="${attrEsc("生還するたび次の深淵が解放される再挑戦の梯子。<br>"+ASC_DEFS.map(a=>`${a.lv<=META.maxAsc?"🔓":"🔒"}${a.name}: ${a.desc}`).join("<br>"))}">挑戦: ${esc(ASC_DEFS[META.ascension].name)}</button>
+      <button onclick="H.toggleMute()">${META.muted?"🔇 SE OFF":"🔊 SE ON"}</button>
+      <button onclick="H.toggleTilt()" data-tt="${attrEsc("盤面を俯瞰3D風に傾ける")}">${META.tilt?"📐 俯瞰":"▦ フラット"}</button>
+      <button onclick="H.toggleFxLite()" data-tt="${attrEsc("演出を軽量化(敵ターン高速・シェイク/紙吹雪OFF)。周回プレイ向け")}">${META.fxLite?"⚡ 演出ライト":"✨ 演出フル"}</button>
+    </p>
+    <p class="muted" style="margin-top:10px;">出撃${META.runs}回 / 生還${META.wins}回 / 最深 ZONE${META.bestZone} / ベストスコア ${META.bestScore} / 所持${coll.length}種<br>
+    v0.6.0-alpha — シード: ${S.seed} (URLに ?seed=数字 で固定可)</p>
+  </div>`;
+}
+
+// ---------- ship select (ビルド個性の起点) ----------
+function renderShipSelect(app){
+  app.innerHTML=`
+  <div class="panel" style="max-width:960px;margin:26px auto;">
+    <h2 style="color:var(--amber)">船体を選べ — それが今回の「流儀」になる</h2>
+    <div class="routebox">
+      ${SHIP_DEFS.map(sd=>{
+        const owned=META.ships.includes(sd.id);
+        const afford=META.credits>=sd.cost;
+        return `<div class="rt" style="border-color:${owned?sd.color:"var(--line)"};${owned?"":"opacity:.75;"}">
+          <img class="shipart" src="art/ship-${sd.id}.png" onerror="this.style.display='none'" alt="">
+          <h4 style="color:${sd.color}">${esc(sd.name)} <span class="muted">${esc(sd.sub)}</span></h4>
+          <p class="muted">旗艦HP ${sd.hp} / 随伴機HP ${sd.droneHp}</p>
+          <p style="font-size:.85rem; color:var(--txt)">${esc(sd.passive)}</p>
+          <p class="muted" style="font-size:.78rem;">${esc(sd.passiveDesc)}</p>
+          ${owned
+            ? `<button class="primary" onclick="H.pickShip('${sd.id}')">この船で出る</button>`
+            : `<button ${afford?"":"disabled"} onclick="H.buyShip('${sd.id}',${sd.cost})" data-tt="${attrEsc("クレジットで就役させる(恒久解放)")}">₢${sd.cost}で就役${afford?"":"(不足)"}</button>`}
+        </div>`;
+      }).join("")}
+    </div>
+    <div class="opts"><button onclick="H.backTitle()">戻る</button></div>
+  </div>`;
+}
+
+// ---------- 整備ドック(第1戦域クリア報酬: 強化/補給/物資の三択 — StSの焚き火) ----------
+function renderUpgrade(app){
+  const sd=shipDef(S.run.shipId);
+  const hp=S.run.shipHp??sd.hp;
+  if(UI.campPick){
+    // 強化ピッカー: 「強化後の姿」をそのまま見せる(事前にわかる)
+    const cands=LK.aliveCards(S).filter(c=>!c.up);
+    app.innerHTML=hudHtml()+`
+    <div class="panel" style="max-width:980px;margin:20px auto;">
+      <h2 style="color:var(--amber)">⚙ 強化 — どれを「+」にする?(表示は強化後の姿)</h2>
+      <p class="muted">🔥印つきの強化は使い方そのものが変わる(無反動化・攻撃付与・制動付与)。</p>
+      <div class="pickgrid">${cands.map(c=>`<div onclick="H.upgradePick('${c.uid}')">${cardFaceHtml({...c,up:true},{mini:false})}</div>`).join("")}</div>
+      <div class="opts"><button onclick="H.campBack()">戻る</button></div>
+    </div>`;
+    return;
+  }
+  app.innerHTML=hudHtml()+`
+  <div class="panel" style="max-width:880px;margin:20px auto;">
+    <h2 style="color:var(--amber)">🛠 整備ドック — ひとつだけ選べ</h2>
+    <p class="muted">強化は投資、補給は保険。船体は次のゾーンに持ち越される — どうせ死なない、は終わりだ。</p>
+    <div class="routebox">
+      <div class="rt" onclick="H.campUpgrade()">
+        <h4 style="color:var(--gold)">⚙ 強化</h4>
+        <p class="muted">カード1枚を恒久強化(+)。<br>将来へ複利で効く。</p>
+      </div>
+      ${LK.hasContract(S.run,"norepair")?`
+      <div class="rt" style="opacity:.45; cursor:not-allowed;" data-tt="${attrEsc("⛔ 契約『補給封鎖』により使用不可 — 回復は物理キルの装甲板だけだ")}">
+        <h4 style="color:var(--dim)">🔧 補給 ⛔</h4>
+        <p class="muted">契約『補給封鎖』発動中。</p>
+      </div>`:`
+      <div class="rt" onclick="H.campResupply()">
+        <h4 style="color:var(--green)">🔧 補給</h4>
+        <p class="muted">旗艦HP+3(現在 ${hp}/${sd.hp})<br>随伴機を完全復帰。</p>
+      </div>`}
+      <div class="rt" onclick="H.campScrap()">
+        <h4 style="color:var(--cyan)">📦 物資回収</h4>
+        <p class="muted">売却価値+1。<br>地味だが、確実。</p>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ---------- hangar (M6 メタ進行) ----------
+function renderHangar(app){
+  const ownedRelics=META.installed;
+  app.innerHTML=`
+  <div class="panel" style="max-width:900px;margin:30px auto;">
+    <h2 style="color:var(--amber)">🛠 格納庫 — クレジット: <b style="color:var(--gold)">₢${META.credits}</b></h2>
+    <p class="muted">帰還で確定した売却価値がクレジットになる。ここで買ったカードは<b>所持コレクション</b>に加わり、出撃前のデッキ編成で使える。</p>
+    <h3 style="color:var(--cyan);margin-top:12px;">技術解放(ブラックマーケット)</h3>
+    <div class="pickgrid">
+      ${UNLOCK_POOL.map(u=>{
+        const owned=META.unlocked.includes(u.defId);
+        const c={uid:"x",defId:u.defId,loc:"pool"};
+        return `<div style="text-align:center;">${cardFaceHtml(c,{mini:true,selected:owned})}
+          <button style="margin-top:4px;" ${owned?"disabled":(META.credits>=u.cost?"":"disabled")} onclick="H.buyUnlock('${u.defId}',${u.cost})">${owned?"解放済み":`₢${u.cost}で解放`}</button></div>`;
+      }).join("")}
+    </div>
+    <h3 style="color:var(--cyan);margin-top:16px;">インストール済み遺物</h3>
+    <p class="muted">${ownedRelics.length?ownedRelics.map(id=>"◆"+esc(RELIC_DEFS.find(r=>r.id===id).name)).join("、"):"(なし — 遺物を持ち帰り、サマリーでインストールを選べ)"}</p>
+    <div class="opts"><button class="primary" onclick="H.backTitle()">戻る</button></div>
+  </div>`;
+}
+
+// ---------- deck build (出撃前編成: コレクション>10のとき) ----------
+function renderDeckBuild(app){
+  const coll=collectionDefIds();
+  if(!UI.deckSel.length){
+    // 前回の編成を覚えている(L-013)。lastDeckはインデックス配列
+    const last=(META.lastDeck||[]).filter(i=>Number.isInteger(i)&&i<coll.length);
+    UI.deckSel = last.length===10 ? [...last] : coll.map((_,i)=>i).slice(0,10);
+    // 契約も前回を引き継ぐ(L-013)
+    UI.contractSel=(META.lastContracts||[]).filter(id=>CONTRACT_DEFS.some(c=>c.id===id));
+  }
+  app.innerHTML=`
+  <div class="panel" style="max-width:980px;margin:20px auto;">
+    <h2 style="color:var(--amber)">出撃デッキ編成 — 10枚を選べ (${UI.deckSel.length}/10)</h2>
+    <p class="muted">これがこのランの全寿命だ。攻め・守り・機動・切り札(🔥)の配分を考えろ。</p>
+    <div class="pickgrid">
+      ${coll.map((defId,i)=>`<div onclick="H.toggleDeck(${i})">${cardFaceHtml({uid:"d"+i,defId,loc:"pool"},{mini:true,selected:UI.deckSel.includes(i)})}</div>`).join("")}
+    </div>
+    <h3 style="color:var(--amber);margin-top:14px;">☠ 航行契約 <span class="muted" style="font-weight:400;">— 任意。盛るほどスコア倍率と危険手当が増える(自分の苦手だけ避けて選べ)</span></h3>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;">
+      ${CONTRACT_DEFS.map(c=>{
+        const on=UI.contractSel.includes(c.id);
+        return `<div onclick="H.toggleContract('${c.id}')" data-tt="${attrEsc("<b>"+c.icon+" "+esc(c.name)+"</b><br>"+esc(c.desc)+"<br><span style='color:#9aa7c4'>"+esc(c.counter)+"</span>")}"
+          style="cursor:pointer; padding:7px 12px; border-radius:8px; font-size:.85rem; user-select:none;
+          border:1px solid ${on?"var(--amber)":"var(--line)"}; background:${on?"#2a1c08":"transparent"}; color:${on?"var(--amber)":"var(--dim)"};">
+          ${c.icon} ${esc(c.name)}${on?" ✓":""}</div>`;
+      }).join("")}
+      <div style="padding:7px 12px; font-size:.9rem; color:${UI.contractSel.length?"var(--gold)":"var(--dim)"};">
+        リスク${UI.contractSel.length} → スコア<b>×${(1+0.2*UI.contractSel.length).toFixed(1)}</b>${UI.contractSel.length?` + 帰還時₢${UI.contractSel.length*2}`:""}${UI.contractSel.length>=3?' <b style="color:var(--gold)">+称号</b>':""}
+      </div>
+    </div>
+    <div class="opts">
+      <button class="primary" ${UI.deckSel.length===10?"":"disabled"} onclick="H.confirmDeck()">この編成で出撃 (${UI.deckSel.length}/10)${UI.contractSel.length?` ☠${UI.contractSel.length}`:""}</button>
+      <button onclick="H.backTitle()">戻る</button>
+    </div>
+  </div>`;
+}
+
+// ---------- zone event (M5) ----------
+function renderEvent(app){
+  const ev=S.pendingEvent;
+  if(!ev){ S.screen="loadout"; return render(); }
+  let body="";
+  if(ev.type==="wreckpick"){
+    const lost=S.run.cards.filter(c=>c.loc==="lost");
+    body=`<p class="muted" style="font-style:italic;">埃を被ったコンテナの中に、見覚えのある部品が…(旗艦HP-1の代償は次の戦域で支払う)</p>
+      ${cardPickFaces(lost,"H.eventWreckPick")}`;
+  } else if(ev.type==="wreck"){
+    body=`<p class="muted" style="font-style:italic;">航路の途中、漂流するコンテナ船。応答はない。ハッチは固く錆びついている。</p>
+      <div class="opts">
+        <button class="danger" ${unitOk()?"":"disabled"} onclick="H.eventWreckOpen()">こじ開ける(旗艦HP-1) — ロストしたカードを1枚回収</button>
+        <button onclick="H.eventSkip()">立ち去る</button>
+      </div>`;
+  } else {
+    body=`<p class="muted" style="font-style:italic;">石碑のような構造体が漂っている。死文明の墓標だ。微かな信号がまだ脈打っている。</p>
+      <div class="opts">
+        <button class="danger" onclick="H.eventGraveDig()">こじ開けて調査(60%で遺物 / 40%で何かが目を覚ます)</button>
+        <button onclick="H.eventGravePray()">祈りを捧げる — 次の休息1回、無償で選別できる</button>
+      </div>`;
+  }
+  function unitOk(){ return true; }
+  app.innerHTML=hudHtml()+`
+  <div class="modal" style="margin:40px auto;">
+    <h2>${ev.type==="grave"?"🪦 静かな墓標":"📡 漂流船"} — ジャンプ航路上の遭遇</h2>
+    ${body}
+  </div>`;
+}
+
+// ---------- loadout ----------
+function cardFaceHtml(c, opts){
+  const d=defOf(c);
+  opts=opts||{};
+  const st=upSpec(d.top,c.up,d,"top"), sb=upSpec(d.bottom,c.up,d,"bottom");
+  const nm=`${esc(d.name)}${c.up?'<span style="color:var(--gold)">+</span>':""}${d.relic?" ◆":""}`;
+  const click=opts.onclick?`onclick="${opts.onclick}"`:"";
+  return `<div class="card ${opts.selected?"selcard":""} ${d.relic?"relic-card":""} ${opts.mini?"mini":""} ${opts.onclick?"pickable":""}" ${click}>
+    <div class="ttl">${nm}</div>
+    <div class="half top${st.lost?" lostact":""}" data-tt="${specTT(d.name,st)}"><span class="tag">▲航行${st.lost?"🔥":""}</span><br>${labelHtml(st)}</div>
+    <div class="half bot${sb.lost?" lostact":""}" data-tt="${specTT(d.name,sb)}"><span class="tag">▼戦闘${sb.lost?"🔥":""}</span><br>${labelHtml(sb)}</div>
+  </div>`;
+}
+// カードを選ばせるUIは常にカード面で(L-012)
+function cardPickFaces(cards, handler){
+  return `<div class="pickgrid">${cards.map(c=>cardFaceHtml(c,{mini:true,onclick:`${handler}('${c.uid}')`})).join("")}</div>`;
+}
+
+function renderLoadout(app){
+  const pool=cardsIn(S,"pool");
+  const want=Math.min(CONFIG.HAND,pool.length);
+  if(!UI.loadoutTouched){
+    // 前回のロードアウトを記憶(L-013): ロスト分は除外して引き継ぐ
+    const last=(S.run.lastLoadout||[]).filter(u=>pool.some(c=>c.uid===u));
+    UI.loadout = last.length ? [...last] : pool.slice(0,want).map(c=>c.uid);
+    for(const c of pool){ if(UI.loadout.length>=want) break; if(!UI.loadout.includes(c.uid)) UI.loadout.push(c.uid); }
+    UI.loadout=UI.loadout.slice(0,want);
+  } else {
+    UI.loadout=UI.loadout.filter(u=>pool.some(c=>c.uid===u));
+  }
+  const list=encounterEnemyList(S);
+  const counts={};
+  list.forEach(t=>counts[t]=(counts[t]||0)+1);
+  const intel=Object.entries(counts).map(([t,n])=>{
+    const d=ENEMY_DEFS[t];
+    const hp=d.hp+(S.run.zone>=5?1:0)+(S.run.asc>=1?1:0)+(LK.hasContract(S.run,"heavy")?1:0);
+    return `<div class="intent"><b>${d.icon} ${esc(d.name)} ×${n}</b> <span class="muted">(HP${hp} / 攻撃${d.dmg})</span><br><span class="what">${esc(d.desc)}</span></div>`;
+  }).join("");
+  app.innerHTML= hudHtml() + `
+  <div class="panel" style="max-width:980px;margin:14px auto;">
+    <h2 style="color:var(--amber)">出撃ロードアウト — 戦闘に持ち込む${want}枚を選べ</h2>
+    <p class="muted" style="line-height:1.8;margin-top:6px;">
+      この${want}枚が次の戦闘の<b style="color:var(--txt)">全リソース</b>だ。毎ターン2枚使い、約3ターンで尽きる。
+      尽きると<b style="color:var(--red)">強制休息=1枚永久ロスト</b>。残りは予備として船倉に置いていく(この戦闘では使えない)。<br>
+      <b style="color:var(--txt)">セオリー</b>: 攻撃の下側を厚く、『制動』持ちを1枚、修理/シールドを敵が強いほど多めに。カードにマウスを乗せると詳細。
+    </p>
+    <div style="margin-top:10px;"><h3 style="color:var(--cyan);font-size:.85rem;">次の戦域の敵 (スキャナー情報)</h3>${intel}</div>
+    <div id="loadgrid">
+      ${pool.map(c=>cardFaceHtml(c,{selected:UI.loadout.includes(c.uid), onclick:`H.toggleLoad('${c.uid}')`})).join("")}
+    </div>
+    <div class="opts">
+      <button class="primary" ${UI.loadout.length===want?"":"disabled"} onclick="H.confirmLoad()">出撃 (${UI.loadout.length}/${want}枚)</button>
+      <button onclick="H.autoLoad()">おまかせ編成</button>
+      ${UI.loadout.length!==want?`<span class="muted" style="align-self:center;">あと${want-UI.loadout.length}枚選んで(カードをクリック)</span>`:""}
+    </div>
+  </div>`;
+}
+
+// ---------- battle: intent overlays ----------
+function intentOverlays(){
+  const cells={}; // key -> {threat:[{i,name,dmg}], charge:[...], move:[{i,icon,dirCh}]}
+  if(!S.enc) return cells;
+  const get=k=>cells[k]||(cells[k]={threat:[],charge:[],move:[]});
+  S.enc.intents.forEach((it,i)=>{
+    const u=unitById(S.enc,it.unitId); if(!u||!u.alive) return;
+    for(const c of it.attackCells) get(c.x+","+c.y).threat.push({i:i+1,name:u.name,dmg:it.dmg,fire:it.fire});
+    const chg=it.chargeCells || (u.charge&&!it.fire?u.charge:null);
+    if(chg) for(const c of chg) get(c.x+","+c.y).charge.push({i:i+1,name:u.name});
+    if(it.moveTo) get(it.moveTo.x+","+it.moveTo.y).move.push({i:i+1,icon:u.icon,dirCh:it.teleport?"✦":(it.moveDir?DIRS[it.moveDir].ch:"")});
+    if(it.summon) get(it.summon.x+","+it.summon.y).move.push({i:i+1,icon:ENEMY_DEFS[it.summon.type||"mine"].icon,dirCh:"⊕"});
+  });
+  return cells;
+}
+
+function driftGhosts(){
+  // uid -> 滑り先表示 {key, icon, ch, boom, tt}
+  const out=[];
+  if(!S.enc) return out;
+  for(const u of aliveUnits(S.enc)){
+    if(!u.drift) continue;
+    const d=DIRS[u.drift];
+    const nx=wrap(u.x+d.x), ny=wrap(u.y+d.y);
+    const occ=unitAt(S.enc,nx,ny);
+    if(occ){
+      const ally=u.side==="player"&&occ.side==="player";
+      out.push({key:nx+","+ny, icon:"💥", ch:d.ch, boom:true,
+        tt:attrEsc(`<b>衝突予報</b>: ${esc(u.name)}が滑ってきて${esc(occ.name)}に${ally?"接触(味方同士: 停止のみ・無傷)":"激突 — <b>双方1ダメージ</b>"}`)});
+    } else {
+      const w=S.enc.well;
+      const wellNote=(w && tdist({x:nx,y:ny},w)<=1 && !(nx===w.x&&ny===w.y))?"<br>⚠ 滑り先は重力渦の隣 — ラウンド頭、さらに渦へ引き込まれる":"";
+      out.push({key:nx+","+ny, icon:u.icon, ch:d.ch, boom:false,
+        tt:attrEsc(`🌀 <b>慣性</b>: ${esc(u.name)}は次のラウンド開始時、ここまで滑る(${d.ch})。<br>${u.side==="player"?"滑りたくなければ『制動』。":"これを読んで位置取りしろ。"}${wellNote}`)});
+    }
+  }
+  return out;
+}
+
+function selectableCells(){
+  // units値: "must"=一次(今選ぶべき) / "switch"=二次(任意の交代/予約) / "target"=攻撃対象(一次)
+  const res={cells:{}, units:{}, dirs:false, blocked:{}};
+  const enc=S.enc;
+  if(!enc||enc.step!=="player") return res;
+  // ユニット先行選択(タクティクスの文法): ペア未選択時も自軍ユニットはクリック可
+  if(!enc.pending){
+    for(const p of players(enc)) res.units[p.id]="switch";
+    return res;
+  }
+  if(UI.actIdx===null) return res;
+  if(enc.pending[UI.actIdx] && enc.pending[UI.actIdx].done) return res;
+  const spec=actionSpec(S,UI.actIdx);
+  if(UI.mode==="unit"){ for(const p of players(enc)) res.units[p.id]="must"; return res; }
+  if(UI.mode!=="target") return res;
+  const unit=unitById(enc,UI.unitId);
+  if(!unit) return res;
+  // 対象選択中でも操縦ユニットはワンクリックで切替可能(L-006)
+  for(const p of players(enc)) if(p.id!==UI.unitId) res.units[p.id]="switch";
+  switch(spec.kind){
+    case "move": case "brake_move":
+      for(const o of moveOptions(S,unit,spec)){
+        const k=o.x+","+o.y;
+        (res.cells[k]=res.cells[k]||{x:o.x,y:o.y,opts:[]}).opts.push(o);
+      }
+      for(const b of moveBlocked(S,unit,spec)){
+        const k=b.x+","+b.y;
+        if(!res.cells[k]) res.blocked[k]=b;
+      }
+      if(spec.kind==="brake_move") res.cells[unit.x+","+unit.y]={x:unit.x,y:unit.y,opts:[{x:unit.x,y:unit.y,dir:null,stay:true}]};
+      break;
+    case "warp":
+      for(let x=0;x<CONFIG.GRID;x++)for(let y=0;y<CONFIG.GRID;y++) if(!unitAt(enc,x,y)) res.cells[x+","+y]={x,y,opts:[{x,y,dir:null}]};
+      break;
+    case "ram":
+      for(const o of ramOptions(S,unit,spec)){
+        const k=o.x+","+o.y;
+        (res.cells[k]=res.cells[k]||{x:o.x,y:o.y,opts:[]}).opts.push(o);
+      }
+      break;
+    case "setdrift":
+      res.dirs=UI.multi.length===1;
+      for(const t of attackTargets(S,unit,spec)) res.units[t.id]="target";
+      break;
+    case "attack": case "attack_line": case "push": case "pull": case "attack_multi":
+      for(const t of attackTargets(S,unit,spec)) res.units[t.id]="target";
+      break;
+    default: break;
+  }
+  return res;
+}
+
+function forecastTT(unit,spec,t){
+  // 攻撃/押し/引きの結果予測ツールチップ
+  if(spec.kind==="attack"||spec.kind==="attack_line"||spec.kind==="attack_multi"||spec.kind==="attack_all"){
+    const armor=(t.side!=="player"&&(ENEMY_DEFS[t.type]||{}).armor)?1:0;
+    const eff=Math.max(0,effDamage(t,spec.dmg)-armor);
+    const after=t.hp-eff;
+    return attrEsc(`<b>予測</b>: 攻撃${spec.dmg}${t.shield?` − 🛡${t.shield}`:""}${armor?" − 🦀装甲1":""} → <b>${eff}ダメージ</b><br>HP ${t.hp} → ${Math.max(0,after)}${after<=0?' <span class="kill">撃破!</span>':""}${armor?"<br><span style='color:#9aa7c4'>物理(衝突/激突/爆発)なら装甲は素通し</span>":""}`);
+  }
+  if(spec.kind==="push"||spec.kind==="pull"){
+    const dk = spec.kind==="push" ? dirBetweenUI(unit,t) : dirBetweenUI(t,unit);
+    const n = spec.kind==="push" ? spec.n : Math.min(spec.n,Math.max(0,LK.tdist(unit,t)-1));
+    const sim=predictForce(t,dk,n);
+    let s=`<b>予測</b>: ${DIRS[dk].ch}へ${spec.kind==="push"?"押し出す":"引き寄せる"}`;
+    if(spec.dmg) s+=` + ${spec.dmg}ダメージ`;
+    if(sim.hit) s+=`<br>💥 途中で${esc(sim.hit)}に激突 — 双方1ダメージ`;
+    else s+=`<br>移動後、${DIRS[dk].ch}向きのドリフト付与(次ラウンドさらに滑る)`;
+    return attrEsc(s);
+  }
+  if(spec.kind==="setdrift") return attrEsc("対象を選んでから方向ボタンでドリフトを書き換える");
+  return unitTT(t);
+}
+function dirBetweenUI(a,b){
+  const dx=tdelta(a.x,b.x), dy=tdelta(a.y,b.y);
+  if(Math.abs(dx)>=Math.abs(dy)) return dx>0?"right":(dx<0?"left":(dy>0?"down":"up"));
+  return dy>0?"down":"up";
+}
+function predictForce(t,dirKey,n){
+  const d=DIRS[dirKey]; let x=t.x,y=t.y;
+  for(let i=0;i<n;i++){
+    const nx=wrap(x+d.x), ny=wrap(y+d.y);
+    const occ=unitAt(S.enc,nx,ny);
+    if(occ) return {hit:occ.name,x,y};
+    x=nx;y=ny;
+  }
+  return {hit:null,x,y};
+}
+
+function promptText(){
+  const enc=S.enc;
+  if(!enc) return "";
+  if(enc.phase==="damage"||enc.phase==="rest"||enc.phase==="cleared") return "";
+  if(enc.phase==="drift") return `<span style="color:var(--cyan)">🌀 慣性解決中…</span>`;
+  if(enc.phase==="enemy"||enc.step==="enemy") return `<span style="color:var(--red)">敵の行動中…</span>`;
+  if(enc.step!=="player") return "";
+  if(enc.awaitEnd) return `行動完了 — <span class="sub">⟲でやり直すか、「敵ターンへ」で確定</span>`;
+  if(!enc.pending){
+    if(UI.selA) return `1枚目: 『${esc(defOf(cardByUid(S,UI.selA.uid)).name)}』の${UI.selA.half==="top"?"▲航行":"▼戦闘"} — <span class="sub">2枚目のカードを選べ(自動でもう片方の側を使う)</span>`;
+    return `手札から2枚選べ — <span class="sub">1枚目はクリックした側(▲航行/▼戦闘)。先にユニットをクリックして操縦予約もできる</span>`;
+  }
+  if(UI.actIdx===null) return `下のボタンから、先に実行する行動を選べ <span class="sub">(順番は自由 / 同じユニットに両方使ってもいい)</span>`;
+  const spec=actionSpec(S,UI.actIdx);
+  if(UI.mode==="unit") return `『${esc(spec.label)}』— <span class="sub">どっちにやらせる? 🚀旗艦 か 🛰️随伴機 をクリック</span>`;
+  if(UI.mode==="target"){
+    if(spec.kind==="move") return `光るマスをクリックで移動(ちょうど${spec.n}マス) <span class="sub">操縦: ${esc((unitById(S.enc,UI.unitId)||{}).name||"")} — もう片方のユニットをクリックで交代 / ホバーで滑り先プレビュー</span>`;
+    if(spec.kind==="brake_move") return `移動先をクリック(自分のマス=その場で制動) <span class="sub">制動済み: 移動後も滑らない</span>`;
+    if(spec.kind==="warp") return `ワープ先の空きマスをクリック`;
+    if(spec.kind==="ram") return `光る到達マスをクリック(突進) <span class="sub">(同じマスに2方向から届くときはマス上の矢印で向きを選ぶ)</span>`;
+    if(spec.kind==="setdrift") return UI.multi.length?`方向ボタンでドリフトを書き換えろ`:`対象の敵をクリック`;
+    if(spec.kind==="attack_multi") return `対象を最大${spec.count}体クリック → 確定`;
+    if(spec.kind==="salvage") return `回収するカードを選べ`;
+    return `赤く光る対象をクリック <span class="sub">(カーソルを乗せるとダメージ予測)</span>`;
+  }
+  return "";
+}
+
+function renderBattle(app){
+  const enc=S.enc;
+  const ov=intentOverlays();
+  const ghosts=driftGhosts();
+  const sel=selectableCells();
+  const enemyOrder=enc.intents.map((it,i)=>({i:i+1,id:it.unitId}));
+  const badgeOf={}; enemyOrder.forEach(o=>badgeOf[o.id]=o.i);
+
+  let grid=`<div id="board" class="${META.tilt?"tilt":""}" style="grid-template-columns:repeat(${CONFIG.GRID},var(--cell)); --zh:${[212,275,160,35,350][S.run.zone-1]};">`;
+  for(let y=0;y<CONFIG.GRID;y++)for(let x=0;x<CONFIG.GRID;x++){
+    const key=x+","+y;
+    const u=unitAt(enc,x,y);
+    const o=ov[key];
+    let cls="cell", dmgHtml="", cellTT=[];
+    if(o&&o.threat.length){
+      cls+=" threat";
+      const total=o.threat.reduce((s,t)=>s+t.dmg,0);
+      dmgHtml=`<span class="dmgnum">-${total}</span>`;
+      cellTT.push(...o.threat.map(t=>`⚠ <b>${t.i}</b> ${esc(t.name)}が今ラウンド終わりにここを攻撃(${t.dmg}ダメージ)`));
+    } else if(o&&o.charge.length){
+      cls+=" charge";
+      dmgHtml=`<span class="dmgnum">次R</span>`;
+      cellTT.push(...o.charge.map(t=>`🔶 <b>${t.i}</b> ${esc(t.name)}の主砲が<b>次のラウンド</b>にここを焼く(2ダメージ)。今のうちに退避を`));
+    }
+    if(o&&o.move.length) cls+=" intent-move";
+    let click="", hover="";
+    const bk=sel.blocked&&sel.blocked[key];
+    if(bk){
+      cls+=" blockedhint";
+      cellTT.push(`⛔ ${DIRS[bk.dir].ch}方向は進めない — 経路上に${esc(bk.by)}(移動は「きっかり」進む。途中で止まれない)`);
+    }
+    const sc=sel.cells[key];
+    if(sc && sc.opts.length===1){
+      const d0=sc.opts[0].dir||"";
+      cls+=" sel-ok cue"; click=`onclick="H.cellClick(${x},${y},'${d0}')"`;
+      hover=`onmouseenter="H.pv(${x},${y},'${d0}')" onmouseleave="H.pvOff()"`;
+    } else if(sc){
+      cls+=" sel-ok cue"; // 2方向から到達可(トーラス) — 矢印で選ぶ(L-001)
+    }
+    let inner="";
+    if(sc && sc.opts.length>1){
+      inner+=`<span class="dirpick">${sc.opts.map(o=>
+        `<button onclick="event.stopPropagation();H.cellClick(${x},${y},'${o.dir}')"
+          onmouseenter="H.pv(${x},${y},'${o.dir}')" onmouseleave="H.pvOff()"
+          data-tt="${attrEsc(`${DIRS[o.dir].ch}回りで進入 — ドリフトも${DIRS[o.dir].ch}向きになる`)}">${DIRS[o.dir].ch}</button>`).join("")}</span>`;
+    }
+    if(o&&o.move.length&&!u) inner+=o.move.map(m=>`<span class="mghost">${m.icon}<span class="mN">${m.i}${m.dirCh}</span></span>`).join("");
+    for(const g of ghosts) if(g.key===key) inner+=`<span class="dghost ${g.boom?"boom":""}" >${g.icon}<i class="darr">${g.ch}</i></span>`;
+    if(enc.container && !enc.container.taken && enc.container.x===x && enc.container.y===y){
+      inner+=`<span class="container-item">📦</span>`;
+      if(!cellTT.length) cellTT.push("📦 <b>漂流コンテナ</b>: ユニットが乗れば回収 — 売却価値+2(移動でもドリフトでも)");
+    }
+    if(enc.well && enc.well.x===x && enc.well.y===y){
+      cls+=" gravwell";
+      inner+=`<span class="wellswirl">🌀</span>`;
+      cellTT.push("🌀 <b>重力渦</b>: ラウンド開始時、隣1マスのユニットを引き込む(慣性は消える)。渦上ではタダで静止できる — 敵を放り込んで予定を狂わせろ");
+    }
+    if(enc.flareRow===y){
+      cls+=" charge";
+      if(!dmgHtml) dmgHtml=`<span class="dmgnum">☀</span>`;
+      cellTT.push("☀ <b>太陽フレア</b>: 次のラウンド頭、この行全体に1ダメージ(敵味方無差別)。退避するか、敵を置き去りにしろ");
+    }
+    if(u){
+      const pcls=u.side==="player"?"player":(u.side==="hazard"?`enemy hazard ${u.type}`:"enemy");
+      const charging=(u.type==="sentinel"&&u.charge)?" charging":"";
+      const actorsel=(u.side==="player"&&((enc.pending&&UI.unitId===u.id)||(!enc.pending&&UI.lastUnit===u.id)))?" actorsel":"";
+      const selKind=sel.units[u.id];
+      const selCls=selKind==="must"?" pick cue":(selKind==="switch"?" pick sub-cue":(selKind==="target"?" target cue":""));
+      const ucls=selCls+(UI.acting===u.id?" acting":"")+charging+actorsel;
+      const uclick=selKind?`onclick="H.unitClick('${u.id}')"`:"";
+      const ehover=u.side==="enemy"?`onmouseenter="H.hlU('${u.id}',true)" onmouseleave="H.hlU('${u.id}',false)"`:"";
+      let utt;
+      if(selKind==="target"&&UI.unitId){
+        utt=forecastTT(unitById(enc,UI.unitId),actionSpec(S,UI.actIdx),u);
+      } else {
+        const hint = selKind==="must" ? "👆 このユニットをクリックして実行先に選ぶ"
+          : selKind==="switch" ? (enc.pending?"👆 クリックで操縦交代":"👆 クリックで操縦予約(次のペアの既定操縦になる)") : null;
+        utt=unitTT(u,hint);
+      }
+      const hp=Array.from({length:u.maxHp},(_,i)=>`<i class="${i<u.hp?"":"off"}"></i>`).join("")
+        + Array.from({length:u.shield},()=>`<i class="sh"></i>`).join("");
+      const drift=u.drift?`<span class="drift">${DIRS[u.drift].ch}</span>`:"";
+      const badge=u.side==="enemy"&&badgeOf[u.id]?`<span class="badgeN">${badgeOf[u.id]}</span>`:"";
+      inner+=`<div class="unit ${pcls}${ucls}" data-uid="${u.id}" ${uclick} ${ehover} data-tt="${utt}">
+        <div class="uinner">${badge}${drift}${unitSvg(u)}<span class="nm">${esc(u.name.slice(0,6))}</span><div class="hp">${hp}</div></div></div>`;
+    }
+    const ttAttr=cellTT.length?`data-tt="${attrEsc(cellTT.join("<br>"))}"`:"";
+    grid+=`<div class="${cls}" data-xy="${key}" ${ttAttr} ${click} ${hover}>${inner}</div>`;
+  }
+  grid+="</div>";
+
+  // hand
+  const hand=cardsIn(S,"hand");
+  const pend=enc.pending;
+  let handHtml=`<div id="hand">`;
+  for(const c of hand){
+    const d=defOf(c);
+    const inPend=pend&&pend.find(p=>p.uid===c.uid);
+    const aSel=UI.selA&&UI.selA.uid===c.uid;
+    const lock=(pend&&!inPend);
+    let topCls="half top", botCls="half bot";
+    if(aSel&&UI.selA.half==="top") topCls+=" chosen";
+    if(aSel&&UI.selA.half==="bottom") botCls+=" chosen";
+    if(inPend){ if(inPend.half==="top"){topCls+=" chosen"; botCls+=" faded";} else {botCls+=" chosen"; topCls+=" faded";} }
+    if(UI.selA&&!aSel&&!pend){ if(UI.selA.half==="top") topCls+=" faded"; else botCls+=" faded"; }
+    if(d.top.lost) topCls+=" lostact";
+    if(d.bottom.lost) botCls+=" lostact";
+    const clickable = enc.step==="player" && !pend && !enc.awaitEnd;
+    // 強調の文法: 次に選ぶべき半面を呼吸させる(1枚目=両面 / 2枚目=もう片方の側)
+    if(clickable){
+      if(!UI.selA){ topCls+=" cue-soft"; botCls+=" cue-soft"; }
+      else if(!aSel){ if(UI.selA.half==="top") botCls+=" cue-soft"; else topCls+=" cue-soft"; }
+    }
+    // 再クリックで選択解除(L-014): ペア確定後も、まだ何も実行していなければカードクリックで解除
+    const unpairable = inPend && !pend.some(q=>q.done);
+    const clickAttr = h => clickable?`onclick="H.halfClick('${c.uid}','${h}')"`:(unpairable?`onclick="H.unpair()"`:"");
+    const st=upSpec(d.top,c.up,d,"top"), sb=upSpec(d.bottom,c.up,d,"bottom");
+    handHtml+=`<div class="card ${lock?"locked":""} ${d.relic?"relic-card":""}">
+      <div class="ttl">${esc(d.name)}${c.up?'<span style="color:var(--gold)">+</span>':""}${d.relic?" ◆":""}</div>
+      <div class="${topCls}" data-tt="${specTT(d.name,st)}" ${clickAttr("top")}><span class="tag">▲航行${st.lost?"🔥":""}</span><br>${labelHtml(st)}</div>
+      <div class="${botCls}" data-tt="${specTT(d.name,sb)}" ${clickAttr("bottom")}><span class="tag">▼戦闘${sb.lost?"🔥":""}</span><br>${labelHtml(sb)}</div>
+    </div>`;
+  }
+  handHtml+="</div>";
+
+  // action chips + controls
+  let chips="";
+  if(enc.step==="player"){
+    chips=`<div style="display:flex;gap:10px;justify-content:center;margin-top:6px;flex-wrap:wrap;">`;
+    if(pend){
+      pend.forEach((p,i)=>{
+        const c=cardByUid(S,p.uid);
+        const d=defOf(c);
+        const spec=upSpec(d[p.half],c.up,d,p.half);
+        const active=UI.actIdx===i;
+        const cue=(UI.actIdx===null&&!p.done)?" cue":"";
+        chips+=`<button ${p.done?"disabled":""} class="${active?"primary":""}${cue}" data-tt="${specTT(d.name,spec)}" onclick="H.chipClick(${i})">
+          ${p.done?"✓ ":""}${esc(d.name)} ${p.half==="top"?"▲":"▼"} ${labelHtml(spec)}</button>`;
+      });
+      if(UI.actIdx!==null && pend[UI.actIdx] && !pend[UI.actIdx].done){
+        const spec=actionSpec(S,UI.actIdx);
+        if(spec.kind==="attack_multi"&&UI.multi.length) chips+=`<button class="primary" onclick="H.multiConfirm()">確定(${UI.multi.length}体)</button>`;
+        const noTarget = UI.mode==="target" && ["attack","attack_line","push","pull","attack_multi","setdrift"].includes(spec.kind) && !attackTargets(S,unitById(enc,UI.unitId),spec).length;
+        chips+=`<button class="danger" data-tt="${attrEsc("対象がいない/狙いを捨てる場合、この半分を不発として消費する")}" onclick="H.fizzle()">${noTarget?"対象なし — ":""}不発にする</button>`;
+        chips+=`<button onclick="H.backChip()">戻る</button>`;
+      }
+      if(enc.awaitEnd) chips+=`<button class="primary cue" style="font-weight:800;" onclick="H.endTurn()">⚔ 敵ターンへ (Enter)</button>`;
+    } else if(UI.selA){
+      chips+=`<button onclick="H.cancelSel()">選び直す</button>`;
+    }
+    if(canUndo(S)&&(pend||UI.selA)) chips+=`<button data-tt="${attrEsc("このターンの行動(移動・攻撃・選択)を全部巻き戻す。敵ターン開始前ならいつでも可")}" onclick="H.undo()">⟲ ターンやり直し</button>`;
+    chips+=`</div>`;
+  }
+
+  // direction picker
+  let dirHtml="";
+  if(sel.dirs){
+    dirHtml=`<div style="text-align:center;margin-top:6px;">方向:
+      ${DIR_KEYS.map(k=>`<button onclick="H.dirClick('${k}')">${DIRS[k].ch}</button>`).join(" ")}</div>`;
+  }
+
+  // side: intent list
+  const intentList=enc.intents.map((it,i)=>{
+    const u=unitById(enc,it.unitId);
+    const dead=!u||!u.alive;
+    const d=u?ENEMY_DEFS[u.type]:null;
+    let what=[];
+    if(!dead){
+      if(it.teleport&&it.moveTo) what.push(`✦位相転移(慣性・衝突無視)`);
+      else if(it.moveTo) what.push(`${DIRS[it.moveDir].ch}へ移動`);
+      else if(it.brake) what.push("制動(その場)");
+      else what.push("動かない");
+      if(it.healTarget){
+        const ht=unitById(enc,it.healTarget);
+        if(ht&&ht.alive) what.push(`<span class="chg">📡 ${esc(ht.name)}を修復+1</span>`);
+      }
+      if(it.summon) what.push(`<span class="chg">${ENEMY_DEFS[it.summon.type||"mine"].icon}を産み付ける(マーカー地点)</span>`);
+      if(it.detonate) what.push(`<span class="atk">💥 自爆! 周囲1マスに${it.dmg}</span>`);
+      else if(it.rush) what.push(`<span class="atk">🦏 轢断突進! レーン上の最初の1体に${it.dmg}</span>`);
+      else if(it.fire) what.push(`<span class="atk">直線を発射! (${it.dmg}ダメージ)</span>`);
+      else if(it.chargeCells) what.push(`<span class="chg">${it.aimDir?"照準中 — 次R轢断突進":"充填中 — 次R直線発射"}</span>`);
+      else if(it.attackCells.length){
+        const tgt=it.attackCells.map(c=>{const v=unitAt(enc,c.x,c.y);return v&&v.side==="player"?v.name:null;}).filter(Boolean);
+        what.push(`<span class="atk">${it.aura?"触手"+it.dmg:(tgt.length?esc(tgt.join("・"))+"へ攻撃"+it.dmg:"攻撃"+it.dmg+"(予告地点)")}</span>`);
+      } else if(!it.healTarget) what.push("様子見");
+    }
+    return `<div class="intent ${dead?"dead":""}" onmouseenter="H.hl(${i},true)" onmouseleave="H.hl(${i},false)">
+      <b>${i+1} ${u?u.icon:""}${u?esc(u.name):"(撃破済み)"}</b>${dead?"":` <span class="muted">HP${u.hp}${u.drift?" 🌀"+DIRS[u.drift].ch:""}</span><br><span class="what">${what.join(" / ")}</span>`}
+    </div>`;
+  }).join("");
+  const logHtml=S.run.log.map(l=>`<div class="${l.cls}">▸ ${esc(l.msg)}</div>`).join("");
+  const driftNote=enc.phase==="drift" ? `<span class="flash">🌀 慣性解決中 — 動いた者は滑る…</span>`
+    : (enc.driftMoves>0?`🌀 慣性解決: ${enc.driftMoves}体が滑った`: "");
+  // 訓練航行のコーチ(状態駆動で次の一手を指示)
+  let coach="";
+  if(S.run.tutorial && enc.step==="player"){
+    let msg;
+    if(!enc.pending && !UI.selA) msg="❶ 手札からカードの<b>▲上半分(航行)</b>をクリック — 1枚目はクリックした側を使う";
+    else if(!enc.pending && UI.selA) msg="❷ 2枚目のカードをクリック — 自動で<b>▼下半分(戦闘)</b>になる";
+    else if(enc.pending && UI.actIdx!==null && UI.mode==="target" && !actionSpec(S,UI.actIdx).kind.startsWith("move") && !enc.awaitEnd && enc.pending.some(p=>p.done)) msg="❹ 赤く光る敵をクリックで攻撃(届かなければ「不発にする」でもOK)";
+    else if(enc.pending && !enc.awaitEnd) msg="❸ 光るマスをクリックで移動。<b>端はループする</b>。黄色い機雷の近くに敵を誘うと…?";
+    else if(enc.awaitEnd) msg="❺ <b>Enter</b>か「敵ターンへ」で確定。⟲でターン丸ごとやり直せる";
+    if(enc.round>=2 && !msg) msg="❻ 薄い影=<b>慣性の滑り先</b>。敵を機雷に押し込む/ぶつけると<b>物理キル</b>=残骸から回収!";
+    coach=msg?`<div style="background:#0c2a1a; border:1px solid var(--green); border-radius:8px; padding:6px 12px; margin:4px 0; font-size:.85rem;">📚 ${msg}</div>`:"";
+  }
+
+  const boss=enc.units.find(u=>u.alive&&(ENEMY_DEFS[u.type]||{}).boss);
+  const bossBar=boss?`<div class="bossbar"><div class="fill" style="width:${Math.round(boss.hp/boss.maxHp*100)}%"></div><div class="nm">${boss.icon} ${esc(boss.name)} ${boss.hp}/${boss.maxHp}</div></div>`:"";
+  app.innerHTML= hudHtml() + `
+  <div id="battle">
+    <div id="boardwrap">
+      ${bossBar}${coach}
+      <div class="muted">ラウンド ${enc.round} — <span class="sw" style="background:#3a1020;border:1px solid var(--red)"></span>赤=今R被弾予定(数字=ダメージ) <span class="sw" style="background:#3a2a10;border:1px solid var(--amber)"></span>橙=次Rに主砲 / 薄い影=<b style="color:var(--amber)">慣性の滑り先</b> / 点線=敵の移動予定</div>
+      <div class="banner">${driftNote}</div>
+      ${grid}
+      <div id="prompt">${promptText()}${UI.msg?`<div class="sub" style="color:var(--red)">${esc(UI.msg)}</div>`:""}</div>
+      ${chips}${dirHtml}
+      ${handHtml}
+    </div>
+    <div id="side">
+      <div class="panel"><h3>敵の行動予定 (この順に動く)</h3>${intentList||"<span class='muted'>掃討完了</span>"}
+        <div class="legend" style="margin-top:6px;">リストにカーソルで対象マスを盤面に表示</div></div>
+      <div class="panel"><h3>覚えておけ</h3><div class="legend">
+        ・動いたら次R勝手に1マス滑る(<b>慣性</b>)。影が滑り先<br>
+        ・止まる/曲がるにはカードが要る。<b>直進はタダ、精密は有料</b><br>
+        ・盤の端は反対側につながっている(壁はない)<br>
+        ・敵は${enc.intents.length?"1→"+enc.intents.length:"番号"}の順に行動。赤マスから逃げろ<br>
+        ・手札が尽きると休息=<b>1枚永久ロスト</b>。カード=寿命
+      </div></div>
+      <div class="panel"><h3>航行記録</h3><div id="log">${logHtml}</div></div>
+    </div>
+  </div>
+  ${battleModal()}${hintsOverlay()}`;
+}
+
+function hintsOverlay(){
+  const enc=S.enc;
+  if(UI.hintsSeen||!enc||S.run.zone!==1||S.run.encIdx!==0||enc.round!==1||enc.phase!=="player") return "";
+  return `<div id="overlay"><div class="modal">
+    <h2>サルベージ屋の心得 (30秒で読める)</h2>
+    <div class="hintlist">
+      ❶ 毎ターン<b>カードを2枚</b>選ぶ。1枚目はクリックした側、2枚目は自動で<b>もう片方の側</b>(▲航行/▼戦闘)<br>
+      ❷ 行動は<b>船とドローンの好きな方</b>にやらせていい。順番も自由。両方同じユニットでもいい<br>
+      ❸ <b>🌀慣性</b>: 移動した者は次のラウンド開始時、同方向へ勝手に1マス滑る。<b>半透明の影が滑り先</b>。止まりたければ『制動』<br>
+      ❹ <b>赤いマス</b>=このラウンド終わりに敵が撃つ場所(数字=ダメージ)。<b>敵も喰らう</b> — 触手や機雷に押し込め<br>
+      ❺ カード=寿命。休息で<b>1枚永久ロスト</b>。被弾はカードで無効化できるが、それも永久に失う<br>
+      ❻ <b>船体はゾーンを越えて持ち越し</b>。回復は応急パッチ/整備ドック/物理キルの残骸修理だけ<br>
+      ⟲ 敵ターン前なら<b>何度でもやり直せる</b>。怖がらず試せ
+    </div>
+    <div class="opts"><button class="primary" onclick="H.dismissHints()">了解、行くぞ</button></div>
+  </div></div>`;
+}
+
+function battleModal(){
+  const enc=S.enc;
+  if(!enc) return "";
+  if(enc.bossIntro){
+    const bu=enc.units.find(u=>u.alive&&(ENEMY_DEFS[u.type]||{}).boss);
+    const bd=bu?ENEMY_DEFS[bu.type]:ENEMY_DEFS.apex;
+    return `<div id="overlay"><div class="warnband">
+      <h1>⚠ WARNING ⚠</h1>
+      <p style="color:var(--amber); font-size:1.1rem; margin:8px 0;">桁外れのエネルギー反応</p>
+      <p style="font-size:1.4rem; font-weight:900; letter-spacing:.15em;">《${esc(bd.title)}》${esc(bd.name)}</p>
+      <p class="muted" style="margin:10px 0;">${esc(bd.hint)}</p>
+      <div class="opts" style="justify-content:center;"><button class="danger lkbtn cue" onclick="H.bossEngage()">交戦開始</button></div>
+    </div></div>`;
+  }
+  if(enc.phase==="damage"){
+    const q=pendingDamage(S);
+    const u=unitById(enc,q.unitId);
+    if(!u||!u.alive){ setTimeout(()=>{ resolveDamage(S,"hp"); render(); },50); return ""; }
+    const eff=Math.max(0,q.dmg-u.shield);
+    const burnable=[...cardsIn(S,"hand"),...cardsIn(S,"discard")];
+    if(eff<=0){ setTimeout(()=>{ resolveDamage(S,"hp"); render(); },350);
+      return `<div id="overlay"><div class="modal"><h2>🛡 シールドが${esc(q.src)}を弾いた!</h2></div></div>`; }
+    return `<div id="overlay"><div class="modal">
+      <h2>被弾! ${esc(u.name)} に ${esc(q.src)} — ${eff}ダメージ</h2>
+      <p class="muted">装甲で受けるか、カードを燃やして無効化するか。燃やしたカードは永遠に失われる(寿命と引き換えの命)。</p>
+      <div class="opts">
+        <button class="danger" onclick="H.dmgHp()">装甲で受ける (HP ${u.hp}→${Math.max(0,u.hp-eff)}${u.hp-eff<=0?" ⚠"+(u.id==="ship"?"ラン終了":"大破"):""})</button>
+      </div>
+      ${burnable.length?`<p style="margin-top:12px;">または、カードを燃やして<b>完全無効化</b>(永久ロスト):</p>
+      ${cardPickFaces(burnable,"H.dmgBurn")}`:""}
+    </div></div>`;
+  }
+  if(enc.phase==="rest"){
+    const all=[...cardsIn(S,"hand"),...cardsIn(S,"discard")];
+    const ship=unitById(enc,"ship");
+    if(!UI.restChoosing){
+      return `<div id="overlay"><div class="modal">
+        <h2>強制休息 — 手札が尽きた</h2>
+        <p class="muted">消耗カードはすべて手札に戻る。だが1枚だけ、宇宙に手放さなければならない。<br>このターン、敵は待ってくれない。</p>
+        <div class="pickgrid">${all.map(c=>cardFaceHtml(c,{mini:true})).join("")}</div>
+        <div class="opts">
+          <button class="primary" onclick="H.restRandom()" data-tt="${attrEsc("どれを失うかは宇宙が決める。タダで済むが、◆遺物カードが流れるかもしれない")}">成り行きに任せる (ランダム・無償)</button>
+          <button class="danger" ${ship.hp>1?"":"disabled"} onclick="H.restChoose()" data-tt="${attrEsc("船体を軋ませて選別する。失うカードを自分で選べるが、旗艦のHPを1払う"+(ship.hp<=1?"<br><b>HP1のため選べない</b>":""))}">自ら選ぶ (旗艦HP ${ship.hp}→${ship.hp-1})</button>
+        </div>
+      </div></div>`;
+    }
+    return `<div id="overlay"><div class="modal">
+      <h2>選別 — どれをエアロックから出す?</h2>
+      <p class="muted">船体がHP1分軋む。選んだカードは永遠に失われる。</p>
+      ${cardPickFaces(all,"H.restLose")}
+      <div class="opts"><button onclick="H.restBack()">やはり成り行きに任せる</button></div>
+    </div></div>`;
+  }
+  if(enc.phase==="crashsalvage"){
+    // 爆発とスタンプを見せてからモーダルを出す(祝福を遮らない)
+    if(!UI.salvageReady){
+      if(!UI.salvageTimer) UI.salvageTimer=setTimeout(()=>{UI.salvageReady=true; UI.salvageTimer=null; render();},META.fxLite?150:800);
+      return "";
+    }
+    const opts=cardsIn(S,"discard");
+    const ship=unitById(enc,"ship");
+    return `<div id="overlay"><div class="modal">
+      <h2>💥 物理キル! — 残骸サルベージ${enc.crashSalvage>1?` (残り${enc.crashSalvage}回)`:""}</h2>
+      <p class="muted">漂う残骸から何を剥ぎ取る? <span style="color:var(--green)">敵をぶつけて壊す — それがこの宇宙の正しい錬金術。</span></p>
+      <div class="opts"><button class="primary" ${ship.hp<ship.maxHp?"":"disabled"} onclick="H.crashRepair()" data-tt="${attrEsc("装甲板を引き剥がして船体に当てがう。船体は次のゾーンへ持ち越されるぞ")}">🔧 装甲板 — 旗艦HP+1 (${ship.hp}/${ship.maxHp})</button></div>
+      ${opts.length?`<p style="margin-top:8px;">または消耗カードを1枚修復:</p>${cardPickFaces(opts,"H.crashPick")}`:`<p class="muted">(消耗パイルは空 — 装甲板を貰っておけ)</p>`}
+    </div></div>`;
+  }
+  if(enc.phase==="cleared"){
+    if(S.run.bossKilled && S.run.zone>=CONFIG.ZONES){
+      return `<div id="overlay"><div class="modal" style="border-color:var(--gold); text-align:center;">
+        <h2 style="color:var(--gold); font-size:1.6rem; letter-spacing:.2em;">中心墓所 — 制圧</h2>
+        <p class="muted" style="line-height:1.9;">死んだ文明の最後の怒りが、静かに眠りについた。<br>
+        この宇宙であんたより深くまで行った者はいない。<br><b style="color:var(--txt)">あとは、帰るだけだ。</b></p>
+        <div class="opts" style="justify-content:center;"><button class="primary lkbtn cue" onclick="H.afterClear()">凱旋する</button></div>
+      </div></div>`;
+    }
+    return `<div id="overlay"><div class="modal">
+      <h2>戦域クリア!</h2>
+      <p class="muted">スキャナーに反応なし。漂う残骸と、静寂。消耗したカードは手札に戻る(ロストは戻らない)。</p>
+      <div class="opts"><button class="primary" onclick="H.afterClear()">続行</button></div>
+    </div></div>`;
+  }
+  if(UI.mode==="salvage"){
+    const opts=cardsIn(S,"discard");
+    return `<div id="overlay"><div class="modal"><h2>どれを回収する?</h2>
+      ${cardPickFaces(opts,"H.salvagePick")}
+      <div class="opts"><button onclick="H.backChip()">やめる</button></div></div></div>`;
+  }
+  return "";
+}
+
+// 敵ターンを1体ずつアニメーション実行
+function maybeRunEnemyPhase(){
+  if(!S.enc||S.enc.phase!=="enemy"||UI.stepping||S.run.over) return;
+  UI.stepping=true;
+  (async()=>{
+    try{
+      let guard=0;
+      const dl=META.fxLite?110:430, dl2=META.fxLite?90:400;
+      while(S.enc && S.enc.step==="enemy" && !S.run.over && guard++<20){
+        UI.acting=nextActingEnemy(S);
+        if(UI.acting){ renderBattle(document.getElementById("app")); flip(); drainFx(); await sleep(dl); }
+        const r=enemyStep(S);
+        renderBattle(document.getElementById("app")); flip(); drainFx();
+        if(r.done) break;
+        await sleep(dl2);
+      }
+    } finally {
+      UI.acting=null; UI.stepping=false;
+      render();
+    }
+  })();
+}
+
+// ---------- route ----------
+function renderRoute(app){
+  const zt=ZONE_TABLE[S.run.zone-1];
+  const fmt=l=>l.map(t=>ENEMY_DEFS[t].icon+ENEMY_DEFS[t].name).join(" / ");
+  app.innerHTML=hudHtml()+`
+  <div class="modal" style="margin:30px auto;">
+    <h2>航路選択 — ${esc(ZONE_NAMES[S.run.zone-1])}の深部へ</h2>
+    <p class="muted">スキャナーが2本の航路を検出。どちらを抜けても次の戦域だ。</p>
+    <div class="routebox">
+      <div class="rt" onclick="H.route('safe')">
+        <h4 style="color:var(--green)">🟢 安全ルート</h4>
+        <p class="muted">敵: ${esc(fmt(zt.safe))}</p>
+        <p class="muted">報酬: コモン遺物</p>
+      </div>
+      <div class="rt danger" onclick="H.route('danger')">
+        <h4 style="color:var(--red)">🔴 危険ルート</h4>
+        <p class="muted">敵: ${esc(fmt(zt.danger))}</p>
+        <p class="muted">報酬: <span style="color:var(--gold)">レア遺物</span></p>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ---------- relic ----------
+function renderRelic(app){
+  const r=S.pendingRelic;
+  if(!r){ S.screen="leapkeep"; return render(); }
+  const card=CARD_DEFS[r.card];
+  const deployOk=canDeploy(S);
+  app.innerHTML=hudHtml()+`
+  <div class="modal" style="margin:30px auto;">
+    <img class="relicart" src="art/relic-${r.id}.png" onerror="this.style.display='none'" alt="">
+    <h2>遺物発見 — ${esc(r.name)} ${r.rare?'<span style="color:var(--gold)">★レア</span>':""}</h2>
+    <p class="muted" style="font-style:italic;">${esc(r.desc)}</p>
+    <div class="relicbox">
+      <b>封印(Seal)</b>: カーゴへ。売却価値 <b>${r.value}</b> — 帰還すれば確定し、アンロックに数えられる<b>唯一</b>の方法。<br>
+      <span class="muted">現在のカーゴ価値 ${cargoValue(S)} → 封印すれば <b style="color:var(--gold)">${cargoValue(S)+r.value}</b>${(()=>{const n=unlocks(S).find(u=>!u.got);return n?`(次の解放『${esc(n.name)}』は価値${n.cost})`:"";})()}<br>…ただし、今のあんたを助けはしない。</span>
+    </div>
+    <div class="relicbox">
+      <b>展開(Deploy)</b>: 『${esc(card.name)}』としてデッキに追加。<br>
+      <span class="muted">▲${esc(card.top.label)} / ▼${esc(card.bottom.label)}</span><br>
+      <span style="color:var(--red)">売却価値${r.value}は放棄する。そしてこのカードを失えば(休息・被弾・燃料)、遺物そのものが永遠に消える。</span><br>
+      <span class="muted">…それでも、今ここで力が要るなら。</span>
+    </div>
+    <div class="opts">
+      <button class="primary" onclick="H.relic('seal')">封印する — 家まで持って帰る</button>
+      <button class="danger" onclick="H.relic('deploy')" ${deployOk?"":"disabled"}>展開する — 今、力が要る${deployOk?"":"(デッキ上限)"}</button>
+    </div>
+  </div>`;
+}
+
+// ---------- leap or keep ----------
+function renderLeapKeep(app){
+  const run=S.run;
+  const alive=aliveCards(S).length;
+  const cv=cargoValue(S);
+  const last=run.zone>=CONFIG.ZONES;
+  const ds=deployedStatus(S);
+  const cargoList=run.cargo.map(id=>{const r=RELIC_DEFS.find(x=>x.id===id);return `<li>◆${esc(r.name)} (価値${r.value})</li>`;}).join("")||"<li class='muted'>(空っぽだ)</li>";
+  const lockedU=UNLOCK_POOL.filter(u=>!META.unlocked.includes(u.defId)).sort((a,b)=>a.cost-b.cost);
+  const nextU=lockedU.length?{...lockedU[0], name:CARD_DEFS[lockedU[0].defId].name, cost:lockedU[0].cost}:null;
+  const futureCred=META.credits+cv;
+  const ladder=`帰還すれば <b style="color:var(--gold)">₢${futureCred}</b>${nextU?` — 『${esc(nextU.name)}』解放(₢${nextU.cost})まであと<b style="color:var(--gold)">${Math.max(0,nextU.cost-futureCred)}</b>`:" — 全カード解放済み!"}`;
+  const nextZone=last?null:ZONE_NAMES[run.zone];
+  const quip = alive<=4 ? `本当に跳ぶ? 残り${alive}枚しかないよ。` :
+               alive<=7 ? `カードは${alive}枚。まだ行ける——たぶん。` :
+               `景気がいいね、船長。深淵が呼んでるよ。`;
+  const cargoChips=run.cargo.map(id=>{const r=RELIC_DEFS.find(x=>x.id===id);
+    return `<span class="cargochip" data-tt="${attrEsc(esc(r.desc))}">◆${esc(r.name)} <b>${r.value}</b></span>`;}).join(" ");
+  app.innerHTML=hudHtml()+`
+  <div class="modal" style="margin:24px auto; position:relative; overflow:hidden;">
+    <div class="lkwm">LEAP OR KEEP</div>
+    <h2 style="position:relative;z-index:1;">ゾーン${run.zone}クリア — ${last?"ここが最深部だ":"跳ぶか、帰るか。"}</h2>
+    <div class="scale">
+      <div class="pan keep"><h4>🏠 KEEP — 帰還する</h4>
+        <p style="margin-bottom:8px;">${cargoChips||"<span class='muted'>(カーゴは空っぽだ)</span>"}</p>
+        <p class="muted">売却価値合計: <b style="color:var(--gold);font-size:1.2rem;">${cv}</b> — 帰還すれば確定。<br>${ladder}</p>
+        ${ds.length?`<p class="muted">展開遺物: ${ds.map(d=>d.alive?`<span style="color:var(--green)">◆${esc(d.relic.name)}(健在)</span>`:`<span style="color:var(--red)">✝${esc(d.relic.name)}(喪失)</span>`).join(" ")}<br>健在のまま帰還すればインストール候補(売却価値はない)。</p>`:""}
+      </div>
+      <div class="pan leap"><h4>🚀 LEAP — さらに深く</h4>
+        ${last?`<p class="muted">これより深くは、何もない。スキャナーは沈黙している。</p>`:`
+        <ul>
+          <li>次: 《${esc(nextZone)}》 — 敵はさらに凶悪</li>
+          <li>遺物のレアリティ上昇${run.zone+1>=4?"(レア率UP)":""}${nextU&&nextU.cost-futureCred>0&&nextU.cost-futureCred<=5?` — <span style="color:var(--gold)">あと遺物1つで『${esc(nextU.name)}』に届くかもしれない</span>`:""}</li>
+          <li>燃料コスト: <b style="color:var(--red)">カード1枚を永久ロスト</b></li>
+        </ul>
+        <p class="muted">残りカード: <b class="${alive<=4?"flash":""}" style="color:var(--amber)">${alive}枚</b></p>`}
+      </div>
+    </div>
+    <p class="lkradio">${esc(quip)}</p>
+    <div class="opts" style="justify-content:center; position:relative; z-index:1;">
+      <button class="primary lkbtn" style="border-color:var(--green);" onclick="H.keepAsk()">🏠 帰還する (KEEP)</button>
+      ${last?"":`<button class="danger lkbtn cue" onclick="H.leapAsk()">🚀 跳ぶ (LEAP)</button>`}
+    </div>
+    <div id="lkExtra" style="position:relative;z-index:1;"></div>
+  </div>`;
+}
+
+// ---------- summary ----------
+function renderSummary(app){
+  const run=S.run;
+  const cv=cargoValue(S);
+  // メタ進行の確定(一度だけ): クレジット加算はボーナス分+遺物は売却/インストールの選択制
+  if(!run.metaApplied && !run.tutorial){
+    run.metaApplied=true;
+    // ローカル戦績(トップ5)
+    META.history=META.history||[];
+    META.history.push({score:run.score??runScore(S), zone:run.zone, ship:run.shipId, asc:run.asc, win:run.win,
+      risk:(run.contracts||[]).length, legend:!!run.bossKilled, date:new Date().toISOString().slice(5,10)});
+    META.history.sort((a,b)=>b.score-a.score);
+    run.rank=META.history.findIndex(h=>h.score===(run.score??runScore(S)))+1;
+    META.history=META.history.slice(0,5);
+    META.runs++;
+    META.bestZone=Math.max(META.bestZone,run.zone);
+    run.score=runScore(S);
+    if(run.score>META.bestScore){ META.bestScore=run.score; run.newBest=true; }
+    if(run.win){
+      META.wins++;
+      META.credits+=run.bonusValue;
+      // 危険手当: 契約1件につき₢2(実利は線形 — 名誉は称号で青天井、が荒れない鉄則)
+      if((run.contracts||[]).length){ run.contractPay=run.contracts.length*2; META.credits+=run.contractPay; }
+      META.bestValue=Math.max(META.bestValue,cv);
+      // アセンション解放: 現在の挑戦レベルで勝つと次が開く
+      if(run.asc>=META.maxAsc && META.maxAsc<3){ META.maxAsc=run.asc+1; run.ascUnlocked=ASC_DEFS[META.maxAsc].name; }
+      sfx("good");
+    } else {
+      // 負けても拾うものはある(アンロックドリップ)
+      run.lossCredits=lossCredits(S);
+      META.credits+=run.lossCredits;
+      sfx("bad");
+    }
+    saveMeta();
+  }
+  const reason={returned:"自発的帰還 — 生きて帰ることが勝利だ",ship:"船体大破 — 深淵はあんたを離さなかった",exhausted:"全カード喪失 — 燃料も、武器も、希望も尽きた"}[run.reason]||"";
+  const legend=run.win&&run.bossKilled;
+  const title=run.win?(legend?"伝 説":"帰 還"):"M I A";
+  const color=legend?"var(--gold)":(run.win?"var(--green)":"var(--red)");
+  const cargoRows=run.cargo.map(id=>{
+    const r=RELIC_DEFS.find(x=>x.id===id);
+    const st=UI.sold[id];
+    const installed=META.installed.includes(id);
+    let act;
+    if(st==="sold") act=`<span style="color:var(--gold)">売却済 +₢${r.value}</span>`;
+    else if(st==="installed") act=`<span style="color:var(--green)">インストール済(次ランから使用可)</span>`;
+    else act=`<button onclick="H.sellRelic('${id}')" data-tt="${attrEsc("クレジット₢"+r.value+"に換える — カード解放の資金")}">売却 +₢${r.value}</button>
+      <button onclick="H.installRelic('${id}')" ${installed?"disabled":""} data-tt="${attrEsc("遺物カード『"+esc(CARD_DEFS[r.card].name)+"』を恒久的にコレクションへ(死んでも残る)。売却益は放棄")}">${installed?"既に保有":"インストール"}</button>`;
+    return `<tr><td>◆${esc(r.name)}</td><td>${r.rare?"★レア":"コモン"}</td><td>${act}</td></tr>`;
+  }).join("");
+  app.innerHTML=`
+  <div style="max-width:720px;margin:40px auto;">
+    <div class="bigtitle" style="color:${color}">${title}</div>
+    <p style="text-align:center;color:var(--amber)">${esc(reason)}</p>
+    <div class="panel" style="margin-top:18px;">
+      <h3>ラン記録</h3>
+      <div style="text-align:center; margin:6px 0 12px;">
+        <div class="muted">SCORE — 挑戦: ${esc(ASC_DEFS[run.asc].name)} / ${esc(shipDef(run.shipId).name)}${(run.contracts||[]).length?` / <span style="color:var(--amber)">☠契約${run.contracts.length} ×${LK.contractMult(run).toFixed(1)}</span>`:""}</div>
+        <div id="scoreNum" style="font-size:3.2rem; font-weight:900; color:var(--gold); text-shadow:0 0 24px #ffd70055; letter-spacing:.04em;">0</div>
+        ${run.newBest?'<div class="bestburst">★ 自己ベスト更新! ★</div>':(run.rank&&run.rank<=5?`<div style="color:var(--cyan);font-weight:800;">🏆 歴代${run.rank}位</div>`:"")}
+        ${run.win&&(run.contracts||[]).length>=3?`<div style="color:var(--gold);font-weight:800;">☠ 称号『${run.contracts.length>=5?"狂気の契約者":"鉄の契約者"}』 — 契約${run.contracts.length}件を生き延びた</div>`:""}
+      </div>
+      <table class="sum">
+        <tr><td>到達ゾーン</td><td>ZONE ${run.zone} 《${esc(ZONE_NAMES[run.zone-1])}》</td></tr>
+        <tr><td>総ラウンド</td><td>${run.totalRounds}</td></tr>
+        <tr><td>物理キル</td><td>${run.physKills||0}回 ${run.physKills>=3?"💥":""}</td></tr>
+        <tr><td>休息/被弾/燃料で失った</td><td>${run.restCount} / ${run.burnCount} / ${run.fuelBurnt}枚</td></tr>
+      </table>
+      ${run.ascUnlocked?`<p style="color:var(--amber)">🔓 新たな挑戦『${esc(run.ascUnlocked)}』が解放された!</p>`:""}
+    </div>
+    ${run.win?`
+    <div class="panel" style="margin-top:12px;">
+      <h3>精算 — 所持クレジット: <b style="color:var(--gold)">₢${META.credits}</b>${run.bonusValue?` (回収ボーナス+₢${run.bonusValue}込み)`:""}${run.contractPay?` <span style="color:var(--amber)">(危険手当+₢${run.contractPay})</span>`:""}</h3>
+      <p class="muted">遺物は<b>売却</b>(クレジット=格納庫でカード解放)か<b>インストール</b>(遺物カードを恒久コレクションへ)か。両方は取れない。</p>
+      <table class="sum">${cargoRows||"<tr><td class='muted'>封印遺物なし — 命だけ持って帰った。それも才能だ。</td></tr>"}</table>
+      ${(()=>{const ds=deployedStatus(S); if(!ds.length) return "";
+        const ok=ds.filter(d=>d.alive), ng=ds.filter(d=>!d.alive);
+        return `${ok.length?`<p class="muted">展開して生還した遺物: ${ok.map(d=>{
+          const inst=META.installed.includes(d.id)||UI.sold[d.id]==="installed";
+          return `◆${esc(d.relic.name)} ${inst?'<span style="color:var(--green)">インストール済</span>':`<button onclick="H.installRelic('${d.id}')" data-tt="${attrEsc("使い込んだ遺物を母港で完全修復し、恒久コレクションへ(売却益はない)")}">インストール</button>`}`;
+        }).join(" / ")}</p>`:""}
+        ${ng.length?`<p class="muted" style="color:var(--red)">永遠に失われた遺物: ${ng.map(d=>"✝"+esc(d.relic.name)+"(価値"+d.relic.value+"相当)").join("、")} — 使った力の代金だ。</p>`:""}`;})()}
+      <p class="muted" style="margin-top:6px;">クレジットの使い道は <b>格納庫</b> で(タイトル画面から)。</p>
+    </div>`:`
+    <div class="panel" style="margin-top:12px;">
+      <h3>失われたもの</h3>
+      <p class="muted">カーゴの遺物(価値${cv})は星間に散った。<br>
+      ${run.lossCredits?`それでも回収班が残骸から <b style="color:var(--gold)">₢${run.lossCredits}</b> ぶん拾い上げた — 失敗ランも無駄ではない。`:""}
+      格納庫の資産(₢${META.credits}とコレクション)は次のあんたが使う。</p>
+    </div>`}
+    <div style="text-align:center;margin-top:18px;">
+      <button class="primary cue" onclick="H.restart()">もう一度跳ぶ</button>
+      <button onclick="H.toTitle()">タイトルへ</button>
+    </div>
+  </div>`;
+  // スコアのカウントアップ祝福(Balatroの教訓: 数字は祝え)
+  const el=document.getElementById("scoreNum");
+  if(el){
+    const target=run.score||0, t0=performance.now(), dur=900;
+    (function tick(now){
+      const p=Math.min(1,(now-t0)/dur);
+      el.textContent=Math.round(target*(1-Math.pow(1-p,3)));
+      if(p<1) requestAnimationFrame(tick);
+      else if(run.newBest) sfx("salvage");
+    })(t0);
+  }
+}
+
+// ---------- handlers ----------
+const H={
+  begin(){
+    sfx("click");
+    S.screen="shipselect"; render();
+  },
+  tutorial(){
+    S=newRun(7777, null, {tutorial:true});
+    UI.hintsSeen=true; resetUI();
+    startEncounter(S, null);
+    // 教習用の固定配置: 敵2+機雷1を所定位置へ
+    const es=enemies(S.enc);
+    if(es[0]){es[0].x=3;es[0].y=1;} if(es[1]){es[1].x=3;es[1].y=3;}
+    const mine=S.enc.units.find(u=>u.type==="mine");
+    if(mine){ mine.x=2; mine.y=2; }
+    S.enc.intents=[]; LK.pump(S); // 配置替え後に意図を引き直す
+    S.enc.step="intents"; LK.pump(S);
+    S.screen="battle"; sfx("warp"); render();
+  },
+  pickShip(id){
+    META.lastShip=id; saveMeta();
+    const coll=collectionDefIds(id);
+    if(coll.length>10){ S.screen="deckbuild"; UI.deckSel=[]; render(); return; }
+    S=newRun(S.seed, coll.slice(0,10), {asc:META.ascension, shipId:id});
+    S.screen="loadout"; resetUI(); UI.loadout=[]; UI.loadoutTouched=false; render();
+  },
+  buyShip(id,cost){
+    if(META.credits<cost||META.ships.includes(id)) return;
+    META.credits-=cost; META.ships.push(id); saveMeta(); sfx("salvage"); render();
+  },
+  cycleAsc(){
+    META.ascension=(META.ascension+1)%(META.maxAsc+1||1);
+    saveMeta(); sfx("click"); render();
+  },
+  upgradePick(uid){ const r=LK.applyUpgrade(S,uid); if(!r.ok) UI.msg=r.msg; UI.campPick=false; sfx("good"); render(); },
+  upgradeSkip(){ LK.applyUpgrade(S,null); UI.campPick=false; render(); },
+  campUpgrade(){ UI.campPick=true; sfx("click"); render(); },
+  campBack(){ UI.campPick=false; render(); },
+  campResupply(){ LK.applyResupply(S); sfx("good"); render(); },
+  campScrap(){ LK.applyScrapLoot(S); sfx("salvage"); render(); },
+  crashRepair(){ const r=LK.crashSalvageRepair(S); if(!r.ok) UI.msg=r.msg; UI.salvageReady=false; render(); },
+  bossEngage(){ S.enc.bossIntro=false; sfx("bad"); render(); },
+  hangar(){ S.screen="hangar"; render(); },
+  backTitle(){ S.screen="title"; UI.deckSel=[]; render(); },
+  toggleMute(){ META.muted=!META.muted; saveMeta(); render(); },
+  toggleTilt(){ META.tilt=!META.tilt; saveMeta(); render(); },
+  toggleFxLite(){ META.fxLite=!META.fxLite; saveMeta(); render(); },
+  buyUnlock(defId,cost){
+    if(META.credits<cost||META.unlocked.includes(defId)) return;
+    META.credits-=cost; META.unlocked.push(defId); saveMeta(); sfx("salvage"); render();
+  },
+  toggleDeck(i){
+    if(UI.deckSel.includes(i)) UI.deckSel=UI.deckSel.filter(x=>x!==i);
+    else if(UI.deckSel.length<10) UI.deckSel.push(i);
+    sfx("pick"); render();
+  },
+  toggleContract(id){
+    if(UI.contractSel.includes(id)) UI.contractSel=UI.contractSel.filter(x=>x!==id);
+    else UI.contractSel.push(id);
+    sfx("pick"); render();
+  },
+  confirmDeck(){
+    const coll=collectionDefIds(META.lastShip);
+    META.lastDeck=[...UI.deckSel]; META.lastContracts=[...UI.contractSel]; saveMeta();
+    S=newRun(S.seed, UI.deckSel.map(i=>coll[i]), {asc:META.ascension, shipId:META.lastShip, contracts:UI.contractSel});
+    S.screen="loadout"; resetUI(); UI.loadout=[]; UI.loadoutTouched=false; UI.deckSel=[]; UI.contractSel=[];
+    render();
+  },
+  // ---- ゾーンイベント ----
+  eventSkip(){ S.pendingEvent=null; S.screen="loadout"; render(); },
+  eventWreckOpen(){
+    const lost=S.run.cards.filter(c=>c.loc==="lost");
+    if(!lost.length){ LK.log(S,"中は空だった。骨折り損だ。"); S.pendingEvent=null; S.screen="loadout"; render(); return; }
+    S.pendingEvent={type:"wreckpick"};
+    render();
+  },
+  eventWreckPick(uid){
+    const c=LK.cardByUid(S,uid);
+    if(c&&c.loc==="lost"){ c.loc="pool"; LK.log(S,`漂流船から『${LK.defOf(c).name}』を取り戻した!`,"good"); }
+    S.run.shipEventDmg=(S.run.shipEventDmg||0)+1; // 次の戦域開始時に旗艦HP-1
+    S.pendingEvent=null; S.screen="loadout"; sfx("salvage"); render();
+  },
+  eventGraveDig(){
+    if(S.rand()<0.6){
+      const pool=RELIC_DEFS.filter(r=>!r.rare&&!S.run.relicsSeen.includes(r.id));
+      const r=pool.length?pool[Math.floor(S.rand()*pool.length)]:null;
+      if(r){ S.run.relicsSeen.push(r.id); S.run.cargo.push(r.id); LK.log(S,`墓標の中から『${r.name}』を見つけた(封印済みとしてカーゴへ)`,"good"); }
+      else { S.run.bonusValue+=2; LK.log(S,"値打ち物の破片を回収 — 価値+2","good"); }
+      sfx("salvage");
+    } else {
+      S.run.extraMiner=true;
+      LK.log(S,"墓標が警報を放った…何かがこちらへ向かっている","bad");
+      sfx("bad");
+    }
+    S.pendingEvent=null; S.screen="loadout"; render();
+  },
+  eventGravePray(){
+    S.run.freeChooseRest=(S.run.freeChooseRest||0)+1;
+    LK.log(S,"祈りを捧げた。次の休息では心静かに選べるだろう。","good");
+    S.pendingEvent=null; S.screen="loadout"; render();
+  },
+  toggleLoad(uid){
+    const want=Math.min(CONFIG.HAND,cardsIn(S,"pool").length);
+    UI.loadoutTouched=true;
+    if(UI.loadout.includes(uid)) UI.loadout=UI.loadout.filter(u=>u!==uid);
+    else if(UI.loadout.length<want) UI.loadout.push(uid);
+    render();
+  },
+  autoLoad(){ UI.loadoutTouched=false; render(); },
+  confirmLoad(){
+    for(const k in prevRects) delete prevRects[k];
+    S.run.lastLoadout=[...UI.loadout];
+    startEncounter(S,UI.loadout);
+    S.screen="battle"; resetUI(); UI.loadout=[]; UI.loadoutTouched=false;
+    render();
+  },
+  halfClick(uid,half){
+    UI.msg="";
+    if(S.enc.awaitEnd) return;
+    if(!UI.selA){ UI.selA={uid,half}; }
+    else if(UI.selA.uid===uid){ UI.selA= UI.selA.half===half?null:{uid,half}; }
+    else {
+      const r=selectPair(S,UI.selA.uid,UI.selA.half,uid);
+      if(!r.ok){ UI.msg=r.msg; } else { UI.selA=null; autoAdvance(); }
+    }
+    render();
+  },
+  cancelSel(){ UI.selA=null; UI.msg=""; render(); },
+  unpair(){
+    const enc=S.enc;
+    if(enc.pending && !enc.pending.some(p=>p.done)){ enc.pending=null; resetUI(); sfx("click"); }
+    render();
+  },
+  chipClick(i){
+    if(!S.enc.pending||S.enc.pending[i].done) return;
+    enterAction(i);
+    const spec=actionSpec(S,i);
+    if(spec.kind==="salvage"&&!cardsIn(S,"discard").length) UI.msg="消耗パイルが空だ — 不発にするしかない";
+    render();
+  },
+  backChip(){ UI.actIdx=null; UI.mode="idle"; UI.multi=[]; UI.msg=""; render(); },
+  unitClick(id){
+    UI.msg="";
+    const enc=S.enc;
+    // ユニット先行選択: ペア未選択時に自軍をクリック → 次の操縦の既定にする
+    if(!enc.pending && enc.step==="player"){
+      const u=unitById(enc,id);
+      if(u&&u.side==="player"&&u.alive){
+        UI.lastUnit=id;
+        fx(S,{type:"float",x:u.x,y:u.y,text:"操縦予約",cls:"good"});
+        sfx("pick"); render();
+      }
+      return;
+    }
+    if(UI.mode==="unit"){
+      const u=unitById(enc,id);
+      if(u.side!=="player") return;
+      UI.unitId=id;
+      const spec=actionSpec(S,UI.actIdx);
+      if(["heal","shield","attack_all","pull_all","spawnhaz"].includes(spec.kind)){
+        const r=execAction(S,UI.actIdx,{unitId:id});
+        if(!r.ok){ UI.msg=r.msg+"(不発も選べる)"; UI.mode="target"; }
+        else afterAct();
+        render(); return;
+      }
+      if(spec.kind==="salvage"){ UI.mode="salvage"; render(); return; }
+      UI.mode="target"; render(); return;
+    }
+    if(UI.mode==="target"){
+      const cu=unitById(enc,id);
+      if(cu&&cu.side==="player"){ UI.unitId=id; UI.multi=[]; render(); return; } // 操縦ユニット切替
+      const spec=actionSpec(S,UI.actIdx);
+      if(spec.kind==="attack_multi"){
+        if(!UI.multi.includes(id)) UI.multi.push(id);
+        if(UI.multi.length>=spec.count) H.multiConfirm(); else render();
+        return;
+      }
+      if(spec.kind==="setdrift"){ UI.multi=[id]; render(); return; }
+      const r=execAction(S,UI.actIdx,{unitId:UI.unitId,targetId:id});
+      if(!r.ok){ UI.msg=r.msg; } else afterAct();
+      render();
+    }
+  },
+  cellClick(x,y,dir){
+    UI.msg="";
+    const r=execAction(S,UI.actIdx,{unitId:UI.unitId,cell:{x,y},dir:dir||undefined});
+    if(!r.ok){ UI.msg=r.msg; } else afterAct();
+    render();
+  },
+  dirClick(k){
+    UI.msg="";
+    const spec=actionSpec(S,UI.actIdx);
+    let params={unitId:UI.unitId,dir:k};
+    if(spec.kind==="setdrift"){ if(!UI.multi.length){UI.msg="先に対象を選べ";render();return;} params.targetId=UI.multi[0]; }
+    const r=execAction(S,UI.actIdx,params);
+    if(!r.ok){ UI.msg=r.msg; } else afterAct();
+    render();
+  },
+  multiConfirm(){
+    const r=execAction(S,UI.actIdx,{unitId:UI.unitId,targetIds:UI.multi});
+    if(!r.ok){ UI.msg=r.msg; } else afterAct();
+    render();
+  },
+  salvagePick(uid){
+    const r=execAction(S,UI.actIdx,{unitId:UI.unitId,salvageUid:uid});
+    if(!r.ok){ UI.msg=r.msg; } else afterAct();
+    render();
+  },
+  fizzle(){ fizzleAction(S,UI.actIdx); afterAct(); render(); },
+  undo(){ const r=undoTurn(S); if(!r.ok) UI.msg=r.msg; resetUI(); render(); },
+  endTurn(){ commitTurn(S); resetUI(); render(); },
+  dmgHp(){ resolveDamage(S,"hp"); render(); },
+  dmgBurn(uid){ const r=resolveDamage(S,"burn",uid); if(!r.ok) UI.msg=r.msg; render(); },
+  restRandom(){ UI.restChoosing=false; const r=doRest(S,"random"); if(!r.ok) UI.msg=r.msg; render(); },
+  restChoose(){ UI.restChoosing=true; render(); },
+  restBack(){ UI.restChoosing=false; render(); },
+  restLose(uid){ const r=doRest(S,"choose",uid); if(!r.ok){ UI.msg=r.msg; } else UI.restChoosing=false; render(); },
+  crashPick(uid){ const r=crashSalvagePick(S,uid); if(!r.ok) UI.msg=r.msg; UI.salvageReady=false; render(); },
+  afterClear(){ finishEncounter(S); resetUI(); UI.loadoutTouched=false; render(); },
+  route(r){ chooseRoute(S,r); resetUI(); UI.loadoutTouched=false; render(); },
+  relic(c){ resolveRelic(S,c); render(); },
+  keepAsk(){
+    const cv=cargoValue(S);
+    const el=document.getElementById("lkExtra");
+    const tease= S.run.zone<CONFIG.ZONES && S.run.cargo.length
+      ? `カーゴの${esc(RELIC_DEFS.find(r=>r.id===S.run.cargo[S.run.cargo.length-1]).name)}、次のゾーンならもっと見つかるけど?`
+      : "本当に帰る? 深淵はまだ、何かを隠しているよ。";
+    el.innerHTML=`<div style="text-align:center;margin-top:12px;">
+      <p style="color:var(--amber)">${S.run.zone>=CONFIG.ZONES?"最深部からの生還だ。胸を張れ。":tease}</p>
+      <button class="primary" onclick="H.keepGo()">それでも帰る — 価値${cv}を確定</button></div>`;
+  },
+  keepGo(){ doKeep(S); render(); },
+  leapAsk(){
+    UI.fuelSel=[];
+    H.renderFuel();
+  },
+  renderFuel(){
+    const el=document.getElementById("lkExtra");
+    if(!el) return;
+    const need=fuelCost(S);
+    const cards=aliveCards(S).filter(c=>!UI.fuelSel.includes(c.uid));
+    el.innerHTML=`<div style="margin-top:12px;">
+      <p style="color:var(--amber);text-align:center;">燃料にするカードを選べ(${UI.fuelSel.length}/${need}) — 永遠に失われる。${need>1?"<b>深淵IIの代償: 2枚</b>":""}</p>
+      ${cardPickFaces(cards,"H.fuelPick")}</div>`;
+  },
+  fuelPick(uid){
+    UI.fuelSel.push(uid);
+    if(UI.fuelSel.length>=fuelCost(S)){
+      const r=doLeap(S,UI.fuelSel);
+      UI.fuelSel=[];
+      if(r.ok){
+        resetUI(); sfx("warp");
+        if(!S.run.over && S.rand()<0.35){
+          S.pendingEvent={type: S.rand()<0.5?"wreck":"grave"};
+          S.screen="event";
+        }
+      }
+      render();
+    } else H.renderFuel();
+  },
+  restart(){ startGame(); H.begin(); },
+  toTitle(){ startGame(); },
+  sellRelic(id){
+    if(UI.sold[id]) return;
+    const r=RELIC_DEFS.find(x=>x.id===id);
+    UI.sold[id]="sold"; META.credits+=r.value; saveMeta();
+    UI.sellN=(UI.sellN||0)+1; sfx("salvage", 1+UI.sellN*0.18); // 連続売却でピッチ上昇(コンボ感)
+    render();
+  },
+  installRelic(id){
+    if(UI.sold[id]==="installed"||META.installed.includes(id)) return;
+    UI.sold[id]="installed"; META.installed.push(id); saveMeta(); sfx("good"); render();
+  },
+  dismissHints(){ UI.hintsSeen=true; render(); },
+  hl(i,on){
+    const it=S.enc&&S.enc.intents[i];
+    if(!it) return;
+    const u=unitById(S.enc,it.unitId);
+    const keys=[...it.attackCells.map(c=>c.x+","+c.y), ...(it.chargeCells||[]).map(c=>c.x+","+c.y)];
+    if(it.moveTo) keys.push(it.moveTo.x+","+it.moveTo.y);
+    for(const k of keys){
+      const el=document.querySelector(`[data-xy="${k}"]`);
+      if(el) el.classList.toggle("hl",on);
+    }
+    if(u&&u.alive){
+      const el=document.querySelector(`.unit[data-uid="${u.id}"]`);
+      if(el) el.classList.toggle("hl",on);
+    }
+  },
+  pv(x,y,dir){
+    H.pvOff();
+    const enc=S.enc;
+    if(!enc||!enc.pending||UI.actIdx===null) return;
+    const spec=actionSpec(S,UI.actIdx);
+    const u=unitById(enc,UI.unitId);
+    if(!u) return;
+    const cell=document.querySelector(`[data-xy="${x},${y}"]`);
+    if(!cell) return;
+    const g=document.createElement("span"); g.className="pvghost";
+    g.innerHTML=unitSvg(u); g.firstElementChild&&g.firstElementChild.setAttribute("style","width:44px;height:44px");
+    cell.appendChild(g); pvEls.push(g);
+    if(spec.kind==="move"){
+      const opts=moveOptions(S,u,spec);
+      const o= dir ? opts.find(o=>o.x===x&&o.y===y&&o.dir===dir) : opts.find(o=>o.x===x&&o.y===y);
+      if(o){
+        const d=DIRS[o.dir];
+        const dx=wrap(x+d.x), dy=wrap(y+d.y);
+        const c2=document.querySelector(`[data-xy="${dx},${dy}"]`);
+        if(c2){
+          const occ=unitAt(enc,dx,dy);
+          const g2=document.createElement("span"); g2.className="pvghost2";
+          g2.innerHTML=(occ?"💥":"⬡")+`<i>${d.ch}</i>`;
+          c2.appendChild(g2); pvEls.push(g2);
+        }
+      }
+    } else if(spec.kind==="brake_move"||spec.kind==="warp"){
+      const b=document.createElement("span"); b.className="pvbrake"; b.textContent="滑らない";
+      cell.appendChild(b); pvEls.push(b);
+    }
+  },
+  pvOff(){ for(const el of pvEls){ try{el.remove();}catch(e){} } pvEls=[]; },
+  hlU(uid,on){
+    const i=S.enc?S.enc.intents.findIndex(it=>it.unitId===uid):-1;
+    if(i>=0) H.hl(i,on);
+  },
+};
+
+function afterAct(){
+  if(UI.unitId) UI.lastUnit=UI.unitId;
+  UI.multi=[];
+  autoAdvance();
+}
+
+// 次の未実行アクションへ自動進行+直前ユニットを既定操縦対象に(L-006 クリック削減)
+function autoAdvance(){
+  const enc=S.enc;
+  if(!enc||!enc.pending){ UI.actIdx=null; UI.unitId=null; UI.mode="idle"; return; }
+  const idx=enc.pending.findIndex(p=>!p.done);
+  if(idx<0){ UI.actIdx=null; UI.mode="idle"; return; }
+  enterAction(idx);
+}
+function enterAction(idx){
+  const enc=S.enc;
+  UI.actIdx=idx; UI.multi=[]; UI.msg="";
+  const spec=actionSpec(S,idx);
+  if(["heal","shield","attack_all","pull_all","salvage","spawnhaz"].includes(spec.kind)){
+    // 効果先(誰に効くか)の明示クリックが必要なアクション
+    UI.unitId=null; UI.mode="unit"; return;
+  }
+  let u=unitById(enc,UI.lastUnit||"ship");
+  if(!u||!u.alive||u.side!=="player") u=players(enc)[0];
+  UI.unitId=u?u.id:null;
+  UI.mode=UI.unitId?"target":"unit";
+}
+
+// キーボード: Enter/Space=敵ターンへ確定, Esc=戻る, Ctrl+Z=ターンやり直し(L-014 標準操作の約束事)
+document.addEventListener("keydown",e=>{
+  if(!S||S.screen!=="battle"||!S.enc) return;
+  if((e.key==="Enter"||e.key===" ") && S.enc.awaitEnd){ e.preventDefault(); H.endTurn(); }
+  else if(e.key==="Escape"){ cancelOneLevel(); }
+  else if((e.key==="z"||e.key==="Z")&&(e.ctrlKey||e.metaKey)){ if(LK.canUndo(S)){ e.preventDefault(); H.undo(); } }
+});
+// 右クリック=1段階キャンセル(L-014)
+document.addEventListener("contextmenu",e=>{
+  if(!S||S.screen!=="battle"||!S.enc) return;
+  e.preventDefault();
+  cancelOneLevel();
+});
+function cancelOneLevel(){
+  if(UI.restChoosing){ H.restBack(); return; }
+  if(UI.actIdx!==null){ H.backChip(); return; }
+  if(S.enc.pending && !S.enc.pending.some(p=>p.done)){ H.unpair(); return; }
+  if(UI.selA){ H.cancelSel(); return; }
+}
+
+// ---------- tooltip engine ----------
+(function(){
+  const tt=document.getElementById("tt");
+  let visible=false;
+  function position(e){
+    const pad=14;
+    let x=e.clientX+pad, y=e.clientY+pad;
+    const r=tt.getBoundingClientRect();
+    if(x+r.width>innerWidth-8) x=Math.max(4,e.clientX-r.width-pad);
+    if(y+r.height>innerHeight-8) y=Math.max(4,e.clientY-r.height-pad);
+    tt.style.left=x+"px"; tt.style.top=y+"px";
+  }
+  document.addEventListener("mouseover",e=>{
+    const el=e.target.closest&&e.target.closest("[data-tt]");
+    if(el){ tt.innerHTML=el.dataset.tt; tt.style.display="block"; visible=true; position(e); }
+    else if(visible){ tt.style.display="none"; visible=false; }
+  });
+  document.addEventListener("mousemove",e=>{ if(visible) position(e); });
+})();
+
+// boot
+for(const sid of ["stars1","stars2","zonebg","titlehero","vig"]){ const d=document.createElement("div"); d.id=sid; document.body.prepend(d); }
+// 大判アートの存在確認(無ければ層は透明のまま)
+const ART={};
+function artBg(el, name){
+  if(ART[name]===false){ el.classList.remove("on"); return; }
+  if(ART[name]===true){ el.style.backgroundImage=`url(art/${name}.png)`; el.classList.add("on"); return; }
+  const img=new Image();
+  img.onload=()=>{ ART[name]=true; el.style.backgroundImage=`url(art/${name}.png)`; el.classList.add("on"); };
+  img.onerror=()=>{ ART[name]=false; };
+  img.src=`art/${name}.png`;
+}
+function updateArtLayers(){
+  const hero=document.getElementById("titlehero"), zone=document.getElementById("zonebg");
+  hero.classList.remove("on"); zone.classList.remove("on");
+  if(!S) return;
+  if(S.screen==="title"||S.screen==="shipselect"||S.screen==="hangar"||S.screen==="summary") artBg(hero,"title-hero");
+  else if(S.screen==="battle"||S.screen==="loadout") artBg(zone,"zone"+S.run.zone);
+}
+window.LK=LK; window.H=H; window.render=render;
+window.lkDebug=()=>({S,UI,META});
+loadMeta();
+const urlSeed=new URLSearchParams(location.search).get("seed");
+startGame(urlSeed!==null?Number(urlSeed):undefined);
+</script>
+</body>
+</html>
