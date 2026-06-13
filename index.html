@@ -1606,6 +1606,64 @@ function voyageChronicle(state, marks){
   return lines;
 }
 
+// ---- エージェント記憶インターフェース(汎用・任意のエージェントが利用可) ----
+// 2チャンネル: A=想い出(voyageMemory: 何をどう感じたかの素材→記憶へ) / B=引き継ぎ(carryover: 次ランで確実に読む軽量サマリ)
+// ゲームは状態を持たない: Bはエージェントが永続化し new 時に渡し返す(汎用性のため)
+
+// A) 想い出: ランの全体像+機械が綴った航海+本人が試合中に呟いた声。エージェントはこれを自分の記憶に保存/蒸留する
+function voyageMemory(state, says, wows){
+  const r=state.run, ct=captainType(state), sd=shipDef(r.shipId);
+  return {
+    kind:"voyage-memory", game:"Leap or Keep",
+    setup:{ ship:r.shipId, shipName:sd.name, asc:r.asc, contracts:r.contracts||[] },
+    outcome:{ win:!!r.win, reason:r.reason||null, zone:r.zone, score:runScore(state),
+      physKills:r.physKills||0, cargo:cargoValue(state), bossKilled:!!r.bossKilled,
+      boss: r.bossKilled ? ((ENEMY_DEFS[r.bossType]||{}).name||null) : null },
+    captain:{ id:ct.id, name:ct.name, title:ct.title, jab:ct.jab, praise:ct.praise, weak:ct.weak, subs:ct.subs },
+    chronicle: voyageChronicle(state, wows||[]),   // ★=本人が刻んだ頂点
+    voice: (says||[]).map(s=>s.text),              // 本人の生の感情(--say)
+  };
+}
+// 想い出を「そのまま記憶にできる」散文に。蒸留しないエージェントはこれを保存するだけでよい
+function voyageMemoryProse(mem){
+  const o=mem.outcome, c=mem.captain, L=[];
+  L.push(`# ${mem.game} 航海の記憶`);
+  L.push(`${mem.setup.shipName}${mem.setup.contracts.length?`(契約: ${mem.setup.contracts.join("/")})`:""}で深淵へ出航した。`);
+  L.push(o.win?`ZONE${o.zone}まで潜り、${o.boss?`《${o.boss}》を討って`:""}生きて帰った(SCORE ${o.score}/物理キル${o.physKills})。`
+             :`ZONE${o.zone}で力尽きた(${o.reason})。`);
+  L.push(`船としての私は『${c.name}』— ${c.title}。${c.jab}${c.subs.length?" "+c.subs.join(" "):""}`);
+  if(mem.chronicle.length){ L.push("","## 航海の断片"); mem.chronicle.forEach(l=>L.push(l)); }
+  // 呟きは散文では「出航時」と「帰投時」の括弧だけ(全文は構造化voice[]へ。記憶は要点で持つ)
+  if(mem.voice.length){
+    L.push("","## 出航のとき", `「${mem.voice[0]}」`);
+    if(mem.voice.length>1) L.push("## 航海の終わりに", `「${mem.voice[mem.voice.length-1]}」`);
+    if(mem.voice.length>2) L.push(`(その間に${mem.voice.length-2}の独白 — 全文は voice[] に残してある)`);
+  }
+  return L.join("\n");
+}
+// B) 引き継ぎ: 次ランで確実に読む軽量レコード。noteはエージェントが書く「心残り/抱負」(汎用の自由文)
+function carryoverRecord(state, note){
+  const r=state.run, ct=captainType(state);
+  return { ship:r.shipId, result:r.win?"win":"loss", zone:r.zone, score:runScore(state),
+    captain:ct.name, boss: r.bossKilled ? ((ENEMY_DEFS[r.bossType]||{}).name||null) : null,
+    note: note||null };
+}
+// 過去の引き継ぎ群を、ゲーム開始時に読める数行のダイジェストへ(エージェントの「記憶の想起」)
+function carryoverDigest(records){
+  records=(records||[]).filter(Boolean);
+  if(!records.length) return [];
+  const wins=records.filter(r=>r.result==="win").length;
+  const bestZ=Math.max(1,...records.map(r=>r.zone||1));
+  const bestS=Math.max(0,...records.map(r=>r.score||0));
+  const types={}; records.forEach(r=>{ if(r.captain) types[r.captain]=(types[r.captain]||0)+1; });
+  const L=[`【記憶】これまで${records.length}回潜航(生還${wins})/最高ZONE${bestZ}・最高SCORE${bestS}`];
+  const t=Object.entries(types).map(([k,v])=>`${k}×${v}`).join(" ");
+  if(t) L.push(`これまでの船長像: ${t}`);
+  const lastNote=[...records].reverse().find(r=>r.note);
+  if(lastNote) L.push(`前回の言葉: 「${lastNote.note}」`);
+  return L;
+}
+
 // 敗北しても拾うものはある(アンロックドリップ — 失敗ランを無駄にしない)
 function lossCredits(state){
   return Math.max(0,(state.run.zone-1)*2) + Math.floor(cargoValue(state)/3);
@@ -2029,7 +2087,8 @@ const LK = { CONFIG, CARD_DEFS, RELIC_DEFS, ENEMY_DEFS, ENEMY_AI, ZONE_TABLE, ZO
   unitAt, players, enemies, unitById, tdist, tdelta, wrap, encounterEnemyList, bossOf, log,
   enemyStep, enemyPhaseAll, nextActingEnemy, commitTurn, undoTurn, canUndo, effDamage, driftPhase,
   crashSalvagePick, deployedStatus,
-  SHIP_DEFS, ASC_DEFS, shipDef, fuelCost, runScore, lossCredits, CAPTAIN_TYPES, captainType, voyageChronicle, cardSpec, upSpec, applyUpgrade, ramOptions, targetables, moveBlocked,
+  SHIP_DEFS, ASC_DEFS, shipDef, fuelCost, runScore, lossCredits, CAPTAIN_TYPES, captainType, voyageChronicle,
+  voyageMemory, voyageMemoryProse, carryoverRecord, carryoverDigest, cardSpec, upSpec, applyUpgrade, ramOptions, targetables, moveBlocked,
   applyResupply, applyScrapLoot, crashSalvageRepair };
 if(typeof module!=="undefined") module.exports=LK;
 /* ===== LOGIC-END ===== */

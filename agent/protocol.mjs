@@ -24,6 +24,8 @@ export function newGame(opts = {}) {
     asc: opts.asc || 0,
     contracts: opts.contracts || [],
   });
+  // エージェントの記憶(過去の引き継ぎ群)を持ち込む — 観測の冒頭に想起される
+  if (opts.memory && opts.memory.length) s.run.priorVoyages = opts.memory;
   LK.startEncounter(s, null);
   s.screen = "battle";
   return s;
@@ -300,6 +302,9 @@ export function observe(s) {
     L.push(`(${ct.jab} ${ct.praise})`);
     return L.join("\n");
   }
+  // 記憶の想起: 持ち込んだ過去の航海(引き継ぎ)を最初の戦域の冒頭だけ表示
+  if (run.priorVoyages && run.zone === 1 && run.encIdx === 0 && enc && enc.round === 1)
+    for (const line of LK.carryoverDigest(run.priorVoyages)) L.push(line);
   L.push(`ZONE ${run.zone}/5《${LK.ZONE_NAMES[run.zone - 1]}》第${run.encIdx + 1}戦域 / 旗艦HP${(enc && LK.unitById(enc, "ship")) ? LK.unitById(enc, "ship").hp : run.shipHp ?? "?"} / 残カード${LK.aliveCards(s).length}枚(=寿命) / カーゴ価値${LK.cargoValue(s)}`);
   if (s.screen === "loadout") {
     const pool = LK.cardsIn(s, "pool");

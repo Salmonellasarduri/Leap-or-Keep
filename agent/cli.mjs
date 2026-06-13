@@ -1,9 +1,11 @@
 // エージェント用CLI(ステートレス・リプレイ式): 状態 = シード+選択IDログ(JSONファイル)
 // usage:
-//   node agent/cli.mjs new [--seed 7] [--ship vagrants|bellyroll|astra] [--contracts heavy,swarm] [--asc 0] [--file tmp/run.json]
+//   node agent/cli.mjs new [--seed 7] [--ship vagrants|bellyroll|astra] [--contracts heavy,swarm] [--asc 0] [--memory tmp/inanna-mem.json] [--file tmp/run.json]
 //   node agent/cli.mjs state [--file ...]
-//   node agent/cli.mjs choose <id> [<id2> <id3>…] [--say "一言"] [--file ...]   … 複数手を一括実行可
+//   node agent/cli.mjs choose <id> [<id2> <id3>…] [--say "一言"] [--wow] [--file ...]   … 複数手を一括実行可
 //   node agent/cli.mjs log [--file ...]        … 選択ログ+セリフ+結果(記事用)
+//   node agent/cli.mjs memory [--note "心残り/抱負"] [--file ...]   … 終了後の記憶2ch(想い出+引き継ぎ)を出力
+// 記憶: --memory に過去の引き継ぎ配列(JSON)を渡すと、ゲーム冒頭でそれを想起する(エージェントが永続化して渡し返す)
 // 毎回シードからリプレイするので、ファイルが正なら状態は常に正(決定論)。
 // 高速化: 合法手が1つだけの強制フェイズ(慣性解決/敵ターン等)は自動進行する(⏩表示)。
 // セリフ: --say はその判断への一言コメント(実況素材)。logで時系列に出る。
@@ -37,6 +39,7 @@ if (cmd === "new") {
       ship: opt("ship", "vagrants"),
       asc: Number(opt("asc", 0)),
       contracts: (opt("contracts", "") || "").split(",").filter(Boolean),
+      memory: (() => { const f = opt("memory", null); if (!f) return undefined; try { return JSON.parse(readFileSync(f, "utf8")); } catch { return undefined; } })(),
     },
     ids: [],
   };
@@ -107,7 +110,18 @@ if (cmd === "new") {
   const data = load();
   const s = replay(data.opts, data.ids);
   console.log(LK.voyageChronicle(s, data.wows || []).join("\n"));
+} else if (cmd === "memory") {
+  // 終了後の記憶2チャンネル: A=想い出(エージェントの記憶へ) / B=引き継ぎ(永続化して次ランに渡す)
+  let note = null;
+  for (let i = 1; i < args.length; i++) { if (args[i] === "--note") note = args[++i]; }
+  const data = load();
+  const s = replay(data.opts, data.ids);
+  const mem = LK.voyageMemory(s, data.says || [], data.wows || []);
+  console.log(JSON.stringify({
+    keepsake: { ...mem, prose: LK.voyageMemoryProse(mem) },   // A) 想い出(structured + そのまま保存可能な散文)
+    carryover: LK.carryoverRecord(s, note),                   // B) 引き継ぎ(過去配列に append して次の --memory へ)
+  }, null, 1));
 } else {
-  console.error("usage: node agent/cli.mjs new|state|choose|log [...]");
+  console.error("usage: node agent/cli.mjs new|state|choose|log|chronicle|memory [...]");
   process.exit(1);
 }

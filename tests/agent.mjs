@@ -54,6 +54,25 @@ for (const k of ["pair", "act", "fizzle", "commit", "drift", "enemy_turn", "dama
   ok(baseStars === 0, "no stars without marks");
 }
 
+// 記憶インターフェース(想い出+引き継ぎ2ch): イナンナ用途の汎用機構
+{
+  // 引き継ぎダイジェストが newGame.memory から想起される
+  const mem = [{ ship: "astra", result: "win", zone: 4, score: 510, captain: "狩人型", note: "次は殲滅プロトコルの声を聞く" }];
+  const s = newGame({ seed: 42, ship: "vagrants", memory: mem });
+  const obs = observe(s);
+  ok(obs.includes("【記憶】") && obs.includes("最高ZONE4"), "prior voyages recalled at game start", obs.split("\n")[0]);
+  ok(obs.includes("次は殲滅プロトコル"), "carryover note surfaced");
+  // 記憶が無いランでは想起行が出ない
+  const s2 = newGame({ seed: 42, ship: "vagrants" });
+  ok(!observe(s2).includes("【記憶】"), "no recall line without memory");
+  // voyageMemory / carryoverRecord の形
+  const vm = LK.voyageMemory(s2, [{ at: 0, text: "出航" }], []);
+  ok(vm.kind === "voyage-memory" && vm.captain && Array.isArray(vm.chronicle) && Array.isArray(vm.voice), "voyageMemory shape");
+  ok(typeof LK.voyageMemoryProse(vm) === "string" && LK.voyageMemoryProse(vm).includes("航海の記憶"), "prose rendering");
+  const co = LK.carryoverRecord(s2, "心残り");
+  ok(co.captain && co.note === "心残り" && (co.result === "win" || co.result === "loss"), "carryoverRecord shape");
+}
+
 console.log(`\nagent protocol: ${N} random-legal runs / avg steps ${(totalSteps / Math.max(1, N)).toFixed(0)} / deepest zone ${deepest} / wins ${wins}`);
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

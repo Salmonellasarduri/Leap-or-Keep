@@ -65,6 +65,14 @@ node agent/llm-driver.mjs --model qwen2.5:7b --seed 7 --ship vagrants
 - **--wow**: プレイヤー/エージェントが「今の瞬間が最高」と刻むマーク。chronicleの該当行に★がつき採用優先(ラン1〜4回推奨)
 - **--say**: 判断への一言実況(タイムライン💬)。chronicleが「事実のドラマ」、sayが「人格の声」 — 二層構造
 
+## 記憶連携(想い出＋引き継ぎ)
+
+エージェントがランの記憶を持ち越せる2チャンネル。詳細と連携仕様: **[docs/HANDOFF-agent-memory.md](../docs/HANDOFF-agent-memory.md)**
+
+- **`lok_memory(note?)`** / `cli memory --note "…"` → `{keepsake(想い出), carryover(引き継ぎ)}`
+- **`lok_new_run(memory: carryover[])`** / `cli new --memory <file>` → 過去の航海をゲーム冒頭で「記憶」として想起
+- `keepsake.prose` はそのまま記憶に保存できる散文。`carryover.note` は次ランの自分への伝言
+
 ## 既知の差分(人間版との違い)
 
 - ゾーンイベント(漂流船/墓標)はUI層実装のため発生しない(botシミュレーションと同条件)
