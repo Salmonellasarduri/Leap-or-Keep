@@ -60,7 +60,7 @@ if (cmd === "new") {
   data.wows = data.wows || [];
   const s = replay(data.opts, data.ids);
   if (say) data.says.push({ at: data.ids.length, text: say });
-  if (wow) data.wows.push({ z: s.run.zone, e: s.run.encIdx, r: s.enc ? s.enc.round : 0 }); // 「今の瞬間」を航海記録に刻む
+  if (wow) data.wows.push({ z: s.run.zone, e: s.run.encIdx, r: s.enc ? s.enc.round : 0, text: say || null }); // 「今の瞬間」を航海記録に刻む(sayがあれば★行の本文に)
   const notes = [];
   for (const id of ids) {
     const legal = legalChoices(s);

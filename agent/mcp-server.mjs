@@ -60,7 +60,7 @@ server.tool(
   async ({ ids, say, wow }) => {
     if (!S) return { content: [{ type: "text", text: "ランが無い — lok_new_run から始める" }] };
     if (say) LOG.says.push({ at: LOG.ids.length, text: say });
-    if (wow) (LOG.wows = LOG.wows || []).push({ z: S.run.zone, e: S.run.encIdx, r: S.enc ? S.enc.round : 0 });
+    if (wow) (LOG.wows = LOG.wows || []).push({ z: S.run.zone, e: S.run.encIdx, r: S.enc ? S.enc.round : 0, text: say || null });
     const notes = [];
     for (const id of ids) {
       const legal = legalChoices(S);

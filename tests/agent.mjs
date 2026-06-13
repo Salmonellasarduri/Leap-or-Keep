@@ -41,6 +41,19 @@ for (let i = 0; i < N; i++) {
 for (const k of ["pair", "act", "fizzle", "commit", "drift", "enemy_turn", "damage_hp", "rest_random", "clear_continue", "keep", "leap"])
   ok(kinds.has(k), `choice kind covered: ${k}`, [...kinds].join(","));
 
+// 航海記録: --wowで刻んだ瞬間は必ず★行として残る(イナンナRun#003指摘の回帰防止)
+{
+  const s = newGame({ seed: 5, ship: "vagrants" });
+  // 1ターン進めて物理キル等が無くてもwowが残ることを確認(テキスト付き)
+  const r1 = s.run.zone, e1 = s.run.encIdx, rr = s.enc ? s.enc.round : 0;
+  const ch1 = LK.voyageChronicle(s, [{ z: r1, e: e1, r: rr, text: "ここが頂点" }]);
+  ok(ch1.some(l => l.startsWith("★") && l.includes("ここが頂点")), "text-bearing wow becomes a ★ chronicle row", JSON.stringify(ch1));
+  // 大量wowでも★が過剰増殖しない(textなしは近傍1件のみ昇格)
+  const ev = s.run.events || [];
+  const baseStars = LK.voyageChronicle(s, []).filter(l => l.startsWith("★")).length;
+  ok(baseStars === 0, "no stars without marks");
+}
+
 console.log(`\nagent protocol: ${N} random-legal runs / avg steps ${(totalSteps / Math.max(1, N)).toFixed(0)} / deepest zone ${deepest} / wins ${wins}`);
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

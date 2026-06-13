@@ -1549,22 +1549,41 @@ function chronLine(ev){
     case "clear": return ev.hull<=2?`船体${ev.hull}で戦域を制圧 — 紙一重を、勝ちと呼ぶ`:null;
     case "end": return ev.win?(ev.reason==="returned"?"帰還。母港の灯りが、ちゃんと待っていた":"生還。"):
       (ev.reason==="ship"?"船体崩壊 — 最後の通信は、ノイズに溶けた":"全カード喪失 — 船はもう、漂うだけの棺だ");
-    case "mark": return "(船長はここで、言葉にならない何かを記録した)";
+    case "mark": return ev.text ? `${ev.text}` : "ここで船長は、言葉にならない何かを刻んだ — 後から思えば、それが航海の頂点だった";
   }
   return null;
 }
 // marks: [{z,e,r}] — プレイヤー/エージェントが「今の瞬間」を刻んだ位置(★がつき採用優先)
 function voyageChronicle(state, marks){
   marks=marks||[];
-  const evs=(state.run.events||[]).map((ev,i)=>{
+  const base=(state.run.events||[]).map((ev,i)=>({...ev, _seq:i}));
+  // --wowで刻んだ瞬間=「船長が宣言した頂点」。挿入順(時系列)を保ったまま、必ず航海記録に残す(イナンナRun#003指摘)
+  const promoted=new Set(); // textなしwowは近傍イベント1件だけを★昇格(過剰昇格の防止)
+  const synth=[];
+  marks.forEach((m,k)=>{
+    const beat=ev=>ev.z===m.z&&ev.e===m.e&&Math.abs((ev.r||0)-(m.r||0))<=1;
+    if(m.text){ // テキスト付きwowは独立した★行に(実況がそのまま頂点の記録になる)
+      let anchor=-1; for(const ev of base){ if(ev.z<m.z||(ev.z===m.z&&(ev.e<m.e||(ev.e===m.e&&(ev.r||0)<=(m.r||0))))) anchor=ev._seq; }
+      synth.push({z:m.z,e:m.e,r:m.r||0,t:"mark",text:m.text,_seq:anchor+0.5,_mark:true});
+      return;
+    }
+    let best=null,bd=9; // textなし: 同戦域・最寄り1件を★昇格、無ければ独立行
+    for(const ev of base){ if(beat(ev)&&!promoted.has(ev._seq)){ const d=Math.abs((ev.r||0)-(m.r||0)); if(d<bd){bd=d;best=ev;} } }
+    if(best) promoted.add(best._seq);
+    else { let anchor=-1; for(const ev of base){ if(ev.z<m.z||(ev.z===m.z&&(ev.r||0)<=(m.r||0))) anchor=ev._seq; }
+      synth.push({z:m.z,e:m.e,r:m.r||0,t:"mark",text:null,_seq:anchor+0.5,_mark:true}); }
+  });
+  const all=[...base,...synth].sort((a,b)=>a._seq-b._seq); // 挿入順=時系列を維持
+  const evs=all.map((ev,i)=>{
     let w=CHRON_W[ev.t]??1;
     if(ev.t==="clear"&&ev.hull<=2) w=6;
-    const starred=marks.some(m=>m.z===ev.z&&m.e===ev.e&&Math.abs((m.r||0)-(ev.r||0))<=1);
+    if(ev.t==="mark") w=99;
+    const starred = ev._mark || promoted.has(ev._seq);
     return {...ev, i, w: starred?w+8:w, starred};
   });
-  // 採用: 背骨(leap/end/bosskill)は常時。残りは「同種を取るほど割引」の貪欲選択で多様性を確保 → 時系列へ戻す
-  const spine=evs.filter(e=>["leap","end","bosskill"].includes(e.t));
-  const pool=evs.filter(e=>!["leap","end","bosskill"].includes(e.t));
+  // 採用: 背骨(leap/end/bosskill/★wow)は常時。残りは「同種を取るほど割引」の貪欲選択で多様性を確保 → 時系列へ戻す
+  const spine=evs.filter(e=>["leap","end","bosskill","mark"].includes(e.t)||e.starred);
+  const pool=evs.filter(e=>!(["leap","end","bosskill","mark"].includes(e.t)||e.starred));
   const slots=Math.max(0,14-spine.length);
   const flesh=[], counts={};
   while(flesh.length<slots && pool.length){
