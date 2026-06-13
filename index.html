@@ -566,6 +566,7 @@ function newRun(seed, deckDefIds, opts){
       cards: deck.map((defId,i)=>({uid:"u"+i, defId, loc:"pool", up:false})),
       nextUid: deck.length,
       cargo:[], relicsSeen:[], deployed:[], bonusValue:0,
+      events:[], // 航海記録(クロニクル)用の構造化イベント — LLMなしでドラマを再構成する材料
       fuelBurnt:0, restCount:0, burnCount:0, totalRounds:0,
       over:false, win:false, reason:null,
       log:[],
@@ -577,6 +578,21 @@ function newRun(seed, deckDefIds, opts){
 }
 
 function log(state,msg,cls){ state.run.log.unshift({msg,cls:cls||"",t:state.run.totalRounds}); if(state.run.log.length>120) state.run.log.pop(); }
+
+// 航海記録イベント(機械的なドラマ検出の材料)。z/戦域/ラウンドつきで時系列に積む
+function chron(state,t,d){
+  const r=state.run;
+  if(!r.events) r.events=[];
+  if(r.events.length>=300) return;
+  r.events.push({z:r.zone, e:r.encIdx, r:(state.enc?state.enc.round:0), t, ...(d||{})});
+}
+// 同一ビート内の連発イベント(連続撃破・誘爆連鎖)は1件に統合してnを伸ばす(記録のスパム防止)
+function chronMerge(state,t,n){
+  const run=state.run, rr=(state.enc?state.enc.round:0);
+  const last=[...(run.events||[])].reverse().find(e=>e.t===t&&e.z===run.zone&&e.e===run.encIdx&&e.r===rr);
+  if(last){ last.n=Math.max(last.n||1,n); }
+  else chron(state,t,{n});
+}
 
 // ---- encounter setup ----
 // ボスの正体はランごとに抽選(周回動機: 「今回の主はどいつだ」)。"apex"はテーブル上のプレースホルダ
@@ -742,6 +758,7 @@ function applyWellPull(state){
       if(Math.abs(u.x-w.x)>1 || Math.abs(u.y-w.y)>1) wrapNote(state,u,dirBetween(u,w)); // 縁越え吸引
       u.x=w.x; u.y=w.y; u.drift=null; enc.driftMoves++;
       fx(state,{type:"float",x:u.x,y:u.y,text:"🌀吸引",cls:"warn"});
+      if(u.side==="enemy") chron(state,"wellpull",{name:u.name});
       log(state,`${u.name} が重力渦に引き込まれた`,u.side==="player"?"bad":"good");
     }
   }
@@ -786,17 +803,20 @@ function dealDamage(state, u, dmg, src){
       log(state, `${u.name} 撃破! 宇宙塵に還った。`, "good");
       if((ENEMY_DEFS[u.type]||{}).boss){
         state.run.bossKilled=true;
+        chron(state,"bosskill",{name:u.name,title:ENEMY_DEFS[u.type].title});
         fx(state,{type:"boom",x:u.x,y:u.y,big:true});
         fx(state,{type:"confetti"});
         fx(state,{type:"stamp",x:u.x,y:u.y,big:true,text:`${ENEMY_DEFS[u.type].title}、沈黙。`});
         log(state,"……静寂。文明を終わらせた怒りが、いま眠りについた。","good");
       }
       if(u.side==="enemy") state.run.kills=(state.run.kills||0)+1;
+      if(u.side==="enemy" && src==="太陽フレア") chron(state,"flarekill",{name:u.name});
       state.enc.killStreak=(state.enc.killStreak||0)+1;
       if(state.enc.killStreak===2) fx(state,{type:"stamp",x:u.x,y:u.y,big:true,text:"DOUBLE KILL!"});
-      if(state.enc.killStreak>=3) fx(state,{type:"stamp",x:u.x,y:u.y,big:true,text:"RAMPAGE!!"});
+      if(state.enc.killStreak>=3){ fx(state,{type:"stamp",x:u.x,y:u.y,big:true,text:"RAMPAGE!!"}); chronMerge(state,"rampage",state.enc.killStreak); }
       // 機雷は死ぬとき周囲1マスの全ユニットを巻き込む(連鎖あり)
       if(u.type==="mine"){
+        if(src==="機雷の爆発"||src==="自爆") chronMerge(state,"chain",1); // 誘爆の連鎖(花火大会)— 同ビートは1件に統合
         log(state, "機雷が誘爆! 周囲を薙ぎ払う", "bad");
         fx(state,{type:"boom",x:u.x,y:u.y,big:true});
         for(const c of neighborCells(u.x,u.y)){
@@ -830,6 +850,7 @@ function dealDamage(state, u, dmg, src){
       if(PHYS_SRCS.includes(src)&&u.side==="enemy"){
         state.enc.crashSalvage=(state.enc.crashSalvage||0)+1;
         state.run.physKills=(state.run.physKills||0)+1;
+        chron(state,"physkill",{name:u.name,src});
         fx(state,{type:"stamp",x:u.x,y:u.y,big:true,text:state.run.physKills>=3?`物理キル ×${state.run.physKills}!!`:"物理キル!"});
         log(state, `物理キル! ${u.name}の残骸から部品をサルベージできる`, "good");
       }
@@ -852,9 +873,11 @@ function resolveDamage(state, mode, burnUid){
     const c=cardByUid(state,burnUid);
     if(!c || (c.loc!=="hand"&&c.loc!=="discard")) return {ok:false,msg:"そのカードは燃やせない"};
     c.loc="lost"; state.run.burnCount++;
+    chron(state,"burnsave",{card:defOf(c).name,dmg:eff});
     log(state, `『${defOf(c).name}』を燃やして${q.src}(${eff}ダメージ)を無効化! カードは永遠に失われた…`, "warn");
   } else {
     u.hp-=eff;
+    if(u.id==="ship" && u.hp===1) chron(state,"neardeath",{src:q.src});
     log(state, `${u.name} が${q.src}で${eff}ダメージ (残HP${Math.max(0,u.hp)})`, "bad");
     if(u.hp<=0){
       u.alive=false;
@@ -869,6 +892,7 @@ function resolveDamage(state, mode, burnUid){
 
 function runOver(state,win,reason){
   const run=state.run;
+  chron(state,"end",{win,reason,hull:state.enc?(unitById(state.enc,"ship")||{}).hp:run.shipHp});
   run.over=true; run.win=win; run.reason=reason;
   state.screen="summary";
   if(win) log(state,"帰還ジャンプ完了。母港の灯りが見える。","good");
@@ -1157,7 +1181,7 @@ function execIntent(state, it){
       // 同士討ち解禁: 予告マスにいる者は敵味方問わず喰らう(誘導が戦術になる)
       if(it.fire){ if(v.id!==u.id) dealDamage(state,v,it.dmg,u.name+"の主砲"); }
       else if(v.id!==u.id){
-        if(v.side!=="player") log(state,`${u.name}の攻撃が${v.name}に当たった! 同士討ちだ`,"good");
+        if(v.side!=="player"){ log(state,`${u.name}の攻撃が${v.name}に当たった! 同士討ちだ`,"good"); chron(state,"friendly",{by:u.name,hit:v.name}); }
         dealDamage(state,v,it.dmg,u.name+"の攻撃");
       }
     }
@@ -1315,6 +1339,7 @@ function doRest(state, mode, loseUid){
     log(state, `成り行きの休息 — 『${defOf(c).name}』が宇宙に流れていった。`, "warn");
   }
   c.loc="lost"; state.run.restCount++;
+  chron(state,"rest",{card:defOf(c).name,mode});
   if(cardsIn(state,"hand").length<2){ runOver(state,false,"exhausted"); return {ok:true}; }
   enc.phase="enemy"; enc.step="enemy"; // 休息はターンを消費する
   pump(state);
@@ -1497,6 +1522,69 @@ function captainType(state){
   else if((r.burnCount||0)>=3) jab=`カードを${r.burnCount}枚燃やしてでも生き残った。正しい。`;
   else jab=`ZONE${r.zone}まで${r.totalRounds}ラウンド — その足取りに性格が出てる。`;
   return {id, name:t.name, title:t.title, praise:t.praise, weak:t.weak, rarity:t.rarity, axes:{F,R,C}, subs, jab};
+}
+
+// ---- 航海記録(クロニクル): LLMなしでランのドラマを再構成する ----
+// 設計(イナンナRun#002の知見): 機械検出(イベント重み)+船長マーク(wow)の併用。文はテンプレ+決定論的バリエーション
+const CHRON_W={bosskill:12, rampage:8, neardeath:7, physkill:6, chain:6, friendly:5, flarekill:4, burnsave:4, wellpull:3, relic:2, leap:2, clear:1, rest:1, end:99};
+function chronLine(ev){
+  const pick=arr=>arr[(ev.z*7+ev.r+ev.i)%arr.length];
+  switch(ev.t){
+    case "physkill":{
+      const how={"衝突":"滑ってきた軌道ごと","激突":"叩きつけられて","機雷の爆発":"機雷の花火に呑まれて","自爆":"爆風に攫われて"}[ev.src]||"物理に屈して";
+      return pick([`${ev.name}、${how}砕けた — 引き金は引いていない`,`${ev.name}が${how}宇宙塵になった。これがこの宇宙の正しい錬金術`]);
+    }
+    case "chain": return pick(["誘爆が連鎖して、盤面が一瞬だけ花火大会になった","爆発が爆発を呼んだ。誰も止めなかったし、止める気もなかった"]);
+    case "double": return null;
+    case "rampage": return ev.n>=5?`${ev.n}連続撃破 — もはや誰も数えていなかった`:`${ev.n}連続撃破 — 静寂が戻るまで、誰も口を開かなかった`;
+    case "neardeath": return pick(["船体、残り1。警報の中で、それでも舵は離さなかった",`${ev.src||"一撃"}が装甲を裂いた。残りHP1 — ここからが船長の仕事`]);
+    case "burnsave": return `『${ev.card}』を炎に焼べて${ev.dmg}ダメージを打ち消した — 寿命で命を買い戻す取引`;
+    case "friendly": return `${ev.by}の一撃が${ev.hit}に吸い込まれた。同士討ちは、誘い込んだ者の戦果だ`;
+    case "flarekill": return `太陽フレアが${ev.name}を焼き払った。退避しなかったのは敵のほうだ`;
+    case "wellpull": return `${ev.name}が重力渦に呑まれて、描いていた未来ごと狂った`;
+    case "bosskill": return `《${ev.title}》${ev.name}、沈黙。深淵が一拍だけ、静かになった`;
+    case "relic": return ev.choice==="deploy"?`『${ev.name}』を展開 — 眠っていた力を、いま叩き起こした`:`『${ev.name}』をカーゴに封印 — 家まで持って帰る、という約束`;
+    case "leap": return `『${ev.burned}』を燃料に、ZONE${ev.to}へ跳んだ(残カード${ev.cardsLeft}枚=寿命)`;
+    case "rest": return ev.mode==="choose"?`船体を軋ませ、自らの手で『${ev.card}』を手放した`:`成り行きの休息 — 『${ev.card}』が静かに宇宙へ流れていった`;
+    case "clear": return ev.hull<=2?`船体${ev.hull}で戦域を制圧 — 紙一重を、勝ちと呼ぶ`:null;
+    case "end": return ev.win?(ev.reason==="returned"?"帰還。母港の灯りが、ちゃんと待っていた":"生還。"):
+      (ev.reason==="ship"?"船体崩壊 — 最後の通信は、ノイズに溶けた":"全カード喪失 — 船はもう、漂うだけの棺だ");
+    case "mark": return "(船長はここで、言葉にならない何かを記録した)";
+  }
+  return null;
+}
+// marks: [{z,e,r}] — プレイヤー/エージェントが「今の瞬間」を刻んだ位置(★がつき採用優先)
+function voyageChronicle(state, marks){
+  marks=marks||[];
+  const evs=(state.run.events||[]).map((ev,i)=>{
+    let w=CHRON_W[ev.t]??1;
+    if(ev.t==="clear"&&ev.hull<=2) w=6;
+    const starred=marks.some(m=>m.z===ev.z&&m.e===ev.e&&Math.abs((m.r||0)-(ev.r||0))<=1);
+    return {...ev, i, w: starred?w+8:w, starred};
+  });
+  // 採用: 背骨(leap/end/bosskill)は常時。残りは「同種を取るほど割引」の貪欲選択で多様性を確保 → 時系列へ戻す
+  const spine=evs.filter(e=>["leap","end","bosskill"].includes(e.t));
+  const pool=evs.filter(e=>!["leap","end","bosskill"].includes(e.t));
+  const slots=Math.max(0,14-spine.length);
+  const flesh=[], counts={};
+  while(flesh.length<slots && pool.length){
+    let best=-1, bw=-Infinity;
+    pool.forEach((ev,j)=>{ const ew=ev.w-2.2*(counts[ev.t]||0); if(ew>bw){bw=ew;best=j;} });
+    if(best<0||bw<=0) break;
+    const ev=pool.splice(best,1)[0];
+    counts[ev.t]=(counts[ev.t]||0)+1;
+    flesh.push(ev);
+  }
+  const chosen=[...spine,...flesh].sort((a,b)=>a.i-b.i);
+  const lines=[];
+  let lastZ=0;
+  for(const ev of chosen){
+    const line=chronLine(ev);
+    if(!line) continue;
+    if(ev.z!==lastZ){ lines.push(`— ZONE ${ev.z}《${ZONE_NAMES[ev.z-1]}》—`); lastZ=ev.z; }
+    lines.push(`${ev.starred?"★":"・"}${line}`);
+  }
+  return lines;
 }
 
 // 敗北しても拾うものはある(アンロックドリップ — 失敗ランを無駄にしない)
@@ -1815,6 +1903,7 @@ function finishEncounter(state){
   const run=state.run;
   for(const c of state.run.cards) if(["hand","discard","reserve"].includes(c.loc)) c.loc="pool";
   const ship=unitById(state.enc,"ship"), drone=unitById(state.enc,"drone");
+  chron(state,"clear",{rounds:state.enc.round, hull:ship?ship.hp:0});
   run.shipHp = ship?ship.hp:run.shipHp;
   run.droneHp = (drone&&drone.alive)?drone.hp:0;
   state.enc=null; state._snap=null;
@@ -1851,11 +1940,13 @@ function resolveRelic(state, choice){
     state.run.relicsSeen.push(r.id);
     if(choice==="seal"){
       state.run.cargo.push(r.id);
+      chron(state,"relic",{name:r.name,choice:"seal"});
       log(state,`『${r.name}』をカーゴに封印した。家まで持って帰るんだ。`,"good");
     } else {
       const uid="u"+(state.run.nextUid++);
       state.run.cards.push({uid, defId:r.card, loc:"pool", relicId:r.id});
       state.run.deployed.push(r.id);
+      chron(state,"relic",{name:r.name,choice:"deploy"});
       log(state,`『${r.name}』を展開! 『${CARD_DEFS[r.card].name}』がデッキに加わった。売却価値は放棄した — カードを失えば、遺物ごと永遠に消える。`,"warn");
     }
   }
@@ -1873,6 +1964,7 @@ function doLeap(state, fuelUids){
   if(cs.some(c=>!c||c.loc==="lost")) return {ok:false,msg:"そのカードは使えない"};
   for(const c of cs){ c.loc="lost"; state.run.fuelBurnt++; }
   state.run.zone++; state.run.encIdx=0; state.run.route=null;
+  chron(state,"leap",{to:state.run.zone, burned:cs.map(c=>defOf(c).name).join("/"), cardsLeft:aliveCards(state).length});
   log(state,`『${cs.map(c=>defOf(c).name).join("』『")}』を燃料に変換 — ジャンプ! ${ZONE_NAMES[state.run.zone-1]}へ。`,"warn");
   if(aliveCards(state).length<2){ runOver(state,false,"exhausted"); return {ok:true}; }
   state.screen="loadout";
@@ -1918,7 +2010,7 @@ const LK = { CONFIG, CARD_DEFS, RELIC_DEFS, ENEMY_DEFS, ENEMY_AI, ZONE_TABLE, ZO
   unitAt, players, enemies, unitById, tdist, tdelta, wrap, encounterEnemyList, bossOf, log,
   enemyStep, enemyPhaseAll, nextActingEnemy, commitTurn, undoTurn, canUndo, effDamage, driftPhase,
   crashSalvagePick, deployedStatus,
-  SHIP_DEFS, ASC_DEFS, shipDef, fuelCost, runScore, lossCredits, CAPTAIN_TYPES, captainType, cardSpec, upSpec, applyUpgrade, ramOptions, targetables, moveBlocked,
+  SHIP_DEFS, ASC_DEFS, shipDef, fuelCost, runScore, lossCredits, CAPTAIN_TYPES, captainType, voyageChronicle, cardSpec, upSpec, applyUpgrade, ramOptions, targetables, moveBlocked,
   applyResupply, applyScrapLoot, crashSalvageRepair };
 if(typeof module!=="undefined") module.exports=LK;
 /* ===== LOGIC-END ===== */
@@ -3290,7 +3382,14 @@ function renderSummary(app){
         <button class="primary cue" onclick="H.shareX()" data-tt="${attrEsc("Xの投稿画面が開く(診断結果+スコア+ゲームURL入り)")}">𝕏 結果をポスト</button>
         <button onclick="H.saveCard()" data-tt="${attrEsc("1200×675の診断カード画像をダウンロード — 投稿に添付できる")}">🖼 カード画像を保存</button>
       </div>
-    </div>`}
+    </div>
+    ${(()=>{const ch=LK.voyageChronicle(S); if(!ch.length) return "";
+      return `<div class="panel" style="margin-top:12px;">
+        <h3>📜 航海記録</h3>
+        <div style="line-height:1.9; font-size:.86rem;">${ch.map(l=>l.startsWith("—")
+          ?`<div style="color:var(--amber); font-weight:800; margin-top:4px;">${esc(l)}</div>`
+          :`<div class="${l.startsWith("★")?"":"muted"}">${esc(l)}</div>`).join("")}</div>
+      </div>`;})()}`}
     ${run.win?`
     <div class="panel" style="margin-top:12px;">
       <h3>精算 — 所持クレジット: <b style="color:var(--gold)">₢${META.credits}</b>${run.bonusValue?` (回収ボーナス+₢${run.bonusValue}込み)`:""}${run.contractPay?` <span style="color:var(--amber)">(危険手当+₢${run.contractPay})</span>`:""}</h3>

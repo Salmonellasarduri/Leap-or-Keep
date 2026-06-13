@@ -88,6 +88,19 @@ const SCENARIOS = {
     S.run.shipHp=5;
     for(const e of LK.enemies(S.enc)) e.alive=false;
     LK.pump(S); H.afterClear(); render();`,
+  // 航海記録パネル(物理キル→帰還でイベントが記録される)
+  chronicle: { delay: 600, script: `
+    H.begin(); H.pickShip("vagrants"); H.confirmLoad(); H.dismissHints();
+    const S=lkDebug().S;
+    S.enc.units=S.enc.units.filter(u=>u.side==="player"||u.side==="enemy");
+    const e=LK.enemies(S.enc)[0];
+    S.enc.units.push({id:"hm",side:"hazard",type:"mine",name:"係留機雷",icon:"☄️",x:2,y:2,hp:1,maxHp:1,dmg:2,drift:null,shield:0,alive:true});
+    e.x=1; e.y=2; e.hp=1; e.drift="right";
+    for(const p of LK.players(S.enc)) p.drift=null;
+    S.enc.step="drift"; S.enc.phase=null;
+    LK.driftPhase(S);
+    S.run.cargo=["starmap"]; S.run.relicsSeen=["starmap"];
+    LK.doKeep(S); render(); window.scrollTo(0,400);` },
   // 船長診断カード(なばて公開ループの主役)
   shindan: `
     H.begin(); H.pickShip("bellyroll"); H.confirmLoad(); H.dismissHints();

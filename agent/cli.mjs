@@ -46,18 +46,21 @@ if (cmd === "new") {
   const data = load();
   show(replay(data.opts, data.ids));
 } else if (cmd === "choose") {
-  let say = null;
+  let say = null, wow = false;
   const ids = [];
   for (let i = 1; i < args.length; i++) {
     if (args[i] === "--say") { say = args[++i]; continue; }
+    if (args[i] === "--wow") { wow = true; continue; }
     if (args[i] === "--file") { ++i; continue; }
     if (!args[i].startsWith("--")) ids.push(args[i]);
   }
-  if (!ids.length) { console.error("usage: choose <id> [<id2>…] [--say \"一言\"]"); process.exit(1); }
+  if (!ids.length) { console.error("usage: choose <id> [<id2>…] [--say \"一言\"] [--wow]"); process.exit(1); }
   const data = load();
   data.says = data.says || [];
+  data.wows = data.wows || [];
   const s = replay(data.opts, data.ids);
   if (say) data.says.push({ at: data.ids.length, text: say });
+  if (wow) data.wows.push({ z: s.run.zone, e: s.run.encIdx, r: s.enc ? s.enc.round : 0 }); // 「今の瞬間」を航海記録に刻む
   const notes = [];
   for (const id of ids) {
     const legal = legalChoices(s);
@@ -95,9 +98,15 @@ if (cmd === "new") {
     over: s.run.over, win: s.run.win, reason: s.run.reason, zone: s.run.zone,
     score: s.run.over ? LK.runScore(s) : null,
     captain: s.run.over ? LK.captainType(s) : null,
+    chronicle: LK.voyageChronicle(s, data.wows || []),
     timeline,
     gameLog: s.run.log.slice(0, 30).map(l => l.msg),
   }, null, 1));
+} else if (cmd === "chronicle") {
+  // LLMなしで生成される航海記録(★=船長がwowで刻んだ瞬間)
+  const data = load();
+  const s = replay(data.opts, data.ids);
+  console.log(LK.voyageChronicle(s, data.wows || []).join("\n"));
 } else {
   console.error("usage: node agent/cli.mjs new|state|choose|log [...]");
   process.exit(1);
