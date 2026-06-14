@@ -4,7 +4,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { newGame, legalChoices, applyChoice, observe, autoForward, LK } from "./protocol.mjs";
+import { newGame, legalChoices, applyChoice, observe, autoForward, LK, DEFAULT_AGENT_UNDO_LIMIT } from "./protocol.mjs";
 
 let S = null;
 let LOG = { opts: null, ids: [], says: [] };
@@ -24,7 +24,7 @@ function view(note) {
   return lines.join("\n");
 }
 
-const server = new McpServer({ name: "leap-or-keep", version: "0.9.0" });
+const server = new McpServer({ name: "leap-or-keep", version: "0.9.1" });
 
 server.tool(
   "lok_new_run",
@@ -35,6 +35,7 @@ server.tool(
     asc: z.number().int().min(0).max(3).optional().describe("アセンション難度0-3"),
     contracts: z.array(z.enum(["heavy", "swarm", "throttle", "norepair", "minefield", "fragile"])).optional()
       .describe("航行契約(リスク自選 — 盛るほどスコア倍率と称号)"),
+    undoLimit: z.number().int().min(0).optional().describe(`AI向けundo回数。ボス区間ごとの上限(省略=${DEFAULT_AGENT_UNDO_LIMIT})`),
     memory: z.array(z.object({
       ship: z.string().optional(), result: z.string().optional(), zone: z.number().optional(),
       score: z.number().optional(), captain: z.string().optional(), boss: z.string().nullable().optional(),
@@ -42,7 +43,7 @@ server.tool(
     })).optional().describe("過去の航海の引き継ぎ配列(lok_memoryのcarryoverを蓄積したもの)。冒頭で『記憶』として想起される"),
   },
   async (a) => {
-    const opts = { seed: a.seed ?? Math.floor(Math.random() * 1e9), ship: a.ship || "vagrants", asc: a.asc || 0, contracts: a.contracts || [], memory: a.memory || undefined };
+    const opts = { seed: a.seed ?? Math.floor(Math.random() * 1e9), ship: a.ship || "vagrants", asc: a.asc || 0, contracts: a.contracts || [], agentUndoLimit: a.undoLimit ?? DEFAULT_AGENT_UNDO_LIMIT, memory: a.memory || undefined };
     S = newGame(opts);
     LOG = { opts, ids: [], says: [] };
     return { content: [{ type: "text", text: view(`# 新規ラン seed=${opts.seed} ship=${opts.ship}`) }] };

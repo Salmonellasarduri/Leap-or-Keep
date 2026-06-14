@@ -1,6 +1,6 @@
 // エージェント用CLI(ステートレス・リプレイ式): 状態 = シード+選択IDログ(JSONファイル)
 // usage:
-//   node agent/cli.mjs new [--seed 7] [--ship vagrants|bellyroll|astra] [--contracts heavy,swarm] [--asc 0] [--memory tmp/inanna-mem.json] [--file tmp/run.json]
+//   node agent/cli.mjs new [--seed 7] [--ship vagrants|bellyroll|astra] [--contracts heavy,swarm] [--asc 0] [--memory tmp/inanna-mem.json] [--undo-limit 2|unlimited] [--file tmp/run.json]
 //   node agent/cli.mjs state [--file ...]
 //   node agent/cli.mjs choose <id> [<id2> <id3>…] [--say "一言"] [--wow] [--file ...]   … 複数手を一括実行可
 //   node agent/cli.mjs log [--file ...]        … 選択ログ+セリフ+結果(記事用)
@@ -11,12 +11,18 @@
 // セリフ: --say はその判断への一言コメント(実況素材)。logで時系列に出る。
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { newGame, replay, legalChoices, applyChoice, observe, autoForward, LK } from "./protocol.mjs";
+import { newGame, replay, legalChoices, applyChoice, observe, autoForward, LK, DEFAULT_AGENT_UNDO_LIMIT } from "./protocol.mjs";
 
 const args = process.argv.slice(2);
 const cmd = args[0];
 function opt(name, dflt) { const i = args.indexOf("--" + name); return i >= 0 ? args[i + 1] : dflt; }
 const file = opt("file", "tmp/agent-run.json");
+function undoLimitOpt() {
+  const raw = opt("undo-limit", String(DEFAULT_AGENT_UNDO_LIMIT));
+  if (/^(unlimited|none)$/i.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : DEFAULT_AGENT_UNDO_LIMIT;
+}
 
 function load() { return JSON.parse(readFileSync(file, "utf8")); }
 function save(data) { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, JSON.stringify(data)); }
@@ -40,11 +46,12 @@ if (cmd === "new") {
       asc: Number(opt("asc", 0)),
       contracts: (opt("contracts", "") || "").split(",").filter(Boolean),
       memory: (() => { const f = opt("memory", null); if (!f) return undefined; try { return JSON.parse(readFileSync(f, "utf8")); } catch { return undefined; } })(),
+      agentUndoLimit: undoLimitOpt(),
     },
     ids: [],
   };
   save(data);
-  show(newGame(data.opts), `# 新規ラン (seed=${data.opts.seed}, ship=${data.opts.ship}${data.opts.contracts.length ? ", 契約=" + data.opts.contracts.join(",") : ""}) → ${file}`);
+  show(newGame(data.opts), `# 新規ラン (seed=${data.opts.seed}, ship=${data.opts.ship}${data.opts.contracts.length ? ", 契約=" + data.opts.contracts.join(",") : ""}, undo=${data.opts.agentUndoLimit === null ? "unlimited" : data.opts.agentUndoLimit}) → ${file}`);
 } else if (cmd === "state") {
   const data = load();
   show(replay(data.opts, data.ids));

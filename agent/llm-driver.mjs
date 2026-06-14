@@ -1,9 +1,9 @@
 // 汎用LLMドライバ: OpenAI互換API(ollama等)のモデルにLeap or Keepをプレイさせる
 // 「安価なエージェントAIでも遊べるか」の検証用。会話履歴なし(毎手フル観測のステートレス)で小型モデルに優しい
-// usage: node agent/llm-driver.mjs --model qwen2.5:7b [--endpoint http://localhost:11434/v1] [--seed 7] [--ship vagrants] [--maxturns 150] [--file tmp/llm-run.json]
+// usage: node agent/llm-driver.mjs --model qwen2.5:7b [--endpoint http://localhost:11434/v1] [--seed 7] [--ship vagrants] [--maxturns 150] [--undo-limit 2|unlimited] [--file tmp/llm-run.json]
 import { writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { newGame, legalChoices, applyChoice, observe, autoForward, LK } from "./protocol.mjs";
+import { newGame, legalChoices, applyChoice, observe, autoForward, LK, DEFAULT_AGENT_UNDO_LIMIT } from "./protocol.mjs";
 
 const args = process.argv.slice(2);
 function opt(name, dflt) { const i = args.indexOf("--" + name); return i >= 0 ? args[i + 1] : dflt; }
@@ -13,6 +13,13 @@ const SEED = Number(opt("seed", 7));
 const SHIP = opt("ship", "vagrants");
 const MAXTURNS = Number(opt("maxturns", 150));
 const FILE = opt("file", `tmp/llm-run-${MODEL.replace(/[^a-z0-9.]/gi, "_")}.json`);
+function undoLimitOpt() {
+  const raw = opt("undo-limit", String(DEFAULT_AGENT_UNDO_LIMIT));
+  if (/^(unlimited|none)$/i.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : DEFAULT_AGENT_UNDO_LIMIT;
+}
+const AGENT_UNDO_LIMIT = undoLimitOpt();
 
 const SYSTEM = `あなたは宇宙ローグライク「Leap or Keep」の船長AI。盤面と合法手リスト(CHOICES)を見て、最善の手をひとつ選ぶ。
 
@@ -39,7 +46,7 @@ async function ask(obs, choices, retryNote) {
 }
 
 const t0 = Date.now();
-const s = newGame({ seed: SEED, ship: SHIP });
+const s = newGame({ seed: SEED, ship: SHIP, agentUndoLimit: AGENT_UNDO_LIMIT });
 const ids = [];
 let invalid = 0, fallback = 0, turns = 0;
 mkdirSync(path.dirname(FILE), { recursive: true });
@@ -77,5 +84,5 @@ const result = {
   captain: s.run.over ? (({ name, title }) => ({ name, title }))(LK.captainType(s)) : null,
   chronicle: LK.voyageChronicle(s, []),
 };
-writeFileSync(FILE, JSON.stringify({ opts: { seed: SEED, ship: SHIP }, ids, result }, null, 1));
+writeFileSync(FILE, JSON.stringify({ opts: { seed: SEED, ship: SHIP, agentUndoLimit: AGENT_UNDO_LIMIT }, ids, result }, null, 1));
 console.log(JSON.stringify(result, null, 1));

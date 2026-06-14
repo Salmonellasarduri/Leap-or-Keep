@@ -373,7 +373,7 @@ const CONFIG = {
   DRONE_HP: 4,
   HAND: 6,
   DECK_CAP: 12,
-  ZONES: 5,
+  ZONES: 9,
   COLLISION_DMG: 1,
 };
 
@@ -508,14 +508,18 @@ const ENEMY_DEFS = {
 // [zone-1] = {e1, safe, danger, hz:[debris,mine], well:重力渦確率, flare:太陽フレア}
 // 敵タイプ=攻略法の語彙(アークナイツ式): 各ゾーンで「いつもの動き」をひとつずつ崩す
 const ZONE_TABLE = [
-  {e1:["miner","miner"],               safe:["miner","miner"],             danger:["miner","miner","bomber"],     hz:[1,0]},
-  {e1:["miner","warden"],              safe:["pirate","bomber","miner"],   danger:["warden","pirate","mender"],   hz:[1,1]},
-  {e1:["pirate","jelly","splitter"],   safe:["jelly","splitter"],          danger:["blinker","pirate","hunter"],  hz:[2,1], well:.5},
-  {e1:["hunter","warden","mender"],    safe:["jelly","blinker","bomber"],  danger:["sentinel","splitter","mender"], hz:[1,2], well:.5, flare:true},
-  // ゾーン5第2戦域は必ずボス(中心墓所の主)
-  {e1:["sentinel","blinker","splitter"], safe:["apex","bomber"],           danger:["apex","warden","mender"],     hz:[1,2], well:.35},
+  {e1:["miner","miner"],                 safe:["miner","miner"],                 danger:["miner","miner","bomber"],       hz:[1,0]},
+  {e1:["miner","warden"],                safe:["pirate","bomber","miner"],       danger:["warden","pirate","mender"],     hz:[1,1]},
+  // 各章の3エリア目・第2戦域は必ずボス。帰還判断もこの後だけ発生する。
+  {e1:["pirate","jelly","splitter"],     safe:["apex"],                          danger:["apex","miner"],                hz:[1,1], well:.4},
+  {e1:["hunter","warden","mender"],      safe:["jelly","blinker","bomber"],      danger:["sentinel","splitter","mender"], hz:[1,2], well:.5, flare:true},
+  {e1:["sentinel","blinker","splitter"], safe:["warden","bomber","mender"],      danger:["sentinel","blinker","bomber"],  hz:[1,2], well:.35},
+  {e1:["hunter","sentinel","mender"],    safe:["apex","warden","bomber"],        danger:["apex","splitter","mender"],     hz:[2,2], well:.45, flare:true},
+  {e1:["blinker","bomber","warden"],     safe:["hunter","jelly","mender"],       danger:["sentinel","blinker","splitter"], hz:[2,2], well:.5, flare:true},
+  {e1:["sentinel","splitter","mender"],  safe:["warden","blinker","bomber"],     danger:["hunter","sentinel","mender"],   hz:[1,3], well:.5, flare:true},
+  {e1:["sentinel","blinker","splitter"], safe:["apex","sentinel","mender"],      danger:["apex","warden","bomber","mender"], hz:[2,3], well:.6, flare:true},
 ];
-const ZONE_NAMES = ["残骸ベルト","海賊の墓場","囁きの星雲","沈黙の前哨","中心墓所"];
+const ZONE_NAMES = ["残骸ベルト","海賊の墓場","外縁墓標","沈黙の前哨","歪んだ回廊","黒灯台","虚無潮流","終端庭園","中心墓所"];
 
 // 開幕でプレイヤー(x=0列)のラップ1歩先(x=4の同行)を塞がない配置(デバッグ報告: 「ループ側に動けない」体感の原因)
 const ENEMY_SPAWNS = [[3,2],[4,0],[4,4],[2,2],[4,2],[3,0],[3,4],[2,0]];
@@ -545,6 +549,10 @@ function cardsIn(state,loc){ return state.run.cards.filter(c=>c.loc===loc); }
 function aliveCards(state){ return state.run.cards.filter(c=>c.loc!=="lost"); }
 function cardByUid(state,uid){ return state.run.cards.find(c=>c.uid===uid); }
 function defOf(c){ return CARD_DEFS[c.defId]; }
+function bossChapterForZone(zone){ return Math.max(1, Math.ceil(zone/3)); }
+function isBossZone(zone){ return zone>0 && zone%3===0; }
+function rewardMultiplier(run){ return Math.pow(2, Math.max(0, run.leapStakes||0)); }
+function nextRewardMultiplier(run){ return Math.pow(2, Math.max(0, (run.leapStakes||0)+1)); }
 
 // ---- run setup ----
 function newRun(seed, deckDefIds, opts){
@@ -566,6 +574,7 @@ function newRun(seed, deckDefIds, opts){
       cards: deck.map((defId,i)=>({uid:"u"+i, defId, loc:"pool", up:false})),
       nextUid: deck.length,
       cargo:[], relicsSeen:[], deployed:[], bonusValue:0,
+      bossTypes:{}, bossKills:0, leapStakes:0,
       events:[], // 航海記録(クロニクル)用の構造化イベント — LLMなしでドラマを再構成する材料
       fuelBurnt:0, restCount:0, burnCount:0, totalRounds:0,
       over:false, win:false, reason:null,
@@ -595,18 +604,21 @@ function chronMerge(state,t,n){
 }
 
 // ---- encounter setup ----
-// ボスの正体はランごとに抽選(周回動機: 「今回の主はどいつだ」)。"apex"はテーブル上のプレースホルダ
-function bossOf(state){
-  if(!state.run.bossType){
+// ボスの正体は章ごとに抽選(周回動機: 「次の墓標の主はどいつだ」)。"apex"はテーブル上のプレースホルダ
+function bossOf(state, chapter){
+  const ch=chapter||bossChapterForZone(state.run.zone);
+  state.run.bossTypes=state.run.bossTypes||{};
+  if(!state.run.bossTypes[ch]){
     const pool=["apex","juggernaut","broodmother"];
-    state.run.bossType=pool[Math.floor(state.rand()*pool.length)];
+    state.run.bossTypes[ch]=pool[Math.floor(state.rand()*pool.length)];
   }
+  state.run.bossType=state.run.bossTypes[ch];
   return state.run.bossType;
 }
 function encounterEnemyList(state){
   const zt = ZONE_TABLE[state.run.zone-1];
   const list = state.run.encIdx===0 ? zt.e1 : (state.run.route==="danger" ? zt.danger : zt.safe);
-  return list.map(t=> t==="apex" ? bossOf(state) : t);
+  return list.map(t=> t==="apex" ? bossOf(state, bossChapterForZone(state.run.zone)) : t);
 }
 
 function startEncounter(state, loadoutUids){
@@ -633,13 +645,17 @@ function startEncounter(state, loadoutUids){
   units.push({id:"drone", side:"player", type:"drone", name:"随伴機R-6", icon:"🛰️",
     x:1,y:3, hp:droneHp, maxHp:sd.droneHp, drift:null, shield:0, alive:true}); // 斜め配置で互いの直線を塞がない
   const hardBonus = run.asc>=1?1:0;
+  const depthBonus = Math.floor((run.zone-1)/3);
+  const bossChapter = bossChapterForZone(run.zone);
   const hasBoss = list.some(t=>ENEMY_DEFS[t].boss);
   list.forEach((t,i)=>{
     let [x,y]=ENEMY_SPAWNS[i];
     if(ENEMY_DEFS[t].boss){ x=3; y=2; } // ボスは中央奥に鎮座
     const d=ENEMY_DEFS[t];
-    const hp=d.hp + (state.run.zone>=5?1:0) + hardBonus + (hasContract(run,"heavy")?1:0);
+    const bossHpMod = ENEMY_DEFS[t].boss ? (bossChapter===1?-4:(bossChapter===3?2:0)) : 0;
+    const hp=Math.max(1,d.hp + depthBonus + bossHpMod + hardBonus + (hasContract(run,"heavy")?1:0));
     const dmg=d.dmg + ((state.run.zone>=4&&(t==="pirate"||t==="hunter"))?1:0)
+      + ((state.run.zone>=7&&t!=="mender")?1:0)
       + ((run.asc>=3&&state.run.zone>=3)?1:0);
     units.push({id:"e"+i, side:"enemy", type:t, name:d.name, icon:d.icon,
       x,y, hp, maxHp:hp, dmg,
@@ -803,6 +819,9 @@ function dealDamage(state, u, dmg, src){
       log(state, `${u.name} 撃破! 宇宙塵に還った。`, "good");
       if((ENEMY_DEFS[u.type]||{}).boss){
         state.run.bossKilled=true;
+        state.run.bossKills=(state.run.bossKills||0)+1;
+        state.run.lastBossType=u.type;
+        state.run.bossType=u.type;
         chron(state,"bosskill",{name:u.name,title:ENEMY_DEFS[u.type].title});
         fx(state,{type:"boom",x:u.x,y:u.y,big:true});
         fx(state,{type:"confetti"});
@@ -1467,9 +1486,9 @@ function crashSalvageRepair(state){
 // スコア(リプレイの物差し)
 function runScore(state){
   const r=state.run;
-  const base = cargoValue(state)*10 + (r.zone-1)*25 + (r.win?100:0)
+  const base = cargoPayoutValue(state)*10 + (r.zone-1)*25 + (r.win?100:0)
     + aliveCards(state).length*3 + deployedStatus(state).filter(d=>d.alive).length*8
-    + (r.physKills||0)*12;
+    + (r.physKills||0)*12 + (r.bossKills||0)*80;
   return Math.round(base*(1+0.25*r.asc)*contractMult(r));
 }
 // ---- 船長診断(3軸8型+サブ称号 — 調査準拠: 全型褒めベース/図星はプレイデータ由来/軽口は自虐とポジの同居) ----
@@ -1617,8 +1636,9 @@ function voyageMemory(state, says, wows){
     kind:"voyage-memory", game:"Leap or Keep",
     setup:{ ship:r.shipId, shipName:sd.name, asc:r.asc, contracts:r.contracts||[] },
     outcome:{ win:!!r.win, reason:r.reason||null, zone:r.zone, score:runScore(state),
-      physKills:r.physKills||0, cargo:cargoValue(state), bossKilled:!!r.bossKilled,
-      boss: r.bossKilled ? ((ENEMY_DEFS[r.bossType]||{}).name||null) : null },
+      physKills:r.physKills||0, cargo:cargoValue(state), payout:cargoPayoutValue(state),
+      rewardMult:rewardMultiplier(r), leapStakes:r.leapStakes||0, bossKilled:!!r.bossKilled, bossKills:r.bossKills||0,
+      boss: r.bossKilled ? ((ENEMY_DEFS[r.lastBossType||r.bossType]||{}).name||null) : null },
     captain:{ id:ct.id, name:ct.name, title:ct.title, jab:ct.jab, praise:ct.praise, weak:ct.weak, subs:ct.subs },
     chronicle: voyageChronicle(state, wows||[]),   // ★=本人が刻んだ頂点
     voice: (says||[]).map(s=>s.text),              // 本人の生の感情(--say)
@@ -1629,7 +1649,7 @@ function voyageMemoryProse(mem){
   const o=mem.outcome, c=mem.captain, L=[];
   L.push(`# ${mem.game} 航海の記憶`);
   L.push(`${mem.setup.shipName}${mem.setup.contracts.length?`(契約: ${mem.setup.contracts.join("/")})`:""}で深淵へ出航した。`);
-  L.push(o.win?`ZONE${o.zone}まで潜り、${o.boss?`《${o.boss}》を討って`:""}生きて帰った(SCORE ${o.score}/物理キル${o.physKills})。`
+  L.push(o.win?`ZONE${o.zone}まで潜り、${o.boss?`《${o.boss}》を討って`:""}生きて帰った(SCORE ${o.score}/物理キル${o.physKills}/深度倍率x${o.rewardMult||1})。`
              :`ZONE${o.zone}で力尽きた(${o.reason})。`);
   L.push(`船としての私は『${c.name}』— ${c.title}。${c.jab}${c.subs.length?" "+c.subs.join(" "):""}`);
   if(mem.chronicle.length){ L.push("","## 航海の断片"); mem.chronicle.forEach(l=>L.push(l)); }
@@ -1645,7 +1665,8 @@ function voyageMemoryProse(mem){
 function carryoverRecord(state, note){
   const r=state.run, ct=captainType(state);
   return { ship:r.shipId, result:r.win?"win":"loss", zone:r.zone, score:runScore(state),
-    captain:ct.name, boss: r.bossKilled ? ((ENEMY_DEFS[r.bossType]||{}).name||null) : null,
+    captain:ct.name, boss: r.bossKilled ? ((ENEMY_DEFS[r.lastBossType||r.bossType]||{}).name||null) : null,
+    rewardMult:rewardMultiplier(r), leapStakes:r.leapStakes||0, bossKills:r.bossKills||0,
     note: note||null };
 }
 // 過去の引き継ぎ群を、ゲーム開始時に読める数行のダイジェストへ(エージェントの「記憶の想起」)
@@ -2028,21 +2049,50 @@ function resolveRelic(state, choice){
     }
   }
   state.pendingRelic=null;
-  state.screen="leapkeep";
+  if(isBossZone(state.run.zone) || state.run.zone>=CONFIG.ZONES){
+    state.screen="leapkeep";
+  } else {
+    advanceArea(state);
+  }
 }
 
 function canDeploy(state){ return aliveCards(state).length < CONFIG.DECK_CAP; }
 
+function recoverTransitCard(state){
+  const c=state.run.cards.find(c=>c.loc==="lost" && !c.relicId && !c.fuelLost);
+  if(!c) return null;
+  c.loc="pool";
+  return c;
+}
+
+function advanceArea(state){
+  if(state.run.zone>=CONFIG.ZONES){ state.screen="leapkeep"; return; }
+  const from=state.run.zone;
+  const sd=shipDef(state.run.shipId);
+  const beforeHp=state.run.shipHp??sd.hp;
+  state.run.shipHp=Math.min(sd.hp,beforeHp+2);
+  state.run.droneHp=Math.min(sd.droneHp,(state.run.droneHp??sd.droneHp)+1);
+  const recovered=recoverTransitCard(state);
+  state.run.zone++;
+  state.run.encIdx=0;
+  state.run.route=null;
+  chron(state,"advance",{from,to:state.run.zone, repair:state.run.shipHp-beforeHp, recovered:recovered?defOf(recovered).name:null});
+  log(state,`《${ZONE_NAMES[from-1]}》を抜けた。帰還判断はまだ遠い — 航行補給で船体+${state.run.shipHp-beforeHp}${recovered?`、『${defOf(recovered).name}』を復帰`:""}。次は《${ZONE_NAMES[state.run.zone-1]}》。`,"warn");
+  state.screen="loadout";
+}
+
 function doLeap(state, fuelUids){
+  if(!isBossZone(state.run.zone) || state.run.zone>=CONFIG.ZONES) return {ok:false,msg:"リープ判断はボス撃破後のチェックポイントだけだ"};
   const uids=Array.isArray(fuelUids)?fuelUids:[fuelUids];
   const need=fuelCost(state);
   if(uids.length!==need || new Set(uids).size!==uids.length) return {ok:false,msg:`燃料はカード${need}枚(深淵IIの代償)`};
   const cs=uids.map(u=>cardByUid(state,u));
   if(cs.some(c=>!c||c.loc==="lost")) return {ok:false,msg:"そのカードは使えない"};
-  for(const c of cs){ c.loc="lost"; state.run.fuelBurnt++; }
+  for(const c of cs){ c.loc="lost"; c.fuelLost=true; state.run.fuelBurnt++; }
+  state.run.leapStakes=(state.run.leapStakes||0)+1;
   state.run.zone++; state.run.encIdx=0; state.run.route=null;
-  chron(state,"leap",{to:state.run.zone, burned:cs.map(c=>defOf(c).name).join("/"), cardsLeft:aliveCards(state).length});
-  log(state,`『${cs.map(c=>defOf(c).name).join("』『")}』を燃料に変換 — ジャンプ! ${ZONE_NAMES[state.run.zone-1]}へ。`,"warn");
+  chron(state,"leap",{to:state.run.zone, burned:cs.map(c=>defOf(c).name).join("/"), cardsLeft:aliveCards(state).length, mult:rewardMultiplier(state.run)});
+  log(state,`『${cs.map(c=>defOf(c).name).join("』『")}』を燃料に変換 — ジャンプ! 報酬倍率x${rewardMultiplier(state.run)}で${ZONE_NAMES[state.run.zone-1]}へ。`,"warn");
   if(aliveCards(state).length<2){ runOver(state,false,"exhausted"); return {ok:true}; }
   state.screen="loadout";
   return {ok:true};
@@ -2051,6 +2101,8 @@ function doLeap(state, fuelUids){
 function doKeep(state){ runOver(state,true,"returned"); }
 
 function cargoValue(state){ return state.run.bonusValue + state.run.cargo.reduce((s,id)=>s+RELIC_DEFS.find(r=>r.id===id).value,0); }
+function cargoPayoutValue(state){ return cargoValue(state)*rewardMultiplier(state.run); }
+function relicPayoutValue(state, value){ return value*rewardMultiplier(state.run); }
 
 // 回収コンテナ: プレイヤーユニットが乗ったら回収(移動・ドリフトどちらでも)
 function checkContainer(state){
@@ -2083,7 +2135,8 @@ const LK = { CONFIG, CARD_DEFS, RELIC_DEFS, ENEMY_DEFS, ENEMY_AI, ZONE_TABLE, ZO
   CONTRACT_DEFS, hasContract, contractMult,
   newRun, startEncounter, pump, doRest, selectPair, actionSpec, execAction, fizzleAction,
   pendingDamage, resolveDamage, finishEncounter, chooseRoute, resolveRelic, canDeploy, doLeap, doKeep,
-  moveOptions, attackTargets, cardsIn, aliveCards, cardByUid, defOf, cargoValue, unlocks,
+  moveOptions, attackTargets, cardsIn, aliveCards, cardByUid, defOf, cargoValue, cargoPayoutValue, relicPayoutValue,
+  rewardMultiplier, nextRewardMultiplier, isBossZone, bossChapterForZone, unlocks,
   unitAt, players, enemies, unitById, tdist, tdelta, wrap, encounterEnemyList, bossOf, log,
   enemyStep, enemyPhaseAll, nextActingEnemy, commitTurn, undoTurn, canUndo, effDamage, driftPhase,
   crashSalvagePick, deployedStatus,
@@ -2908,7 +2961,7 @@ function renderBattle(app){
   const enemyOrder=enc.intents.map((it,i)=>({i:i+1,id:it.unitId}));
   const badgeOf={}; enemyOrder.forEach(o=>badgeOf[o.id]=o.i);
 
-  let grid=`<div id="board" class="${META.tilt?"tilt":""}" style="grid-template-columns:repeat(${CONFIG.GRID},var(--cell)); --zh:${[212,275,160,35,350][S.run.zone-1]};">`;
+  let grid=`<div id="board" class="${META.tilt?"tilt":""}" style="grid-template-columns:repeat(${CONFIG.GRID},var(--cell)); --zh:${[212,275,160,35,350,18,190,310,48][S.run.zone-1]||212};">`;
   for(let y=0;y<CONFIG.GRID;y++)for(let x=0;x<CONFIG.GRID;x++){
     const key=x+","+y;
     const u=unitAt(enc,x,y);
@@ -3222,7 +3275,7 @@ function battleModal(){
     </div></div>`;
   }
   if(enc.phase==="cleared"){
-    if(S.run.bossKilled && S.run.zone>=CONFIG.ZONES){
+    if((S.run.bossKills||0)>=bossChapterForZone(CONFIG.ZONES) && S.run.zone>=CONFIG.ZONES){
       return `<div id="overlay"><div class="modal" style="border-color:var(--gold); text-align:center;">
         <h2 style="color:var(--gold); font-size:1.6rem; letter-spacing:.2em;">中心墓所 — 制圧</h2>
         <p class="muted" style="line-height:1.9;">死んだ文明の最後の怒りが、静かに眠りについた。<br>
@@ -3324,14 +3377,18 @@ function renderLeapKeep(app){
   const run=S.run;
   const alive=aliveCards(S).length;
   const cv=cargoValue(S);
+  const mult=rewardMultiplier(run);
+  const payout=cargoPayoutValue(S);
+  const nextMult=nextRewardMultiplier(run);
   const last=run.zone>=CONFIG.ZONES;
   const ds=deployedStatus(S);
   const cargoList=run.cargo.map(id=>{const r=RELIC_DEFS.find(x=>x.id===id);return `<li>◆${esc(r.name)} (価値${r.value})</li>`;}).join("")||"<li class='muted'>(空っぽだ)</li>";
   const lockedU=UNLOCK_POOL.filter(u=>!META.unlocked.includes(u.defId)).sort((a,b)=>a.cost-b.cost);
   const nextU=lockedU.length?{...lockedU[0], name:CARD_DEFS[lockedU[0].defId].name, cost:lockedU[0].cost}:null;
-  const futureCred=META.credits+cv;
+  const futureCred=META.credits+payout;
   const ladder=`帰還すれば <b style="color:var(--gold)">₢${futureCred}</b>${nextU?` — 『${esc(nextU.name)}』解放(₢${nextU.cost})まであと<b style="color:var(--gold)">${Math.max(0,nextU.cost-futureCred)}</b>`:" — 全カード解放済み!"}`;
   const nextZone=last?null:ZONE_NAMES[run.zone];
+  const nextBoss=Math.min(CONFIG.ZONES, run.zone+3);
   const quip = alive<=4 ? `本当に跳ぶ? 残り${alive}枚しかないよ。` :
                alive<=7 ? `カードは${alive}枚。まだ行ける——たぶん。` :
                `景気がいいね、船長。深淵が呼んでるよ。`;
@@ -3340,19 +3397,21 @@ function renderLeapKeep(app){
   app.innerHTML=hudHtml()+`
   <div class="modal" style="margin:24px auto; position:relative; overflow:hidden;">
     <div class="lkwm">LEAP OR KEEP</div>
-    <h2 style="position:relative;z-index:1;">ゾーン${run.zone}クリア — ${last?"ここが最深部だ":"跳ぶか、帰るか。"}</h2>
+    <h2 style="position:relative;z-index:1;">ボス撃破チェックポイント ZONE${run.zone} — ${last?"ここが最深部だ":"跳ぶか、帰るか。"}</h2>
     <div class="scale">
       <div class="pan keep"><h4>🏠 KEEP — 帰還する</h4>
         <p style="margin-bottom:8px;">${cargoChips||"<span class='muted'>(カーゴは空っぽだ)</span>"}</p>
-        <p class="muted">売却価値合計: <b style="color:var(--gold);font-size:1.2rem;">${cv}</b> — 帰還すれば確定。<br>${ladder}</p>
+        <p class="muted">素の価値: <b style="color:var(--gold);font-size:1.05rem;">${cv}</b> × 深度倍率<b style="color:var(--gold);font-size:1.2rem;">x${mult}</b>
+          = 確定報酬 <b style="color:var(--gold);font-size:1.35rem;">${payout}</b><br>${ladder}</p>
         ${ds.length?`<p class="muted">展開遺物: ${ds.map(d=>d.alive?`<span style="color:var(--green)">◆${esc(d.relic.name)}(健在)</span>`:`<span style="color:var(--red)">✝${esc(d.relic.name)}(喪失)</span>`).join(" ")}<br>健在のまま帰還すればインストール候補(売却価値はない)。</p>`:""}
       </div>
       <div class="pan leap"><h4>🚀 LEAP — さらに深く</h4>
         ${last?`<p class="muted">これより深くは、何もない。スキャナーは沈黙している。</p>`:`
         <ul>
           <li>次: 《${esc(nextZone)}》 — 敵はさらに凶悪</li>
+          <li>次のボス(ZONE${nextBoss})まで生きれば深度倍率 <b style="color:var(--gold)">x${mult} → x${nextMult}</b></li>
           <li>遺物のレアリティ上昇${run.zone+1>=4?"(レア率UP)":""}${nextU&&nextU.cost-futureCred>0&&nextU.cost-futureCred<=5?` — <span style="color:var(--gold)">あと遺物1つで『${esc(nextU.name)}』に届くかもしれない</span>`:""}</li>
-          <li>燃料コスト: <b style="color:var(--red)">カード1枚を永久ロスト</b></li>
+          <li>燃料コスト: <b style="color:var(--red)">カード${fuelCost(S)}枚を永久ロスト</b></li>
         </ul>
         <p class="muted">残りカード: <b class="${alive<=4?"flash":""}" style="color:var(--amber)">${alive}枚</b></p>`}
       </div>
@@ -3374,6 +3433,7 @@ function renderSummary(app){
   // メタ進行の確定(一度だけ): クレジット加算はボーナス分+遺物は売却/インストールの選択制
   if(!run.metaApplied && !run.tutorial){
     run.metaApplied=true;
+    run.rewardMult=rewardMultiplier(run);
     // ローカル戦績(トップ5)
     META.history=META.history||[];
     META.history.push({score:run.score??runScore(S), zone:run.zone, ship:run.shipId, asc:run.asc, win:run.win,
@@ -3388,7 +3448,8 @@ function renderSummary(app){
     if(run.score>META.bestScore){ META.bestScore=run.score; run.newBest=true; }
     if(run.win){
       META.wins++;
-      META.credits+=run.bonusValue;
+      run.bonusPay=run.bonusValue*run.rewardMult;
+      META.credits+=run.bonusPay;
       // 危険手当: 契約1件につき₢2(実利は線形 — 名誉は称号で青天井、が荒れない鉄則)
       if((run.contracts||[]).length){ run.contractPay=run.contracts.length*2; META.credits+=run.contractPay; }
       META.bestValue=Math.max(META.bestValue,cv);
@@ -3409,12 +3470,13 @@ function renderSummary(app){
   const color=legend?"var(--gold)":(run.win?"var(--green)":"var(--red)");
   const cargoRows=run.cargo.map(id=>{
     const r=RELIC_DEFS.find(x=>x.id===id);
+    const sale=relicPayoutValue(S,r.value);
     const st=UI.sold[id];
     const installed=META.installed.includes(id);
     let act;
-    if(st==="sold") act=`<span style="color:var(--gold)">売却済 +₢${r.value}</span>`;
+    if(st==="sold") act=`<span style="color:var(--gold)">売却済 +₢${sale}</span>`;
     else if(st==="installed") act=`<span style="color:var(--green)">インストール済(次ランから使用可)</span>`;
-    else act=`<button onclick="H.sellRelic('${id}')" data-tt="${attrEsc("クレジット₢"+r.value+"に換える — カード解放の資金")}">売却 +₢${r.value}</button>
+    else act=`<button onclick="H.sellRelic('${id}')" data-tt="${attrEsc("価値"+r.value+" × 深度倍率x"+rewardMultiplier(run)+" = クレジット₢"+sale+"に換える")}">売却 +₢${sale}</button>
       <button onclick="H.installRelic('${id}')" ${installed?"disabled":""} data-tt="${attrEsc("遺物カード『"+esc(CARD_DEFS[r.card].name)+"』を恒久的にコレクションへ(死んでも残る)。売却益は放棄")}">${installed?"既に保有":"インストール"}</button>`;
     return `<tr><td>◆${esc(r.name)}</td><td>${r.rare?"★レア":"コモン"}</td><td>${act}</td></tr>`;
   }).join("");
@@ -3432,6 +3494,7 @@ function renderSummary(app){
       </div>
       <table class="sum">
         <tr><td>到達ゾーン</td><td>ZONE ${run.zone} 《${esc(ZONE_NAMES[run.zone-1])}》</td></tr>
+        <tr><td>深度倍率</td><td>x${rewardMultiplier(run)}${run.leapStakes?` — リープ${run.leapStakes}回の賭けが精算に乗った`:""}</td></tr>
         <tr><td>総ラウンド</td><td>${run.totalRounds}</td></tr>
         <tr><td>物理キル</td><td>${run.physKills||0}回 ${run.physKills>=3?"💥":""}</td></tr>
         <tr><td>休息/被弾/燃料で失った</td><td>${run.restCount} / ${run.burnCount} / ${run.fuelBurnt}枚</td></tr>
@@ -3470,7 +3533,7 @@ function renderSummary(app){
       </div>`;})()}`}
     ${run.win?`
     <div class="panel" style="margin-top:12px;">
-      <h3>精算 — 所持クレジット: <b style="color:var(--gold)">₢${META.credits}</b>${run.bonusValue?` (回収ボーナス+₢${run.bonusValue}込み)`:""}${run.contractPay?` <span style="color:var(--amber)">(危険手当+₢${run.contractPay})</span>`:""}</h3>
+      <h3>精算 — 所持クレジット: <b style="color:var(--gold)">₢${META.credits}</b>${run.bonusValue?` (回収ボーナス₢${run.bonusValue}×${rewardMultiplier(run)}=+₢${run.bonusPay||0}込み)`:""}${run.contractPay?` <span style="color:var(--amber)">(危険手当+₢${run.contractPay})</span>`:""}</h3>
       <p class="muted">遺物は<b>売却</b>(クレジット=格納庫でカード解放)か<b>インストール</b>(遺物カードを恒久コレクションへ)か。両方は取れない。</p>
       <table class="sum">${cargoRows||"<tr><td class='muted'>封印遺物なし — 命だけ持って帰った。それも才能だ。</td></tr>"}</table>
       ${(()=>{const ds=deployedStatus(S); if(!ds.length) return "";
@@ -3729,13 +3792,14 @@ const H={
   relic(c){ resolveRelic(S,c); render(); },
   keepAsk(){
     const cv=cargoValue(S);
+    const payout=cargoPayoutValue(S);
     const el=document.getElementById("lkExtra");
     const tease= S.run.zone<CONFIG.ZONES && S.run.cargo.length
       ? `カーゴの${esc(RELIC_DEFS.find(r=>r.id===S.run.cargo[S.run.cargo.length-1]).name)}、次のゾーンならもっと見つかるけど?`
       : "本当に帰る? 深淵はまだ、何かを隠しているよ。";
     el.innerHTML=`<div style="text-align:center;margin-top:12px;">
       <p style="color:var(--amber)">${S.run.zone>=CONFIG.ZONES?"最深部からの生還だ。胸を張れ。":tease}</p>
-      <button class="primary" onclick="H.keepGo()">それでも帰る — 価値${cv}を確定</button></div>`;
+      <button class="primary" onclick="H.keepGo()">それでも帰る — 価値${cv} × x${rewardMultiplier(S.run)} = ${payout}を確定</button></div>`;
   },
   keepGo(){ doKeep(S); render(); },
   leapAsk(){
@@ -3791,7 +3855,7 @@ const H={
   sellRelic(id){
     if(UI.sold[id]) return;
     const r=RELIC_DEFS.find(x=>x.id===id);
-    UI.sold[id]="sold"; META.credits+=r.value; saveMeta();
+    UI.sold[id]="sold"; META.credits+=relicPayoutValue(S,r.value); saveMeta();
     UI.sellN=(UI.sellN||0)+1; sfx("salvage", 1+UI.sellN*0.18); // 連続売却でピッチ上昇(コンボ感)
     render();
   },

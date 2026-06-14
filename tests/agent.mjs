@@ -1,7 +1,7 @@
 // エージェントプロトコルの完全性テスト:
 // 「列挙された合法手をランダムに選び続けるだけで、必ずラン終了に到達できる」(stuck/例外/列挙バグ=ゼロ)
 // usage: node tests/agent.mjs [runs=120]
-import { newGame, legalChoices, applyChoice, observe, LK } from "../agent/protocol.mjs";
+import { newGame, replay, legalChoices, applyChoice, observe, LK, DEFAULT_AGENT_UNDO_LIMIT } from "../agent/protocol.mjs";
 
 let failed = 0, passed = 0;
 function ok(cond, name, detail) {
@@ -34,6 +34,73 @@ for (let i = 0; i < N; i++) {
   if (s.run.over) {
     const ct = LK.captainType(s);
     ok(!!ct && !!ct.name, `captainType at end (seed=${opts.seed})`);
+  }
+}
+
+// ボス後チェックポイントはランダム合法手だけでは到達率が低いため、構成済み状態で直接カバーする。
+{
+  const sKeep = LK.newRun(8801);
+  sKeep.screen = "leapkeep";
+  sKeep.run.zone = 3;
+  const keepChoices = legalChoices(sKeep);
+  ok(keepChoices.some(c => c.id === "keep"), "checkpoint exposes keep");
+  const keepResult = applyChoice(sKeep, "keep");
+  ok(keepResult.ok && sKeep.run.over && sKeep.run.win, "checkpoint keep ends in win");
+  kinds.add("keep");
+
+  const sLeap = LK.newRun(8802);
+  sLeap.screen = "leapkeep";
+  sLeap.run.zone = 3;
+  const leapChoice = legalChoices(sLeap).find(c => c.id.startsWith("leap:"));
+  ok(!!leapChoice, "checkpoint exposes leap");
+  if (leapChoice) {
+    const leapResult = applyChoice(sLeap, leapChoice.id);
+    ok(leapResult.ok && sLeap.run.zone === 4 && !sLeap.run.over, "checkpoint leap advances to next chapter");
+    kinds.add("leap");
+  }
+}
+
+// 非人間入口のundoは、考え直し用の有限リソースとしてボス区間ごとに制限される。
+{
+  const s = newGame({ seed: 9901, ship: "vagrants" });
+  ok(observe(s).includes(`AI undo残り ${DEFAULT_AGENT_UNDO_LIMIT}/${DEFAULT_AGENT_UNDO_LIMIT}`), "observation exposes AI undo budget");
+
+  let pair = legalChoices(s).find(c => c.id.startsWith("pair:"));
+  ok(!!pair, "initial pair exists for undo-budget test");
+  if (pair) ok(applyChoice(s, pair.id).ok, "pair before first undo");
+
+  for (let i = 0; i < DEFAULT_AGENT_UNDO_LIMIT; i++) {
+    if (i > 0) {
+      pair = legalChoices(s).find(c => c.id.startsWith("pair:"));
+      ok(!!pair && applyChoice(s, pair.id).ok, `pair before undo ${i + 1}`);
+    }
+    ok(legalChoices(s).some(c => c.id === "undo"), `undo exposed while budget remains ${i + 1}`);
+    const r = applyChoice(s, "undo");
+    ok(r.ok, `undo ${i + 1} spends budget`);
+  }
+
+  ok(observe(s).includes(`AI undo残り 0/${DEFAULT_AGENT_UNDO_LIMIT}`), "observation shows exhausted undo budget");
+  pair = legalChoices(s).find(c => c.id.startsWith("pair:"));
+  ok(!!pair && applyChoice(s, pair.id).ok, "pair after undo budget exhausted");
+  ok(!legalChoices(s).some(c => c.id === "undo"), "exhausted undo is removed from legal choices");
+  const blocked = applyChoice(s, "undo");
+  ok(!blocked.ok && /undo limit exhausted/.test(blocked.msg || ""), "direct undo is rejected after budget exhaustion", blocked.msg);
+
+  s.screen = "leapkeep";
+  s.run.zone = 3;
+  const leapChoice = legalChoices(s).find(c => c.id.startsWith("leap:"));
+  ok(!!leapChoice, "leap exists for undo-budget reset");
+  if (leapChoice) {
+    const leapResult = applyChoice(s, leapChoice.id);
+    ok(leapResult.ok && observe(s).includes(`AI undo残り ${DEFAULT_AGENT_UNDO_LIMIT}/${DEFAULT_AGENT_UNDO_LIMIT}`), "undo budget resets after leap to next boss chapter");
+  }
+
+  const old = newGame({ seed: 9902, ship: "vagrants", agentUndoLimit: null });
+  const oldPair = legalChoices(old).find(c => c.id.startsWith("pair:"));
+  const legacyIds = oldPair ? [oldPair.id, "undo", oldPair.id, "undo", oldPair.id, "undo"] : [];
+  if (legacyIds.length) {
+    const replayed = replay({ seed: 9902, ship: "vagrants" }, legacyIds);
+    ok(replayed.agentPolicy.undoRemaining === null, "legacy replay without agentUndoLimit remains unlimited");
   }
 }
 

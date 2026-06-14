@@ -16,6 +16,63 @@ vm.createContext(sandbox);
 vm.runInContext(m[1], sandbox, { filename: "lok-logic.js" });
 export const LK = sandbox.module.exports;
 
+export const DEFAULT_AGENT_UNDO_LIMIT = 2;
+
+function hasOpt(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj || {}, key);
+}
+
+function normalizeUndoLimit(value) {
+  if (value === null || value === "unlimited" || value === "none") return null;
+  if (value === undefined) return DEFAULT_AGENT_UNDO_LIMIT;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_AGENT_UNDO_LIMIT;
+  return Math.max(0, Math.floor(n));
+}
+
+function chapterFor(s) {
+  return LK.bossChapterForZone ? LK.bossChapterForZone(s.run.zone) : Math.ceil(s.run.zone / 3);
+}
+
+function resetAgentUndo(s) {
+  const policy = s.agentPolicy || {};
+  s.agentPolicy = {
+    ...policy,
+    undoChapter: chapterFor(s),
+    undoRemaining: policy.undoLimit === null ? null : policy.undoLimit,
+  };
+  return s.agentPolicy;
+}
+
+function initAgentPolicy(s, opts = {}) {
+  const value = hasOpt(opts, "agentUndoLimit") ? opts.agentUndoLimit : opts.undoLimit;
+  s.agentPolicy = {
+    undoLimit: normalizeUndoLimit(value),
+    undoChapter: chapterFor(s),
+    undoRemaining: null,
+  };
+  resetAgentUndo(s);
+  return s.agentPolicy;
+}
+
+function ensureAgentPolicy(s) {
+  if (!s.agentPolicy || !hasOpt(s.agentPolicy, "undoLimit")) initAgentPolicy(s);
+  if (s.agentPolicy.undoChapter !== chapterFor(s)) resetAgentUndo(s);
+  return s.agentPolicy;
+}
+
+function agentCanUndo(s) {
+  if (!LK.canUndo(s)) return false;
+  const policy = ensureAgentPolicy(s);
+  return policy.undoRemaining === null || policy.undoRemaining > 0;
+}
+
+function undoLabel(s) {
+  const policy = ensureAgentPolicy(s);
+  if (policy.undoRemaining === null) return "ターン全体をやり直す";
+  return `ターン全体をやり直す(このボス区間の残り${policy.undoRemaining}/${policy.undoLimit})`;
+}
+
 // ---------- ゲーム生成 ----------
 export function newGame(opts = {}) {
   const seed = Number.isFinite(opts.seed) ? opts.seed : 1;
@@ -26,13 +83,18 @@ export function newGame(opts = {}) {
   });
   // エージェントの記憶(過去の引き継ぎ群)を持ち込む — 観測の冒頭に想起される
   if (opts.memory && opts.memory.length) s.run.priorVoyages = opts.memory;
+  initAgentPolicy(s, opts);
   LK.startEncounter(s, null);
   s.screen = "battle";
   return s;
 }
 
 export function replay(opts, ids) {
-  const s = newGame(opts);
+  // 既存の保存済みログはagentUndoLimitを持たない。リプレイ互換のため旧ログだけは無制限として読む。
+  const replayOpts = !hasOpt(opts, "agentUndoLimit") && !hasOpt(opts, "undoLimit")
+    ? { ...opts, agentUndoLimit: null }
+    : opts;
+  const s = newGame(replayOpts);
   for (const id of ids) {
     const r = applyChoice(s, id);
     if (!r.ok) throw new Error(`replay failed at "${id}": ${r.msg}`);
@@ -59,8 +121,9 @@ export function legalChoices(s) {
   }
   if (s.screen === "route") {
     const zt = LK.ZONE_TABLE[run.zone - 1];
-    add("route_safe", `安全ルート(敵: ${zt.safe.map(t => t === "apex" ? LK.bossOf(s) : t).join(",")} / コモン遺物)`);
-    add("route_danger", `危険ルート(敵: ${zt.danger.map(t => t === "apex" ? LK.bossOf(s) : t).join(",")} / レア遺物)`);
+    const bossChapter = LK.bossChapterForZone ? LK.bossChapterForZone(run.zone) : undefined;
+    add("route_safe", `安全ルート(敵: ${zt.safe.map(t => t === "apex" ? LK.bossOf(s, bossChapter) : t).join(",")} / コモン遺物)`);
+    add("route_danger", `危険ルート(敵: ${zt.danger.map(t => t === "apex" ? LK.bossOf(s, bossChapter) : t).join(",")} / レア遺物)`);
     return out;
   }
   if (s.screen === "relic") {
@@ -70,13 +133,19 @@ export function legalChoices(s) {
     return out;
   }
   if (s.screen === "leapkeep") {
-    add("keep", "帰還する(ランを勝利で終える — カーゴ確定)");
-    const cost = LK.fuelCost(s);
-    const cards = LK.aliveCards(s);
-    const combos = kCombos(cards.map(c => c.uid), cost).slice(0, 200);
-    for (const combo of combos) {
-      const names = combo.map(u => LK.defOf(cards.find(c => c.uid === u)).name).join("+");
-      add(`leap:${combo.join(",")}`, `跳ぶ(燃料: ${names}を永久ロスト)`);
+    const raw = LK.cargoValue(s);
+    const mult = LK.rewardMultiplier ? LK.rewardMultiplier(run) : 1;
+    const payout = LK.cargoPayoutValue ? LK.cargoPayoutValue(s) : raw;
+    add("keep", `帰還する(ランを勝利で終える — 価値${raw}×x${mult}=${payout}を確定)`);
+    if (run.zone < LK.CONFIG.ZONES) {
+      const cost = LK.fuelCost(s);
+      const cards = LK.aliveCards(s);
+      const nextMult = LK.nextRewardMultiplier ? LK.nextRewardMultiplier(run) : mult * 2;
+      const combos = kCombos(cards.map(c => c.uid), cost).slice(0, 200);
+      for (const combo of combos) {
+        const names = combo.map(u => LK.defOf(cards.find(c => c.uid === u)).name).join("+");
+        add(`leap:${combo.join(",")}`, `跳ぶ(燃料: ${names}を永久ロスト / 次のボス帰還で倍率x${mult}->x${nextMult})`);
+      }
     }
     return out;
   }
@@ -124,7 +193,7 @@ export function legalChoices(s) {
   if (enc.phase === "player") {
     if (enc.awaitEnd) {
       add("commit", "ターン確定(敵ターンへ — 2枚は消耗へ)");
-      if (LK.canUndo(s)) add("undo", "ターン全体をやり直す");
+      if (agentCanUndo(s)) add("undo", undoLabel(s));
       return out;
     }
     if (!enc.pending) {
@@ -202,7 +271,7 @@ export function legalChoices(s) {
       }
       add(`fizzle:${idx}`, `${halfName}: 不発にする(対象なし/温存)`);
     });
-    if (LK.canUndo(s)) add("undo", "ターン全体をやり直す");
+    if (agentCanUndo(s)) add("undo", undoLabel(s));
     return out;
   }
   return out;
@@ -249,7 +318,7 @@ export function applyChoice(s, id) {
       case "keep": LK.doKeep(s); return { ok: true };
       case "leap": {
         const r = LK.doLeap(s, rest.join(":").split(","));
-        if (r.ok && !s.run.over) { LK.startEncounter(s, null); s.screen = "battle"; }
+        if (r.ok && !s.run.over) { resetAgentUndo(s); LK.startEncounter(s, null); s.screen = "battle"; }
         return r;
       }
       case "loadout_default": LK.startEncounter(s, null); s.screen = "battle"; return { ok: true };
@@ -267,7 +336,15 @@ export function applyChoice(s, id) {
       case "drift": return LK.driftPhase(s);
       case "enemy_turn": LK.enemyPhaseAll(s); return { ok: true };
       case "commit": return LK.commitTurn(s);
-      case "undo": return LK.undoTurn(s);
+      case "undo": {
+        if (!LK.canUndo(s)) return LK.undoTurn(s);
+        const policy = ensureAgentPolicy(s);
+        if (policy.undoRemaining !== null && policy.undoRemaining <= 0)
+          return { ok: false, msg: `undo limit exhausted for this boss chapter (${policy.undoLimit})` };
+        const r = LK.undoTurn(s);
+        if (r.ok && policy.undoRemaining !== null) policy.undoRemaining = Math.max(0, policy.undoRemaining - 1);
+        return r;
+      }
       case "pair": return LK.selectPair(s, rest[0], rest[1], rest[2]);
       case "fizzle": return LK.fizzleAction(s, Number(rest[0]));
       case "act": {
@@ -297,7 +374,7 @@ export function observe(s) {
   if (run.over) {
     const ct = LK.captainType(s);
     L.push(`=== ラン終了: ${run.win ? "勝利(" + (run.bossKilled ? "伝説" : "帰還") + ")" : "敗北(" + run.reason + ")"} ===`);
-    L.push(`SCORE ${LK.runScore(s)} / ZONE ${run.zone} / 物理キル${run.physKills || 0} / カーゴ価値${LK.cargoValue(s)}`);
+    L.push(`SCORE ${LK.runScore(s)} / ZONE ${run.zone} / 物理キル${run.physKills || 0} / カーゴ価値${LK.cargoValue(s)} / 深度倍率x${LK.rewardMultiplier ? LK.rewardMultiplier(run) : 1} / 精算価値${LK.cargoPayoutValue ? LK.cargoPayoutValue(s) : LK.cargoValue(s)}`);
     L.push(`船長診断: 『${ct.name}』 — ${ct.title} ${ct.subs.join(" ")}`);
     L.push(`(${ct.jab} ${ct.praise})`);
     return L.join("\n");
@@ -305,14 +382,26 @@ export function observe(s) {
   // 記憶の想起: 持ち込んだ過去の航海(引き継ぎ)を最初の戦域の冒頭だけ表示
   if (run.priorVoyages && run.zone === 1 && run.encIdx === 0 && enc && enc.round === 1)
     for (const line of LK.carryoverDigest(run.priorVoyages)) L.push(line);
-  L.push(`ZONE ${run.zone}/5《${LK.ZONE_NAMES[run.zone - 1]}》第${run.encIdx + 1}戦域 / 旗艦HP${(enc && LK.unitById(enc, "ship")) ? LK.unitById(enc, "ship").hp : run.shipHp ?? "?"} / 残カード${LK.aliveCards(s).length}枚(=寿命) / カーゴ価値${LK.cargoValue(s)}`);
+  L.push(`ZONE ${run.zone}/${LK.CONFIG.ZONES}《${LK.ZONE_NAMES[run.zone - 1]}》第${run.encIdx + 1}戦域 / 旗艦HP${(enc && LK.unitById(enc, "ship")) ? LK.unitById(enc, "ship").hp : run.shipHp ?? "?"} / 残カード${LK.aliveCards(s).length}枚(=寿命) / カーゴ価値${LK.cargoValue(s)} / 深度倍率x${LK.rewardMultiplier ? LK.rewardMultiplier(run) : 1}`);
+  const undoPolicy = ensureAgentPolicy(s);
+  if (undoPolicy.undoRemaining !== null)
+    L.push(`AI undo残り ${undoPolicy.undoRemaining}/${undoPolicy.undoLimit} (このボス区間)`);
   if (s.screen === "loadout") {
     const pool = LK.cardsIn(s, "pool");
     L.push("出撃前 — プール: " + pool.map(c => `${c.uid}=${LK.defOf(c).name}${c.up ? "+" : ""}${c.relicId ? "◆" : ""}`).join(" "));
     L.push("(loadout:<uid6つカンマ区切り> で自由編成も可)");
     return L.join("\n");
   }
-  if (s.screen !== "battle" || !enc) { L.push(`画面: ${s.screen}`); return L.join("\n"); }
+  if (s.screen !== "battle" || !enc) {
+    if (s.screen === "leapkeep") {
+      const raw = LK.cargoValue(s);
+      const mult = LK.rewardMultiplier ? LK.rewardMultiplier(run) : 1;
+      const payout = LK.cargoPayoutValue ? LK.cargoPayoutValue(s) : raw;
+      L.push(`ボス後チェックポイント: KEEPなら価値${raw}×x${mult}=${payout}を確定。${run.zone < LK.CONFIG.ZONES ? `LEAPならカード燃料を失い、次のボス帰還倍率はx${LK.nextRewardMultiplier ? LK.nextRewardMultiplier(run) : mult * 2}。` : "ここが最深部なのでLEAPはない。"}`);
+    }
+    L.push(`画面: ${s.screen}`);
+    return L.join("\n");
+  }
   L.push(`ラウンド${enc.round} フェイズ:${enc.phase}${enc.flareRow !== null && enc.flareRow !== undefined ? ` ☀フレア予告:y=${enc.flareRow}行が次R頭に1ダメ` : ""}${LK.cardsIn(s, "hand").length <= 2 && enc.phase === "player" ? " ⚠手札残少 — 尽きると強制休息(1枚永久ロスト+そのラウンド無防備)" : ""}`);
   if (enc.container && !enc.container.taken)
     L.push(`箱=漂流コンテナ@(${enc.container.x},${enc.container.y}): ユニットが乗れば価値+2。⚠敵全滅で戦域即終了=回収はその前に`);
