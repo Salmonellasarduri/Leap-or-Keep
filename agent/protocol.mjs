@@ -277,6 +277,389 @@ export function legalChoices(s) {
   return out;
 }
 
+function uniq(arr) {
+  return [...new Set(arr.filter(Boolean))];
+}
+
+function addTag(tags, tag) {
+  if (tag && !tags.includes(tag)) tags.push(tag);
+}
+
+function threatCells(enc) {
+  const cells = new Set();
+  for (const it of enc && enc.intents || []) {
+    for (const c of it.attackCells || []) cells.add(`${c.x},${c.y}`);
+  }
+  return cells;
+}
+
+function specTags(spec) {
+  const tags = [];
+  switch (spec && spec.kind) {
+    case "move": case "brake_move": case "warp": case "ram":
+      addTag(tags, "position"); break;
+    case "attack": case "attack_line": case "pierce": case "attack_multi":
+    case "attack_all": case "execute": case "attack_push": case "attack_pull":
+      addTag(tags, "attack"); break;
+    case "push": case "pull": case "pull_all": case "setdrift":
+      addTag(tags, "control"); break;
+    case "shield":
+      addTag(tags, "defense"); break;
+    case "heal":
+      addTag(tags, "repair"); break;
+    case "salvage":
+      addTag(tags, "resource"); break;
+    case "spawnhaz":
+      addTag(tags, "setup"); break;
+  }
+  if (spec && spec.selfDmg) addTag(tags, "self_damage");
+  if (spec && spec.lost) addTag(tags, "burns_card");
+  return tags;
+}
+
+function damageForTarget(state, spec, target) {
+  if (!spec || !target) return 0;
+  if (spec.kind === "execute") return spec.dmg + (target.hp < target.maxHp ? spec.bonus || 0 : 0);
+  return spec.dmg || 0;
+}
+
+function actionMeta(state, id, tags) {
+  const enc = state.enc;
+  const parts = id.split(":");
+  const idx = Number(parts[1]);
+  const unitId = parts[2];
+  const mode = parts[3];
+  const spec = enc && enc.pending ? LK.actionSpec(state, idx) : null;
+  for (const tag of specTags(spec)) addTag(tags, tag);
+  const unit = enc ? LK.unitById(enc, unitId) : null;
+  let hideReason = "";
+  if (mode === "cell" && unit) {
+    const [x, y] = (parts[4] || "").split(",").map(Number);
+    const threats = threatCells(enc);
+    addTag(tags, "move_choice");
+    if (threats.has(`${x},${y}`)) addTag(tags, "steps_into_threat");
+    else if (threats.has(`${unit.x},${unit.y}`)) addTag(tags, "avoids_damage");
+  } else if (mode === "stay" && unit) {
+    addTag(tags, "brake");
+    if (spec && spec.kind === "brake_move" && !unit.drift) {
+      addTag(tags, "no_effect");
+      hideReason = "brake_stay_without_drift";
+    }
+  } else if (mode === "target") {
+    const target = enc ? LK.unitById(enc, parts[4]) : null;
+    if (target) {
+      addTag(tags, target.side === "enemy" ? "enemy_target" : "hazard_target");
+      if (target.type === "mine") addTag(tags, "mine_interaction");
+      const dmg = damageForTarget(state, spec, target);
+      if (dmg > 0) {
+        addTag(tags, "causes_damage");
+        if (LK.effDamage(target, dmg) >= target.hp) addTag(tags, "lethal");
+      }
+    }
+  } else if (mode === "multi") {
+    addTag(tags, "multi_target");
+  } else if (mode === "go") {
+    if (spec && spec.kind === "heal" && unit && unit.hp >= unit.maxHp && !spec.shield) {
+      addTag(tags, "no_effect");
+      hideReason = "heal_full_hp";
+    }
+  }
+  return hideReason;
+}
+
+function pairBucket(state, id, tags) {
+  const parts = id.split(":");
+  const a = LK.cardByUid(state, parts[1]);
+  const b = LK.cardByUid(state, parts[3]);
+  const aHalf = parts[2];
+  if (!a || !b) return "pair:unknown";
+  const bHalf = aHalf === "top" ? "bottom" : "top";
+  const specs = [LK.cardSpec(state, a, aHalf), LK.cardSpec(state, b, bHalf)];
+  const kinds = [];
+  for (const spec of specs) {
+    kinds.push(spec.kind || "unknown");
+    for (const tag of specTags(spec)) addTag(tags, tag);
+  }
+  return "pair:" + kinds.sort().join("+");
+}
+
+function annotateChoice(state, choice, rawChoices) {
+  const tags = [];
+  const head = choice.id.split(":")[0];
+  let hideReason = "";
+  let bucket = head;
+  if (["enemy_turn", "drift", "clear_continue"].includes(head)) { addTag(tags, "progress"); addTag(tags, "forced_progress"); }
+  if (["commit", "keep"].includes(head)) addTag(tags, "progress");
+  if (head === "keep") { addTag(tags, "safe"); addTag(tags, "high_stakes"); }
+  if (head.startsWith("route_")) { addTag(tags, "route"); addTag(tags, "high_stakes"); }
+  if (head === "route_safe") addTag(tags, "safe");
+  if (head === "route_danger") { addTag(tags, "risk"); addTag(tags, "temptation"); addTag(tags, "upside"); }
+  if (head.startsWith("camp_")) addTag(tags, "camp");
+  if (head === "camp_resupply" && LK.hasContract(state.run, "norepair")) {
+    addTag(tags, "blocked");
+    hideReason = "blocked_by_contract";
+  }
+  if (head.startsWith("relic_")) { addTag(tags, "relic"); addTag(tags, "high_stakes"); }
+  if (head === "relic_seal") addTag(tags, "safe");
+  if (head === "relic_deploy") { addTag(tags, "risk"); addTag(tags, "temptation"); addTag(tags, "resource_loss"); addTag(tags, "upside"); }
+  if (head === "leap") { addTag(tags, "risk"); addTag(tags, "resource_loss"); addTag(tags, "high_stakes"); addTag(tags, "temptation"); addTag(tags, "upside"); }
+  if (head === "loadout" || head === "loadout_default") addTag(tags, "loadout");
+  if (head === "undo") { addTag(tags, "recovery_only"); bucket = "undo"; }
+  if (head === "damage_hp") { addTag(tags, "takes_damage"); addTag(tags, "resource_preserve"); addTag(tags, "high_stakes"); }
+  if (head === "damage_burn") { addTag(tags, "resource_loss"); addTag(tags, "avoids_damage"); addTag(tags, "survival"); addTag(tags, "high_stakes"); }
+  if (head === "salvage_card") addTag(tags, "resource");
+  if (head === "salvage_repair") addTag(tags, "repair");
+  if (head === "rest_random") { addTag(tags, "rest"); addTag(tags, "random"); addTag(tags, "resource_loss"); addTag(tags, "high_stakes"); }
+  if (head === "rest_choose") { addTag(tags, "rest"); addTag(tags, "resource_loss"); addTag(tags, "high_stakes"); }
+  if (head === "fizzle") {
+    addTag(tags, "low_value");
+    const idx = choice.id.split(":")[1];
+    bucket = `fizzle:${idx}`;
+  }
+  if (head === "pair") {
+    addTag(tags, "pair");
+    bucket = pairBucket(state, choice.id, tags);
+  }
+  if (head === "act") {
+    addTag(tags, "action");
+    hideReason = actionMeta(state, choice.id, tags) || hideReason;
+    bucket = ["act", ...uniq(tags).filter(t => ["attack", "position", "control", "defense", "repair", "resource", "setup", "lethal", "avoids_damage"].includes(t)).sort()].join(":");
+  }
+  return {
+    id: choice.id,
+    label: choice.label,
+    tags: uniq(tags),
+    bucket,
+    hide_from_agent: !!hideReason,
+    hide_reason: hideReason || null,
+  };
+}
+
+function choiceScore(meta, index) {
+  let score = 1000 - index;
+  const t = new Set(meta.tags || []);
+  if (t.has("progress")) score += 200;
+  if (t.has("lethal")) score += 120;
+  if (t.has("avoids_damage")) score += 90;
+  if (t.has("causes_damage")) score += 70;
+  if (t.has("attack")) score += 55;
+  if (t.has("position")) score += 40;
+  if (t.has("defense")) score += 35;
+  if (t.has("repair")) score += 30;
+  if (t.has("resource")) score += 25;
+  if (t.has("setup")) score += 20;
+  if (t.has("risk")) score -= 15;
+  if (t.has("low_value")) score -= 80;
+  if (t.has("recovery_only")) score -= 100;
+  return score;
+}
+
+function selectDiverseChoices(choices, maxChoices) {
+  const sorted = choices.map((c, i) => ({ c, i, score: choiceScore(c, i) }))
+    .sort((a, b) => b.score - a.score || a.i - b.i);
+  const selected = [];
+  const ids = new Set();
+  const buckets = new Set();
+  for (const item of sorted) {
+    if (selected.length >= maxChoices) break;
+    if (buckets.has(item.c.bucket)) continue;
+    selected.push(item);
+    ids.add(item.c.id);
+    buckets.add(item.c.bucket);
+  }
+  for (const item of sorted) {
+    if (selected.length >= maxChoices) break;
+    if (ids.has(item.c.id)) continue;
+    selected.push(item);
+    ids.add(item.c.id);
+  }
+  selected.sort((a, b) => a.i - b.i);
+  return selected.map(x => x.c);
+}
+
+const POLICY_BLOCK_TAGS = new Set(["high_stakes", "risk", "resource_loss", "random", "takes_damage", "self_damage", "burns_card"]);
+const POLICY_LOW_VALUE_TAGS = new Set(["low_value", "recovery_only", "no_effect", "blocked"]);
+
+function profileTagCounts(profile) {
+  const raw = profile && profile.tag_counts || profile && profile.tagCounts || {};
+  const out = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const n = Number(value);
+    if (key && Number.isFinite(n) && n > 0) out[key] = n;
+  }
+  return out;
+}
+
+function topTags(tagCounts, limit = 8) {
+  return Object.entries(tagCounts)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([tag, count]) => ({ tag, count }));
+}
+
+function hasAnyTag(choice, set) {
+  return (choice.tags || []).some(t => set.has(t));
+}
+
+function canAutoSingleChoice(choice) {
+  const tags = new Set(choice.tags || []);
+  if (hasAnyTag(choice, POLICY_BLOCK_TAGS)) return false;
+  return tags.has("forced_progress") || tags.has("progress");
+}
+
+function profileScore(choice, tagCounts) {
+  let score = 0;
+  for (const tag of choice.tags || []) score += tagCounts[tag] || 0;
+  return score;
+}
+
+function policyChoice(choice, reason, confidence, extra = {}) {
+  return {
+    id: choice.id,
+    reason,
+    confidence,
+    tags: choice.tags || [],
+    bucket: choice.bucket || choice.id.split(":")[0],
+    ...extra,
+  };
+}
+
+export function decisionPolicy(choices, opts = {}) {
+  const enabled = opts.enabled !== false;
+  const maxAutoChoices = Math.max(1, Number(opts.maxAutoChoices || 2));
+  const visible = (choices || []).filter(c => !c.hide_from_agent);
+  const tagCounts = profileTagCounts(opts.profile || {});
+  const profileTotal = Number((opts.profile || {}).total || 0);
+  const base = {
+    schema: "lok_decision_policy/1.0",
+    enabled,
+    max_auto_choices: maxAutoChoices,
+    auto_choice: null,
+    skip_reason: "",
+    profile: {
+      total: Number.isFinite(profileTotal) ? Math.max(0, Math.floor(profileTotal)) : 0,
+      top_tags: topTags(tagCounts),
+    },
+  };
+  if (!enabled) return { ...base, skip_reason: "disabled" };
+  if (!visible.length) return { ...base, skip_reason: "no_choices" };
+  if (visible.length > maxAutoChoices) return { ...base, skip_reason: "too_many_choices" };
+  if (visible.length === 1) {
+    if (!canAutoSingleChoice(visible[0])) return { ...base, skip_reason: "single_choice_requires_connector" };
+    return {
+      ...base,
+      auto_choice: policyChoice(visible[0], "single_visible_choice", 1.0),
+    };
+  }
+
+  const scored = visible.map((choice, index) => ({
+    choice,
+    index,
+    score: choiceScore(choice, index),
+    profile_score: profileScore(choice, tagCounts),
+    blocked: hasAnyTag(choice, POLICY_BLOCK_TAGS),
+    low_value: hasAnyTag(choice, POLICY_LOW_VALUE_TAGS),
+  }));
+  if (scored.some(x => x.blocked)) {
+    return { ...base, skip_reason: "high_stakes_small_choice" };
+  }
+
+  const nonLow = scored.filter(x => !x.low_value);
+  if (nonLow.length === 1) {
+    return {
+      ...base,
+      auto_choice: policyChoice(nonLow[0].choice, "dominates_low_value", 0.92, {
+        compared_choice_ids: visible.map(c => c.id),
+        score_gap: nonLow[0].score - Math.max(...scored.filter(x => x !== nonLow[0]).map(x => x.score)),
+      }),
+    };
+  }
+
+  const sorted = [...scored].sort((a, b) => b.score - a.score || a.index - b.index);
+  const scoreGap = sorted[0].score - sorted[1].score;
+  if (scoreGap >= 120 && !sorted[0].blocked) {
+    return {
+      ...base,
+      auto_choice: policyChoice(sorted[0].choice, "dominant_small_choice", 0.86, {
+        compared_choice_ids: visible.map(c => c.id),
+        score_gap: scoreGap,
+      }),
+    };
+  }
+
+  if (base.profile.total > 0) {
+    const byProfile = [...scored].sort((a, b) => b.profile_score - a.profile_score || b.score - a.score || a.index - b.index);
+    const profileGap = byProfile[0].profile_score - byProfile[1].profile_score;
+    if (profileGap > 0 && !byProfile[0].blocked) {
+      return {
+        ...base,
+        auto_choice: policyChoice(byProfile[0].choice, "profile_small_choice", Math.min(0.84, 0.62 + profileGap / Math.max(8, base.profile.total * 2)), {
+          compared_choice_ids: visible.map(c => c.id),
+          profile_score: byProfile[0].profile_score,
+          profile_gap: profileGap,
+        }),
+      };
+    }
+  }
+  return { ...base, skip_reason: "profile_insufficient" };
+}
+
+export function agentChoices(s, opts = {}) {
+  const raw = legalChoices(s);
+  const maxChoices = Math.max(2, Number(opts.maxChoices || 12));
+  const threshold = Math.max(maxChoices, Number(opts.threshold || maxChoices));
+  const annotated = raw.map((choice, index) => ({ ...annotateChoice(s, choice, raw), index }));
+  let visible = annotated.filter(c => !c.hide_from_agent);
+  const hidden = annotated.filter(c => c.hide_from_agent);
+  if (!visible.length && hidden.length) {
+    const restored = hidden.shift();
+    restored.hide_from_agent = false;
+    restored.hide_reason = null;
+    visible = [restored];
+  }
+  if (visible.length > threshold) {
+    const keep = selectDiverseChoices(visible, maxChoices);
+    const keepIds = new Set(keep.map(c => c.id));
+    for (const c of visible) {
+      if (!keepIds.has(c.id)) hidden.push({ ...c, hide_from_agent: true, hide_reason: "choice_cap" });
+    }
+    visible = keep;
+  }
+  const reasonCounts = {};
+  for (const c of hidden) reasonCounts[c.hide_reason || "unknown"] = (reasonCounts[c.hide_reason || "unknown"] || 0) + 1;
+  const clean = c => ({
+    id: c.id,
+    label: c.label,
+    tags: c.tags || [],
+    bucket: c.bucket || c.id.split(":")[0],
+    hide_from_agent: !!c.hide_from_agent,
+    hide_reason: c.hide_reason || null,
+  });
+  const cleanHidden = c => ({
+    id: c.id,
+    tags: c.tags || [],
+    bucket: c.bucket || c.id.split(":")[0],
+    hide_from_agent: true,
+    hide_reason: c.hide_reason || null,
+  });
+  const visibleClean = visible.map(clean);
+  const hiddenClean = hidden.map(cleanHidden);
+  return {
+    schema: "lok_choice_meta/1.0",
+    raw_count: raw.length,
+    visible_count: visible.length,
+    hidden_count: hidden.length,
+    reason_counts: reasonCounts,
+    decision_policy: decisionPolicy(visibleClean, {
+      enabled: opts.decisionPolicy !== false,
+      maxAutoChoices: opts.autoSmallMax || 2,
+      profile: opts.profile || {},
+    }),
+    choices: visibleClean,
+    hidden: hiddenClean,
+  };
+}
+
 // 強制手の自動進行: 合法手が1つしかない=判断が存在しない → 自動で適用(プレイ時間短縮の核)
 // 適用したIDの配列を返す(リプレイ用に必ずログへ保存すること)
 export function autoForward(s, max = 30) {

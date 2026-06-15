@@ -1,7 +1,12 @@
 // エージェントプロトコルの完全性テスト:
 // 「列挙された合法手をランダムに選び続けるだけで、必ずラン終了に到達できる」(stuck/例外/列挙バグ=ゼロ)
 // usage: node tests/agent.mjs [runs=120]
-import { newGame, replay, legalChoices, applyChoice, observe, LK, DEFAULT_AGENT_UNDO_LIMIT } from "../agent/protocol.mjs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { newGame, replay, legalChoices, agentChoices, decisionPolicy, applyChoice, observe, LK, DEFAULT_AGENT_UNDO_LIMIT } from "../agent/protocol.mjs";
 
 let failed = 0, passed = 0;
 function ok(cond, name, detail) {
@@ -13,6 +18,8 @@ const N = Number(process.argv[2] || 120);
 const kinds = new Set();
 let totalSteps = 0, deepest = 1, wins = 0;
 const ships = ["vagrants", "bellyroll", "astra"];
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const cliPath = path.join(repoRoot, "agent", "cli.mjs");
 
 for (let i = 0; i < N; i++) {
   const rnd = (() => { let a = (7700 + i) ^ 0x9e3779b9; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })();
@@ -101,6 +108,102 @@ for (let i = 0; i < N; i++) {
   if (legacyIds.length) {
     const replayed = replay({ seed: 9902, ship: "vagrants" }, legacyIds);
     ok(replayed.agentPolicy.undoRemaining === null, "legacy replay without agentUndoLimit remains unlimited");
+  }
+}
+
+// agentChoices は人間/UI用の合法手を変えず、非人間入口だけにタグと明白な除外を与える。
+{
+  const s = newGame({ seed: 9911, ship: "astra" });
+  const raw = legalChoices(s);
+  const view = agentChoices(s, { maxChoices: 12, threshold: 12 });
+  ok(view.schema === "lok_choice_meta/1.0", "agentChoices emits versioned metadata");
+  ok(view.raw_count === raw.length, "agentChoices preserves raw choice count");
+  ok(view.visible_count === view.choices.length && view.visible_count <= 12, "agentChoices caps crowded openings");
+  ok(view.hidden_count === view.hidden.length && view.hidden_count > 0, "agentChoices hides overflow only from agent view");
+  ok((view.reason_counts.choice_cap || 0) > 0, "agentChoices records choice_cap reason");
+  ok(view.choices.every(c => raw.some(r => r.id === c.id)), "agentChoices visible ids remain legal");
+  ok(view.choices.some(c => (c.tags || []).length), "agentChoices annotates visible choices with tags");
+
+  const camp = newGame({ seed: 9912, ship: "astra", contracts: ["norepair"] });
+  camp.screen = "upgrade";
+  const campRaw = legalChoices(camp);
+  const campView = agentChoices(camp);
+  ok(campRaw.some(c => c.id === "camp_resupply"), "legalChoices keeps blocked camp_resupply visible for compatibility");
+  ok(campView.hidden.some(c => c.id === "camp_resupply" && c.hide_reason === "blocked_by_contract"), "agentChoices hides blocked camp_resupply");
+
+  const forced = newGame({ seed: 9913, ship: "astra" });
+  forced.enc.phase = "cleared";
+  const forcedView = agentChoices(forced);
+  ok(forcedView.decision_policy.auto_choice.id === "clear_continue", "decisionPolicy auto-selects single visible choice");
+
+  const route = newGame({ seed: 9914, ship: "astra" });
+  route.screen = "route";
+  const routeView = agentChoices(route);
+  ok(!routeView.decision_policy.auto_choice && routeView.decision_policy.skip_reason === "high_stakes_small_choice", "decisionPolicy leaves high-stakes route choice to connector");
+
+  const singleHighStakes = decisionPolicy([
+    { id: "keep", tags: ["progress", "safe", "high_stakes"], bucket: "keep" },
+  ]);
+  ok(!singleHighStakes.auto_choice && singleHighStakes.skip_reason === "single_choice_requires_connector", "decisionPolicy does not auto-select single high-stakes choice");
+
+  const blockedVsLow = decisionPolicy([
+    { id: "damage_hp", tags: ["takes_damage", "high_stakes"], bucket: "damage_hp" },
+    { id: "fizzle:0", tags: ["low_value"], bucket: "fizzle:0" },
+  ]);
+  ok(!blockedVsLow.auto_choice && blockedVsLow.skip_reason === "high_stakes_small_choice", "decisionPolicy leaves high-stakes vs low-value choice to connector");
+
+  const selfDamageVsLow = decisionPolicy([
+    { id: "act:0:ship:target:self", tags: ["self_damage", "attack"], bucket: "act:attack" },
+    { id: "fizzle:0", tags: ["low_value"], bucket: "fizzle:0" },
+  ]);
+  ok(!selfDamageVsLow.auto_choice && selfDamageVsLow.skip_reason === "high_stakes_small_choice", "decisionPolicy does not auto-select self-damage over fizzle");
+
+  const profiled = decisionPolicy([
+    { id: "attack", tags: ["attack"], bucket: "act:attack" },
+    { id: "guard", tags: ["defense"], bucket: "act:defense" },
+  ], { profile: { total: 3, tag_counts: { defense: 3 } } });
+  ok(profiled.auto_choice && profiled.auto_choice.id === "guard" && profiled.auto_choice.reason === "profile_small_choice", "decisionPolicy uses tag profile for two good choices");
+}
+
+// CLI の非人間入口は CHOICE_META を出し、選択タグ profile を run JSON に永続化する。
+{
+  const dir = mkdtempSync(path.join(tmpdir(), "lok-agent-cli-"));
+  const file = path.join(dir, "run.json");
+  try {
+    const newOut = execFileSync(process.execPath, [
+      cliPath,
+      "new",
+      "--seed", "9911",
+      "--ship", "astra",
+      "--file", file,
+      "--agent-choices",
+      "--choice-max", "2",
+      "--choice-threshold", "2",
+    ], { encoding: "utf8" });
+    const metaLine = newOut.split(/\r?\n/).find(line => line.startsWith("CHOICE_META "));
+    ok(!!metaLine, "CLI new --agent-choices emits CHOICE_META");
+    const meta = metaLine ? JSON.parse(metaLine.slice("CHOICE_META ".length)) : null;
+    ok(meta && meta.schema === "lok_choice_meta/1.0", "CLI CHOICE_META keeps schema");
+    ok(meta && meta.decision_policy && meta.decision_policy.schema === "lok_decision_policy/1.0", "CLI CHOICE_META includes decision_policy schema");
+    const firstChoiceId = meta && meta.choices && meta.choices[0] && meta.choices[0].id;
+    ok(!!firstChoiceId, "CLI CHOICE_META lists visible choices");
+
+    const chooseOut = execFileSync(process.execPath, [
+      cliPath,
+      "choose",
+      firstChoiceId,
+      "--file", file,
+      "--agent-choices",
+      "--choice-max", "2",
+      "--choice-threshold", "2",
+    ], { encoding: "utf8" });
+    ok(chooseOut.includes("CHOICE_META "), "CLI choose --agent-choices keeps CHOICE_META output");
+    const saved = JSON.parse(readFileSync(file, "utf8"));
+    ok(saved.agentChoiceProfile && saved.agentChoiceProfile.schema === "lok_choice_profile/1.0", "CLI persists agentChoiceProfile schema");
+    ok(saved.agentChoiceProfile && saved.agentChoiceProfile.total === 1, "CLI increments agentChoiceProfile total");
+    ok(Object.values(saved.agentChoiceProfile.tag_counts || {}).some(n => n > 0), "CLI persists agentChoiceProfile tag counts");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 }
 

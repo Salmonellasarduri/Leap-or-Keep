@@ -11,11 +11,12 @@
 // セリフ: --say はその判断への一言コメント(実況素材)。logで時系列に出る。
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { newGame, replay, legalChoices, applyChoice, observe, autoForward, LK, DEFAULT_AGENT_UNDO_LIMIT } from "./protocol.mjs";
+import { newGame, replay, legalChoices, agentChoices, applyChoice, observe, autoForward, LK, DEFAULT_AGENT_UNDO_LIMIT } from "./protocol.mjs";
 
 const args = process.argv.slice(2);
 const cmd = args[0];
 function opt(name, dflt) { const i = args.indexOf("--" + name); return i >= 0 ? args[i + 1] : dflt; }
+function flag(name) { return args.includes("--" + name); }
 const file = opt("file", "tmp/agent-run.json");
 function undoLimitOpt() {
   const raw = opt("undo-limit", String(DEFAULT_AGENT_UNDO_LIMIT));
@@ -26,14 +27,50 @@ function undoLimitOpt() {
 
 function load() { return JSON.parse(readFileSync(file, "utf8")); }
 function save(data) { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, JSON.stringify(data)); }
-function show(s, note) {
+function emptyChoiceProfile() {
+  return { schema: "lok_choice_profile/1.0", total: 0, tag_counts: {}, bucket_counts: {} };
+}
+function ensureChoiceProfile(data) {
+  if (!data.agentChoiceProfile || typeof data.agentChoiceProfile !== "object") data.agentChoiceProfile = emptyChoiceProfile();
+  data.agentChoiceProfile.schema = "lok_choice_profile/1.0";
+  data.agentChoiceProfile.total = Number(data.agentChoiceProfile.total || 0);
+  data.agentChoiceProfile.tag_counts = data.agentChoiceProfile.tag_counts || {};
+  data.agentChoiceProfile.bucket_counts = data.agentChoiceProfile.bucket_counts || {};
+  return data.agentChoiceProfile;
+}
+function agentChoiceOptions() {
+  return {
+    maxChoices: Number(opt("choice-max", 12)),
+    threshold: Number(opt("choice-threshold", opt("choice-max", 12))),
+    decisionPolicy: !flag("no-decision-policy"),
+    autoSmallMax: Number(opt("auto-small-max", 2)),
+  };
+}
+function agentChoiceMeta(s, data) {
+  return agentChoices(s, { ...agentChoiceOptions(), profile: data ? ensureChoiceProfile(data) : emptyChoiceProfile() });
+}
+function choiceMetaForId(s, data, id) {
+  const meta = agentChoiceMeta(s, data);
+  return [...(meta.choices || []), ...(meta.hidden || [])].find(c => c.id === id) || null;
+}
+function recordChoiceProfile(data, choice) {
+  if (!choice) return;
+  const profile = ensureChoiceProfile(data);
+  profile.total += 1;
+  for (const tag of choice.tags || []) profile.tag_counts[tag] = (profile.tag_counts[tag] || 0) + 1;
+  const bucket = choice.bucket || choice.id.split(":")[0];
+  profile.bucket_counts[bucket] = (profile.bucket_counts[bucket] || 0) + 1;
+}
+function show(s, note, data = null) {
   const out = [];
   if (note) out.push(note);
   out.push(observe(s));
-  const cs = legalChoices(s);
+  const meta = flag("agent-choices") ? agentChoiceMeta(s, data) : null;
+  const cs = meta ? meta.choices : legalChoices(s);
   if (cs.length) {
     out.push(`\nCHOICES (${cs.length}件 — \`node agent/cli.mjs choose <id>\` で選択):`);
     for (const c of cs) out.push(`  ${c.id}  …${c.label}`);
+    if (meta) out.push(`CHOICE_META ${JSON.stringify(meta)}`);
   } else out.push("\n(選択肢なし — ラン終了)");
   console.log(out.join("\n"));
 }
@@ -49,12 +86,13 @@ if (cmd === "new") {
       agentUndoLimit: undoLimitOpt(),
     },
     ids: [],
+    agentChoiceProfile: emptyChoiceProfile(),
   };
   save(data);
-  show(newGame(data.opts), `# 新規ラン (seed=${data.opts.seed}, ship=${data.opts.ship}${data.opts.contracts.length ? ", 契約=" + data.opts.contracts.join(",") : ""}, undo=${data.opts.agentUndoLimit === null ? "unlimited" : data.opts.agentUndoLimit}) → ${file}`);
+  show(newGame(data.opts), `# 新規ラン (seed=${data.opts.seed}, ship=${data.opts.ship}${data.opts.contracts.length ? ", 契約=" + data.opts.contracts.join(",") : ""}, undo=${data.opts.agentUndoLimit === null ? "unlimited" : data.opts.agentUndoLimit}) → ${file}`, data);
 } else if (cmd === "state") {
   const data = load();
-  show(replay(data.opts, data.ids));
+  show(replay(data.opts, data.ids), null, data);
 } else if (cmd === "choose") {
   let say = null, wow = false;
   const ids = [];
@@ -62,6 +100,10 @@ if (cmd === "new") {
     if (args[i] === "--say") { say = args[++i]; continue; }
     if (args[i] === "--wow") { wow = true; continue; }
     if (args[i] === "--file") { ++i; continue; }
+    if (args[i] === "--agent-choices") { continue; }
+    if (args[i] === "--choice-max" || args[i] === "--choice-threshold") { ++i; continue; }
+    if (args[i] === "--no-decision-policy") { continue; }
+    if (args[i] === "--auto-small-max") { ++i; continue; }
     if (!args[i].startsWith("--")) ids.push(args[i]);
   }
   if (!ids.length) { console.error("usage: choose <id> [<id2>…] [--say \"一言\"] [--wow]"); process.exit(1); }
@@ -83,9 +125,11 @@ if (cmd === "new") {
       if (legal.length > 40) console.error(`  …他${legal.length - 40}件(state で全件)`);
       process.exit(1);
     }
+    const chosenMeta = choiceMetaForId(s, data, id);
     const r = applyChoice(s, id);
     if (!r.ok) { save(data); console.error(`✖ 失敗: ${id}: ${r.msg || "?"}(直前までは適用済み)`); process.exit(1); }
     data.ids.push(id);
+    recordChoiceProfile(data, chosenMeta);
     notes.push(`✔ ${id}`);
     // 強制手(合法手1つ)の自動進行
     const fwd = autoForward(s);
@@ -93,7 +137,7 @@ if (cmd === "new") {
     if (s.run.over) break;
   }
   save(data);
-  show(s, notes.join("\n"));
+  show(s, notes.join("\n"), data);
 } else if (cmd === "log") {
   const data = load();
   const s = replay(data.opts, data.ids);
