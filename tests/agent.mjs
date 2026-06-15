@@ -140,6 +140,9 @@ for (let i = 0; i < N; i++) {
   route.screen = "route";
   const routeView = agentChoices(route);
   ok(!routeView.decision_policy.auto_choice && routeView.decision_policy.skip_reason === "high_stakes_small_choice", "decisionPolicy leaves high-stakes route choice to connector");
+  const dangerRoute = routeView.choices.find(c => c.id === "route_danger");
+  ok(dangerRoute && dangerRoute.risk_facts.includes("greedy_route"), "CHOICE_META labels danger route as fact, not recommendation");
+  ok(!("recommended_id" in routeView) && !("recommendation" in dangerRoute), "CHOICE_META does not emit recommendations");
 
   const singleHighStakes = decisionPolicy([
     { id: "keep", tags: ["progress", "safe", "high_stakes"], bucket: "keep" },
@@ -187,6 +190,8 @@ for (let i = 0; i < N; i++) {
     ok(meta && meta.decision_policy && meta.decision_policy.schema === "lok_decision_policy/1.0", "CLI CHOICE_META includes decision_policy schema");
     const firstChoiceId = meta && meta.choices && meta.choices[0] && meta.choices[0].id;
     ok(!!firstChoiceId, "CLI CHOICE_META lists visible choices");
+    ok(Array.isArray(meta.choices[0].risk_facts), "CLI CHOICE_META includes additive risk_facts array");
+    ok(typeof meta.choices[0].consequence_summary === "string", "CLI CHOICE_META includes additive consequence_summary string");
 
     const chooseOut = execFileSync(process.execPath, [
       cliPath,

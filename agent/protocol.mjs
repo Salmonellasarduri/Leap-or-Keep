@@ -285,6 +285,10 @@ function addTag(tags, tag) {
   if (tag && !tags.includes(tag)) tags.push(tag);
 }
 
+function addFact(facts, fact) {
+  if (fact && !facts.includes(fact)) facts.push(fact);
+}
+
 function threatCells(enc) {
   const cells = new Set();
   for (const it of enc && enc.intents || []) {
@@ -323,7 +327,7 @@ function damageForTarget(state, spec, target) {
   return spec.dmg || 0;
 }
 
-function actionMeta(state, id, tags) {
+function actionMeta(state, id, tags, facts) {
   const enc = state.enc;
   const parts = id.split(":");
   const idx = Number(parts[1]);
@@ -337,8 +341,16 @@ function actionMeta(state, id, tags) {
     const [x, y] = (parts[4] || "").split(",").map(Number);
     const threats = threatCells(enc);
     addTag(tags, "move_choice");
-    if (threats.has(`${x},${y}`)) addTag(tags, "steps_into_threat");
-    else if (threats.has(`${unit.x},${unit.y}`)) addTag(tags, "avoids_damage");
+    const startsThreatened = threats.has(`${unit.x},${unit.y}`);
+    const endsThreatened = threats.has(`${x},${y}`);
+    if (endsThreatened) {
+      addTag(tags, "steps_into_threat");
+      addFact(facts, "steps_into_threat");
+    } else if (startsThreatened) {
+      addTag(tags, "avoids_damage");
+      addFact(facts, "escape_option");
+    }
+    if (unit.id === "ship" && unit.hp <= 2 && (startsThreatened || endsThreatened)) addFact(facts, "survival_critical");
   } else if (mode === "stay" && unit) {
     addTag(tags, "brake");
     if (spec && spec.kind === "brake_move" && !unit.drift) {
@@ -353,7 +365,11 @@ function actionMeta(state, id, tags) {
       const dmg = damageForTarget(state, spec, target);
       if (dmg > 0) {
         addTag(tags, "causes_damage");
-        if (LK.effDamage(target, dmg) >= target.hp) addTag(tags, "lethal");
+        addFact(facts, "deals_damage");
+        if (LK.effDamage(target, dmg) >= target.hp) {
+          addTag(tags, "lethal");
+          addFact(facts, "lethal_target");
+        }
       }
     }
   } else if (mode === "multi") {
@@ -362,6 +378,9 @@ function actionMeta(state, id, tags) {
     if (spec && spec.kind === "heal" && unit && unit.hp >= unit.maxHp && !spec.shield) {
       addTag(tags, "no_effect");
       hideReason = "heal_full_hp";
+    } else if (spec && spec.kind === "heal") {
+      addFact(facts, "repair_available");
+      if (unit && unit.hp <= 2) addFact(facts, "survival_recovery");
     }
   }
   return hideReason;
@@ -385,32 +404,49 @@ function pairBucket(state, id, tags) {
 
 function annotateChoice(state, choice, rawChoices) {
   const tags = [];
+  const facts = [];
   const head = choice.id.split(":")[0];
   let hideReason = "";
   let bucket = head;
+  let consequenceSummary = "";
+  const enc = state.enc;
+  const ship = enc ? LK.unitById(enc, "ship") : null;
+  const pendingDamage = LK.pendingDamage(state);
   if (["enemy_turn", "drift", "clear_continue"].includes(head)) { addTag(tags, "progress"); addTag(tags, "forced_progress"); }
   if (["commit", "keep"].includes(head)) addTag(tags, "progress");
-  if (head === "keep") { addTag(tags, "safe"); addTag(tags, "high_stakes"); }
+  if (head === "keep") { addTag(tags, "safe"); addTag(tags, "high_stakes"); addFact(facts, "safe_route"); addFact(facts, "locks_payout"); consequenceSummary = "ランを勝利で終えて現在のカーゴ価値を確定する"; }
   if (head.startsWith("route_")) { addTag(tags, "route"); addTag(tags, "high_stakes"); }
-  if (head === "route_safe") addTag(tags, "safe");
-  if (head === "route_danger") { addTag(tags, "risk"); addTag(tags, "temptation"); addTag(tags, "upside"); }
+  if (head === "route_safe") { addTag(tags, "safe"); addFact(facts, "safe_route"); consequenceSummary = "安全ルートへ進む"; }
+  if (head === "route_danger") { addTag(tags, "risk"); addTag(tags, "temptation"); addTag(tags, "upside"); addFact(facts, "greedy_route"); consequenceSummary = "危険ルートへ進み、レア報酬の可能性を取る"; }
   if (head.startsWith("camp_")) addTag(tags, "camp");
   if (head === "camp_resupply" && LK.hasContract(state.run, "norepair")) {
     addTag(tags, "blocked");
     hideReason = "blocked_by_contract";
   }
   if (head.startsWith("relic_")) { addTag(tags, "relic"); addTag(tags, "high_stakes"); }
-  if (head === "relic_seal") addTag(tags, "safe");
-  if (head === "relic_deploy") { addTag(tags, "risk"); addTag(tags, "temptation"); addTag(tags, "resource_loss"); addTag(tags, "upside"); }
-  if (head === "leap") { addTag(tags, "risk"); addTag(tags, "resource_loss"); addTag(tags, "high_stakes"); addTag(tags, "temptation"); addTag(tags, "upside"); }
+  if (head === "relic_seal") { addTag(tags, "safe"); addFact(facts, "locks_payout"); consequenceSummary = "遺物を封印してカーゴ価値に変える"; }
+  if (head === "relic_deploy") { addTag(tags, "risk"); addTag(tags, "temptation"); addTag(tags, "resource_loss"); addTag(tags, "upside"); addFact(facts, "greedy_route"); addFact(facts, "trades_payout_for_power"); consequenceSummary = "遺物価値を放棄して即戦力カード化する"; }
+  if (head === "leap") { addTag(tags, "risk"); addTag(tags, "resource_loss"); addTag(tags, "high_stakes"); addTag(tags, "temptation"); addTag(tags, "upside"); addFact(facts, "greedy_route"); addFact(facts, "burns_fuel_cards"); addFact(facts, "raises_reward_multiplier"); consequenceSummary = "カードを燃料にして次の深度へ跳び、将来倍率を上げる"; }
   if (head === "loadout" || head === "loadout_default") addTag(tags, "loadout");
   if (head === "undo") { addTag(tags, "recovery_only"); bucket = "undo"; }
-  if (head === "damage_hp") { addTag(tags, "takes_damage"); addTag(tags, "resource_preserve"); addTag(tags, "high_stakes"); }
-  if (head === "damage_burn") { addTag(tags, "resource_loss"); addTag(tags, "avoids_damage"); addTag(tags, "survival"); addTag(tags, "high_stakes"); }
+  if (head === "damage_hp") {
+    addTag(tags, "takes_damage"); addTag(tags, "resource_preserve"); addTag(tags, "high_stakes");
+    addFact(facts, "takes_damage");
+    const unit = pendingDamage && enc ? LK.unitById(enc, pendingDamage.unitId) : null;
+    if (unit && unit.id === "ship") addFact(facts, "ship_damage");
+    if (unit && unit.hp <= 2) addFact(facts, "survival_critical");
+    if (unit && pendingDamage && pendingDamage.dmg >= unit.hp) addFact(facts, unit.id === "ship" ? "incoming_lethal" : "unit_lethal_damage");
+    if (unit && pendingDamage) consequenceSummary = `${unit.name} HP ${unit.hp}->${Math.max(0, unit.hp - pendingDamage.dmg)} (${pendingDamage.src})`;
+  }
+  if (head === "damage_burn") {
+    addTag(tags, "resource_loss"); addTag(tags, "avoids_damage"); addTag(tags, "survival"); addTag(tags, "high_stakes");
+    addFact(facts, "prevents_pending_damage"); addFact(facts, "burns_card");
+    consequenceSummary = "カードを永久ロストして保留中ダメージを無効化する";
+  }
   if (head === "salvage_card") addTag(tags, "resource");
-  if (head === "salvage_repair") addTag(tags, "repair");
-  if (head === "rest_random") { addTag(tags, "rest"); addTag(tags, "random"); addTag(tags, "resource_loss"); addTag(tags, "high_stakes"); }
-  if (head === "rest_choose") { addTag(tags, "rest"); addTag(tags, "resource_loss"); addTag(tags, "high_stakes"); }
+  if (head === "salvage_repair") { addTag(tags, "repair"); addFact(facts, "repair_available"); if (ship && ship.hp <= 2) addFact(facts, "survival_recovery"); }
+  if (head === "rest_random") { addTag(tags, "rest"); addTag(tags, "random"); addTag(tags, "resource_loss"); addTag(tags, "high_stakes"); addFact(facts, "random_loss"); addFact(facts, "burns_card"); consequenceSummary = "ランダムに1枚永久ロストして休息する"; }
+  if (head === "rest_choose") { addTag(tags, "rest"); addTag(tags, "resource_loss"); addTag(tags, "high_stakes"); addFact(facts, "burns_card"); if (ship && ship.hp <= 2 && !state.run.freeChooseRest) addFact(facts, "survival_critical"); consequenceSummary = state.run.freeChooseRest > 0 ? "選んだカードを永久ロストして無償休息する" : "旗艦HPを支払い、選んだカードを永久ロストして休息する"; }
   if (head === "fizzle") {
     addTag(tags, "low_value");
     const idx = choice.id.split(":")[1];
@@ -422,13 +458,15 @@ function annotateChoice(state, choice, rawChoices) {
   }
   if (head === "act") {
     addTag(tags, "action");
-    hideReason = actionMeta(state, choice.id, tags) || hideReason;
+    hideReason = actionMeta(state, choice.id, tags, facts) || hideReason;
     bucket = ["act", ...uniq(tags).filter(t => ["attack", "position", "control", "defense", "repair", "resource", "setup", "lethal", "avoids_damage"].includes(t)).sort()].join(":");
   }
   return {
     id: choice.id,
     label: choice.label,
     tags: uniq(tags),
+    risk_facts: uniq(facts),
+    consequence_summary: consequenceSummary,
     bucket,
     hide_from_agent: !!hideReason,
     hide_reason: hideReason || null,
@@ -631,6 +669,8 @@ export function agentChoices(s, opts = {}) {
     id: c.id,
     label: c.label,
     tags: c.tags || [],
+    risk_facts: c.risk_facts || [],
+    consequence_summary: c.consequence_summary || "",
     bucket: c.bucket || c.id.split(":")[0],
     hide_from_agent: !!c.hide_from_agent,
     hide_reason: c.hide_reason || null,
