@@ -1,0 +1,31 @@
+{
+  "exact": {
+    "LEAP OR KEEP — 船長診断": "LEAP OR KEEP — CAPTAIN TYPE",
+    "墓所制圧": "Tomb conquered",
+    "最大連鎖": "Best chain",
+    "推定艦隊比": "Est. fleet share",
+    "SEEDで同じ宇宙に挑める": "dare the same universe at SEED",
+    "受信した航海記録": "Incoming voyage record",
+    "あんたは何型だ?": "What type are you?",
+    "⚔ 挑戦状リンクをコピー": "⚔ Copy challenge link",
+    "⚔ コピーした — 相手に送りつけろ": "⚔ Copied — go throw the gauntlet",
+    "同じシード=同じ宇宙。敵も機雷も同じ配置で、あんたの腕だけが変数だ": "Same seed = same universe. Same foes, same mines — your skill is the only variable",
+    "この航海と同じシード(同じ宇宙・同じ配置)に相手を招待するURLをコピー": "Copy a URL that invites someone into this exact universe (same seed, same layout)",
+    "Xの投稿画面が開く(診断結果+スコア+挑戦状URL入り)": "Opens an X post (type + score + challenge URL included)",
+    "1200×675の診断カード画像をダウンロード — 投稿に添付できる": "Download the 1200×675 captain-type card image — attach it to your post",
+    "𝕏 結果をポスト": "𝕏 Post result",
+    "🖼 カード画像を保存": "🖼 Save card image"
+  },
+  "rules": [
+    ["^⚔ この宇宙に挑む — SEED (\\d+)$", "⚔ Dare this universe — SEED $1"],
+    ["^『(.+)』$", "“$1”"],
+    ["^— (.+) —$", "— $1 —"],
+    ["^連鎖×(\\d+)🎆$", "Chain ×$1🎆"],
+    ["^機雷が誘爆! 連鎖(\\d+)発目!$", "Mine sympathetic detonation! Chain link $1!"],
+    ["^誘爆 ×2!$", "CHAIN ×2!"],
+    ["^連鎖爆発 ×3!!$", "CHAIN BLAST ×3!!"],
+    ["^花火大会 ×(\\d+)!!!$", "FIREWORKS ×$1!!!"],
+    ["^物理キル ×(\\d+)!!$", "PHYSICS KILL ×$1!!"],
+    ["^物理キル!$", "PHYSICS KILL!"]
+  ]
+}

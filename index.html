@@ -67,7 +67,36 @@ h1,h2{letter-spacing:.06em;}
 .fxring{position:absolute; width:18px; height:18px; border-radius:50%; border:3px solid var(--amber);
   transform:translate(-50%,-50%); animation:fxring .5s ease-out forwards; pointer-events:none;}
 @keyframes fxring{0%{opacity:1; scale:.4; border-width:6px;}100%{opacity:0; scale:4.5; border-width:1px;}}
-.fxstamp.big{font-size:2rem; color:#ffd700; text-shadow:0 0 16px #ffd70088, 2px 2px 0 #000;}
+.fxstamp.big{font-size:2rem; color:#ffd700; text-shadow:0 0 12px #ffea00aa, 0 0 28px #ff5a0088, 2px 2px 0 #000;}
+/* 爆発の白い芯: まず白黄で発光→橙→外周赤(発光の階層) */
+.fxcore{position:absolute; width:64px; height:64px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; z-index:30;
+  background:radial-gradient(circle, #fff 0 10%, #fff36a 18%, #ff9d00 42%, #ff3d00 72%, transparent 100%);
+  mix-blend-mode:screen; animation:fxcore .26s cubic-bezier(.12,.9,.2,1) forwards;}
+@keyframes fxcore{0%{opacity:1; scale:.35;}55%{opacity:1; scale:1.25;}100%{opacity:0; scale:.9;}}
+/* 着弾ショックリング: 爆発の「瞬間」と「熱」を分離する1枚(Codex処方) */
+.fxshock{position:absolute; width:36px; height:36px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; z-index:31;
+  border:2px solid rgba(255,245,150,.85); filter:blur(1px);
+  animation:fxshock .23s ease-out forwards; animation-delay:.07s; opacity:0;}
+@keyframes fxshock{0%{opacity:1; scale:1;}100%{opacity:0; scale:3.1;}}
+/* 誘爆ビーム: 爆心→巻き込み先へ走る光(なぜ連鎖したかを1コマで見せる) */
+.fxbeam{position:absolute; height:5px; transform-origin:left center; pointer-events:none; z-index:25;}
+.fxbeam::before{content:""; display:block; height:100%; border-radius:3px;
+  background:linear-gradient(90deg,#7cfbff,#ffe600); box-shadow:0 0 10px #6fffd2, 0 0 22px #ffe600;
+  transform-origin:left center; animation:fxbeam .2s ease-out forwards;}
+@keyframes fxbeam{0%{transform:scaleX(0); opacity:1;}45%{transform:scaleX(1); opacity:1;}78%{opacity:.9;}100%{transform:scaleX(1); opacity:0;}}
+/* 爆発の焦げ跡: 通った跡が1秒強残る(GIFの残光) */
+.fxscorch{position:absolute; width:76px; height:76px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; z-index:5;
+  background:radial-gradient(circle, rgba(255,120,0,.38) 0%, rgba(80,30,8,.45) 38%, transparent 72%);
+  animation:fxscorch 1.3s ease-out forwards;}
+@keyframes fxscorch{0%{opacity:.9;}100%{opacity:0;}}
+/* 連鎖コンボカウンタ: 盤面上部中央で数字が育つ */
+#fxchain{position:absolute; left:50%; top:12%; translate:-50% -50%; font-weight:900; color:#fff200; z-index:45; pointer-events:none; white-space:nowrap;
+  opacity:.92; text-shadow:0 0 12px #ffea00, 0 0 28px #ff5a00, 2px 2px 0 #000;}
+#fxchain.pop{animation:chainpop .18s cubic-bezier(.2,1.4,.4,1);}
+@keyframes chainpop{0%{scale:1.35; opacity:1;}100%{scale:1; opacity:.92;}}
+/* 爆発中はHUDを一瞬沈めて盤面を主役にする */
+#side,#hand{transition:opacity .25s,filter .25s;}
+#app.boomdim #side, #app.boomdim #hand{opacity:.55; filter:brightness(.85);}
 .fxconf{position:absolute; width:8px; height:12px; border-radius:2px; animation:fxconf 1.4s ease-in forwards; pointer-events:none;}
 @keyframes fxconf{0%{opacity:1; transform:translateY(0) rotate(0);}100%{opacity:.1; transform:translateY(480px) rotate(560deg);}}
 /* ボス */
@@ -85,9 +114,14 @@ h1,h2{letter-spacing:.06em;}
 .fxstamp{position:absolute; transform:translate(-50%,-50%) rotate(-6deg); font-weight:900; font-size:1.35rem;
   color:var(--gold); text-shadow:0 0 10px #000, 2px 2px 0 #000; letter-spacing:.06em; white-space:nowrap;
   animation:fxstamp .9s ease-out forwards; z-index:40;}
-@keyframes fxstamp{0%{opacity:0; scale:2.2;}18%{opacity:1; scale:1;}75%{opacity:1;}100%{opacity:0; scale:1.05;}}
+@keyframes fxstamp{0%{opacity:0; scale:.65;}12%{opacity:1; scale:1.18;}24%{scale:1;}75%{opacity:1; translate:0 0;}100%{opacity:0; scale:1.02; translate:0 -28px;}}
 #board.shake{animation:bshake .35s;}
 @keyframes bshake{0%,100%{translate:0 0}20%{translate:5px -4px}40%{translate:-6px 3px}60%{translate:4px 4px}80%{translate:-3px -3px}}
+/* 連鎖段数に応じたカメラパンチ(filterはpreserve-3dを壊すので使わない — L-030系) */
+#board.shake2{animation:bshake2 .32s;}
+@keyframes bshake2{0%,100%{translate:0 0; rotate:0deg;}15%{translate:8px -6px; rotate:-.4deg;}35%{translate:-9px 5px; rotate:.3deg;}55%{translate:7px 6px;}80%{translate:-5px -4px;}}
+#board.shake3{animation:bshake3 .42s;}
+@keyframes bshake3{0%,100%{translate:0 0; rotate:0deg;}12%{translate:11px -8px; rotate:-.6deg;}30%{translate:-12px 7px; rotate:.5deg;}50%{translate:10px 8px; rotate:-.3deg;}70%{translate:-8px -6px;}88%{translate:5px 4px;}}
 .container-item{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
   font-size:1.6rem; pointer-events:none; filter:drop-shadow(0 0 8px var(--gold)); animation:eyepulse 1.8s infinite;}
 /* 方向選択矢印(トーラスで2方向が同マスに着くとき) */
@@ -177,6 +211,7 @@ button[data-tt],.half[data-tt],.unit[data-tt],.cell[data-tt],.pick[data-tt]{curs
 #board.tilt::after{content:""; position:absolute; inset:0; border-radius:14px; pointer-events:none;
   background:linear-gradient(180deg,#0004,transparent 26%,transparent 80%,#0004);}
 #board.tilt .fxfloat,#board.tilt .fxstamp{transform:translate(-50%,-50%) rotateX(calc(var(--tilt) * -1));}
+#board.tilt #fxchain{transform:rotateX(calc(var(--tilt) * -1));}
 .uinner{width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; position:relative;}
 .unit::before{content:""; position:absolute; bottom:1px; left:14%; width:72%; height:11px; border-radius:50%;
   background:radial-gradient(ellipse, #000b 0%, transparent 70%); pointer-events:none;}
@@ -667,14 +702,25 @@ function startEncounter(state, loadoutUids){
   if(hasContract(run,"minefield") && !run.tutorial) hz=[hz[0],hz[1]+2]; // 契約『機雷宙域』
   const hzList=[...Array(hz[0]).fill("debris"),...Array(hz[1]).fill("mine")];
   let hi=0;
+  const minesPlaced=[];
   for(const t of hzList){
     let tries=0;
     while(tries++<30){
-      const x=1+Math.floor(state.rand()*3), y=Math.floor(state.rand()*CONFIG.GRID);
+      let x,y;
+      if(t==="mine" && minesPlaced.length && state.rand()<0.6){
+        // 機雷は6割で既存機雷の隣に寄せる: クラスタ=誘爆連鎖の火種(1発で花火大会が起きる地形)
+        const a=minesPlaced[Math.floor(state.rand()*minesPlaced.length)];
+        const nb=neighborCells(a.x,a.y);
+        const c=nb[Math.floor(state.rand()*nb.length)];
+        x=c.x; y=c.y;
+      } else {
+        x=1+Math.floor(state.rand()*3); y=Math.floor(state.rand()*CONFIG.GRID);
+      }
       if(units.some(u=>u.x===x&&u.y===y)) continue;
       const d=ENEMY_DEFS[t];
       units.push({id:"h"+(hi++), side:"hazard", type:t, name:d.name, icon:d.icon,
         x,y, hp:d.hp, maxHp:d.hp, dmg:d.dmg, drift:null, shield:0, alive:true});
+      if(t==="mine") minesPlaced.push({x,y});
       break;
     }
   }
@@ -713,7 +759,7 @@ function startEncounter(state, loadoutUids){
 }
 
 // ---- fx queue (UIが描画時に消費。ロジックはDOMを知らない) ----
-function fx(state, ev){ const q=state.enc&&state.enc.fxQueue; if(!q) return; q.push(ev); if(q.length>60) q.shift(); }
+function fx(state, ev){ const q=state.enc&&state.enc.fxQueue; if(!q) return; if(state.enc._fxDelay&&ev.d==null) ev.d=state.enc._fxDelay; q.push(ev); if(q.length>60) q.shift(); }
 // トーラスの縁越え(ラップ)通知: UIは盤面横断スライドではなく「端から退場→反対側から入場」を描く
 function wrapNote(state,u,dirKey){
   const enc=state.enc; if(!enc||!dirKey) return;
@@ -792,7 +838,7 @@ function driftPhase(state){
 
 // ---- damage ----
 const PHYS_SRCS=["衝突","激突","機雷の爆発","自爆"]; // 「物理」= 装甲種カラパスを素通しする系
-function dealDamage(state, u, dmg, src){
+function dealDamage(state, u, dmg, src, chain=0){ // chain=このダメージが通ってきた爆発リンク数(誘爆の深さ)
   if(!u.alive || dmg<=0) return;
   // ベリーロール(装甲衝角艦)のパッシブ: 物理は通さない、物理で殴る
   if((src==="衝突"||src==="激突") && state.run.shipId==="bellyroll"){
@@ -830,27 +876,20 @@ function dealDamage(state, u, dmg, src){
       }
       if(u.side==="enemy") state.run.kills=(state.run.kills||0)+1;
       if(u.side==="enemy" && src==="太陽フレア") chron(state,"flarekill",{name:u.name});
-      state.enc.killStreak=(state.enc.killStreak||0)+1;
-      if(state.enc.killStreak===2) fx(state,{type:"stamp",x:u.x,y:u.y,big:true,text:"DOUBLE KILL!"});
-      if(state.enc.killStreak>=3){ fx(state,{type:"stamp",x:u.x,y:u.y,big:true,text:"RAMPAGE!!"}); chronMerge(state,"rampage",state.enc.killStreak); }
+      if(u.side==="enemy"){ // 撃破ストリークは敵限定(機雷の誘爆で薄めない — 祝福の価値を守る)
+        state.enc.killStreak=(state.enc.killStreak||0)+1;
+        if(state.enc.killStreak===2) fx(state,{type:"stamp",x:u.x,y:u.y,big:true,text:"DOUBLE KILL!"});
+        if(state.enc.killStreak>=3){ fx(state,{type:"stamp",x:u.x,y:u.y,big:true,text:"RAMPAGE!!"}); chronMerge(state,"rampage",state.enc.killStreak); }
+      }
       // 機雷は死ぬとき周囲1マスの全ユニットを巻き込む(連鎖あり)
       if(u.type==="mine"){
-        if(src==="機雷の爆発"||src==="自爆") chronMerge(state,"chain",1); // 誘爆の連鎖(花火大会)— 同ビートは1件に統合
-        log(state, "機雷が誘爆! 周囲を薙ぎ払う", "bad");
-        fx(state,{type:"boom",x:u.x,y:u.y,big:true});
-        for(const c of neighborCells(u.x,u.y)){
-          const v=unitAt(state.enc,c.x,c.y);
-          if(v) dealDamage(state,v,2,"機雷の爆発");
-        }
+        const link=chain+1; // この爆発が連鎖の何発目か
+        chainBlast(state,u,link,"機雷の爆発", link>=2?`機雷が誘爆! 連鎖${link}発目!`:"機雷が誘爆! 周囲を薙ぎ払う");
       }
       // 自爆種ボムスポア: どんな死に方でも爆ぜる(歩く機雷 — 押し返して敵群で割れ)
       if((ENEMY_DEFS[u.type]||{}).boom){
-        log(state, `${u.name}が爆散! 周囲を巻き込む`, "bad");
-        fx(state,{type:"boom",x:u.x,y:u.y,big:true});
-        for(const c of neighborCells(u.x,u.y)){
-          const v=unitAt(state.enc,c.x,c.y);
-          if(v) dealDamage(state,v,2,"自爆");
-        }
+        const link=chain+1;
+        chainBlast(state,u,link,"自爆", `${u.name}が爆散! 周囲を巻き込む`);
       }
       // 分裂体ミトス: 死ぬと幼体2体が隣の空きマスへ(手数を喰う — 割る場所を選べ)
       if((ENEMY_DEFS[u.type]||{}).split){
@@ -876,6 +915,31 @@ function dealDamage(state, u, dmg, src){
     }
     else if(eff>0){ fx(state,{type:"hitflash",unitId:u.id}); log(state, `${u.name} に${eff}ダメージ (残HP${u.hp})`); }
   }
+}
+
+// 爆発の連鎖処理: link=この爆発が連鎖の何発目か。演出は110ms/段ずらして波及を見せる(視覚のみ、ロジックは即時解決)
+const CHAIN_STEP_MS=110;
+function chainBlast(state, u, link, src, msg){
+  if(link>=2){ // 誘爆(爆発が爆発を呼んだ)から演出がエスカレート
+    state.run.chainLinks=(state.run.chainLinks||0)+1;
+    state.run.chainBest=Math.max(state.run.chainBest||0,link);
+    chronMerge(state,"chain",link); // n=連鎖の最大深度
+    fx(state,{type:"chainx",n:link}); // 盤面上部の単一コンボカウンタ(段が上がるたび同じ場所でデカくなる)
+    fx(state,{type:"shake",n:Math.min(3,link)});
+    if(link===4) fx(state,{type:"confetti"});
+  }
+  log(state, msg, "bad");
+  fx(state,{type:"boom",x:u.x,y:u.y,big:true,core:true,stop:90+40*Math.min(4,link)});
+  const pd=state.enc._fxDelay||0;
+  state.enc._fxDelay=pd+CHAIN_STEP_MS; // 巻き込み先の被弾と次の誘爆は1段遅れて見せる
+  for(const c of neighborCells(u.x,u.y)){
+    const v=unitAt(state.enc,c.x,c.y);
+    if(v&&v.alive){
+      if(Math.abs(v.x-u.x)<=1&&Math.abs(v.y-u.y)<=1) fx(state,{type:"beam",x1:u.x,y1:u.y,x2:v.x,y2:v.y,d:pd}); // ラップ越えは線を引かない
+      dealDamage(state,v,2,src,link);
+    }
+  }
+  state.enc._fxDelay=pd;
 }
 
 function pendingDamage(state){ return state.enc && state.enc.dmgQueue.length ? state.enc.dmgQueue[0] : null; }
@@ -1488,7 +1552,7 @@ function runScore(state){
   const r=state.run;
   const base = cargoPayoutValue(state)*10 + (r.zone-1)*25 + (r.win?100:0)
     + aliveCards(state).length*3 + deployedStatus(state).filter(d=>d.alive).length*8
-    + (r.physKills||0)*12 + (r.bossKills||0)*80;
+    + (r.physKills||0)*12 + (r.chainLinks||0)*15 + (r.bossKills||0)*80;
   return Math.round(base*(1+0.25*r.asc)*contractMult(r));
 }
 // ---- 船長診断(3軸8型+サブ称号 — 調査準拠: 全型褒めベース/図星はプレイデータ由来/軽口は自虐とポジの同居) ----
@@ -1553,7 +1617,9 @@ function chronLine(ev){
       const how={"衝突":"滑ってきた軌道ごと","激突":"叩きつけられて","機雷の爆発":"機雷の花火に呑まれて","自爆":"爆風に攫われて"}[ev.src]||"物理に屈して";
       return pick([`${ev.name}、${how}砕けた — 引き金は引いていない`,`${ev.name}が${how}宇宙塵になった。これがこの宇宙の正しい錬金術`]);
     }
-    case "chain": return pick(["誘爆が連鎖して、盤面が一瞬だけ花火大会になった","爆発が爆発を呼んだ。誰も止めなかったし、止める気もなかった"]);
+    case "chain": return ev.n>=3
+      ? pick([`誘爆が${ev.n}連鎖 — 盤面がまるごと花火大会になった`,`爆発が爆発を呼び、${ev.n}発の連鎖が闇を昼に変えた`])
+      : pick(["誘爆が連鎖して、盤面が一瞬だけ花火大会になった","爆発が爆発を呼んだ。誰も止めなかったし、止める気もなかった"]);
     case "double": return null;
     case "rampage": return ev.n>=5?`${ev.n}連続撃破 — もはや誰も数えていなかった`:`${ev.n}連続撃破 — 静寂が戻るまで、誰も口を開かなかった`;
     case "neardeath": return pick(["船体、残り1。警報の中で、それでも舵は離さなかった",`${ev.src||"一撃"}が装甲を裂いた。残りHP1 — ここからが船長の仕事`]);
@@ -2346,6 +2412,45 @@ function unitTT(u, extra){
 }
 
 // ---------- boot ----------
+// ---- i18n(日英トグル): 表示層(DOM境界)でのみ翻訳。ロジック/プロトコル/保存データは日本語のまま ----
+let LANG="ja";
+/* I18N-DICT-START (tools/geni18n.mjs が tmp/i18n-exact.json + tmp/i18n-rules.json から生成・注入) */
+const EN_EXACT={"カーゴ: 空":"CARGO: empty","帰 還":"R E T U R N E D","伝 説":"L E G E N D","自発的帰還 — 生きて帰ることが勝利だ":"Voluntary return — coming home alive is the win","船体大破 — 深淵はあんたを離さなかった":"Hull shattered — the abyss wouldn't let you go","全カード喪失 — 燃料も、武器も、希望も尽きた":"All cards lost — fuel, guns, and hope, all spent","・盤の端は反対側につながっている(壁はない)":"• The board edges wrap to the opposite side (no walls)","盤の端は反対側につながっている(壁はない)":"The board edges wrap to the opposite side (no walls)","慣性の滑り先":"drift destination","赤=今R被弾予定(数字=ダメージ)":"red = hit incoming this R (number = damage)","橙=次Rに主砲 / 薄い影=":"orange = cannon next R / faint ghost = ","/ 点線=敵の移動予定":" / dotted = enemy path","▲航行":"▲NAV","▼戦闘":"▼COMBAT","航行":"NAV","戦闘":"COMBAT","様子見":"sizing you up","不発にする":"Fizzle it","戻る":"Back","ターンやり直し":"Redo turn","敵ターンへ":"To enemy turn","1枚目はクリックした側(▲航行/▼戦闘)。先にユニットをクリックして操縦予約もできる":"First card uses the half you clicked (▲NAV/▼COMBAT). Click a unit first to reserve the pilot","動いたら次R勝手に1マス滑る(":"Move now and you slide 1 tile next R (","慣性":"inertia",")。影が滑り先":"). The ghost marks where","止まる/曲がるにはカードが要る。":"Stopping/turning needs a card. ","直進はタダ、精密は有料":"straight is free, precision costs","敵は1→2の順に行動。赤マスから逃げろ":"Enemies act 1→2. Get off the red tiles","手札が尽きると休息=":"Empty hand forces a rest = ","1枚永久ロスト":"1 card lost forever","。カード=寿命":". Cards = lifespan","デスロール・バーン":"Deathroll Burn","フルリバース":"Full Reverse","ゼロ距離斉射":"Point-Blank Volley","ドローン・スウォーム":"Drone Swarm","応急パッチ":"Quick Patch","リパルサー・ブラスト":"Repulsor Blast","狙撃レールガン":"Sniper Railgun","回避機動":"Evasive Maneuver","ラムアタック":"Ram Attack","リックレス・リープ":"Reckless Leap","トラクター・ビーム":"Tractor Beam","オーバーバーン":"Overburn","弾幕散布":"Flak Spread","スクラップ回収":"Scrap Salvage","デブリ・シールド":"Debris Shield","ハープーン・ボルト":"Harpoon Bolt","衝角ブラスト":"Ramblast","自爆ドローン":"Suicide Drone","最終防衛線":"Last Line of Defense","機雷散布":"Minelayer","デコイ岩塊":"Decoy Rock","トドメ砲":"Finisher Cannon","重力子弾":"Graviton Shot","フュージョン・バースト":"Fusion Burst","星図ジャンプ":"Starchart Jump","位相変移":"Phase Shift","ナノリペア":"Nano Repair","グラビティ・アンカー":"Gravity Anchor","殲滅プロトコル":"Annihilate Protocol","移動2(直線)":"Move 2 (straight)","攻撃2 射程1":"Attack 2, Range 1","制動+移動1(ドリフト消去)":"Brake + Move 1 (clears drift)","攻撃1 射程2":"Attack 1, Range 2","移動1(直線)":"Move 1 (straight)","攻撃3 射程1":"Attack 3, Range 1","攻撃2 射程2":"Attack 2, Range 2","修理2(HP回復)":"Repair 2 (heal)","隣接敵を2マス押し飛ばす(ドリフト付与)":"Push adjacent enemy 2 tiles (applies drift)","貫通2 直線射程3(敵味方無差別)・反動ドリフト":"Pierce 2, straight range 3 (hits anyone), recoil drift","貫通2 直線射程3・無反動":"Pierce 2, straight range 3, no recoil","シールド2(このラウンド)":"Shield 2 (this round)","シールド2+制動":"Shield 2 + Brake","突進2: 直線上の標的に2ダメージして停止":"Charge 2: deal 2 damage to target in line, then stop","攻撃1 射程1":"Attack 1, Range 1","移動3(直線)":"Move 3 (straight)","射程2の敵を引き寄せ(ドリフトを自分向きに)":"Pull enemy at range 2 (drift toward you)","攻撃1+引き寄せ2(直線射程2)":"Attack 1 + pull 2 (straight range 2)","移動4(直線)・自分に1ダメージ":"Move 4 (straight), 1 damage to self","攻撃1 周囲1マスの全敵":"Attack 1, all enemies within 1 tile","消耗カード1枚を手札に回収":"Recover 1 spent card to hand","制動(ドリフト消去)":"Brake (clears drift)","攻撃1+引き寄せ(直線射程2)":"Attack 1 + pull (straight range 2)","攻撃1+2マス突き飛ばし(隣接)":"Attack 1 + push 2 tiles (adjacent)","攻撃3 周囲全対象 🔥ロスト":"Attack 3, all in range 🔥Lost","制動+移動1":"Brake + Move 1","シールド4 🔥ロスト":"Shield 4 🔥Lost","隣接空きマスに機雷2個 🔥ロスト":"Spawn 2 mines on adjacent empty tiles 🔥Lost","隣接空きマスに岩塊1個":"Spawn 1 rock on adjacent empty tile","攻撃1 射程2(傷ついた敵には+2)":"Attack 1, Range 2 (+2 vs wounded enemies)","攻撃1+ドリフト書換(直線射程2)":"Attack 1 + rewrite drift (straight range 2)","任意の空きマスへワープ(制動)":"Warp to any empty tile (brake)","攻撃1 射程3":"Attack 1, Range 3","移動2(ユニット通過可)":"Move 2 (passes through units)","射程2の敵のドリフトを任意方向に設定":"Set drift of enemy at range 2 to any direction","修理3+シールド1":"Repair 3 + Shield 1","制動+移動2":"Brake + Move 2","射程2の全敵を1マス引き寄せ":"Pull all enemies at range 2 by 1 tile","攻撃2 射程2・最大2体":"Attack 2, Range 2, up to 2 targets","ヴァグランツ":"Vagrants","標準サルベージ艦":"Standard Salvage Hull","なし(全性能が基準値)":"None (baseline stats)","癖がなく、すべての戦術が一通りこなせる。最初の相棒。":"No quirks — handles every tactic reasonably well. Your first partner.","ベリーロール":"Bellyroll","装甲衝角艦":"Armored Ram Hull","物理マスター: 衝突/激突で自軍は無傷・与ダメ+1":"Physical Mastery: no self-damage from collisions/rams, +1 damage dealt","ぶつかるために生まれた船。機雷も岩も敵も、すべては「ぶつける物」。":"Built to crash into things. Mines, rocks, enemies — all just things to ram.","アストラ":"Astra","長距離砲撃艦":"Long-Range Gunship","精密照準: 攻撃系の射程+1 — ただし船体が脆い(HP7)":"Precision Aim: +1 range on attacks — but a fragile hull (HP 7)","届かない間合いから削り切る。触らせなければ負けない — 触られなければ。":"Whittles them down from beyond reach. Untouchable, as long as nothing touches you.","標準":"Standard","基準難易度":"Baseline difficulty","深淵I":"Abyss I","全敵HP+1":"All enemies +1 HP","深淵II":"Abyss II","+リープの燃料がカード2枚になる":"+Leap fuel cost becomes 2 cards","深淵III":"Abyss III","+ゾーン3以降、全敵の攻撃+1":"+From Zone 3 on, all enemy attacks +1","重装編成":"Heavy Formation","全ての敵HP+1":"All enemies +1 HP","火力押しを罰する — 物理キルは素通しだ":"Punishes brute force — physical kills slip right through","増援協定":"Reinforcement Pact","各戦域の敵が1体増える":"Each encounter gets 1 extra enemy","手数勝負 — 同士討ちと爆発で間引け":"A numbers game — thin them with friendly fire and explosions","過給機関":"Supercharged Engine","ジャンプ燃料がカード+1枚":"Jump fuel cost +1 card","寿命が縮む — 深く跳ぶか、早く帰るか":"Shortens your lifespan — jump deep or head home early","補給封鎖":"Supply Blockade","整備ドックの「補給」が使えない":"\"Resupply\" is unavailable at the maintenance dock","回復は物理キルの装甲板だけ — ぶつけて生きろ":"Only physical-kill armor plating heals you — ram to survive","機雷宙域":"Minefield Sector","各戦域に機雷+2":"+2 mines per encounter","罠だらけ — だが罠はあんたの武器でもある":"Traps everywhere — but traps are your weapon too","老朽船体":"Aging Hull","出撃時の旗艦HP-2":"Flagship starts each sortie at -2 HP","被弾1点が重い — 完璧な盤面操作を":"Every point of damage hurts — play the board perfectly","古代のナノ修復槽":"Ancient Nano-Repair Vat","銀色の槽の中で、何かがまだ脈打っている。":"Something still pulses inside the silver vat.","不安定な位相コイル":"Unstable Phase Coil","持っているだけで輪郭がにじむ。たぶん気のせいじゃない。":"Just holding it blurs your outline. Probably not your imagination.","重力子アンカー":"Graviton Anchor","落ちない錨。むしろ周りが落ちてくる。":"An anchor that never falls. If anything, everything else falls toward it.","ひび割れた融合炉":"Cracked Fusion Core","ひびの奥で恒星の欠片が燃えている。修理? 無理無理。":"A shard of a star still burns behind the crack. Repair it? Not a chance.","死文明の星図":"Star Chart of a Dead Civilization","もう存在しない星々の地図。だが座標は今も生きている。":"A map of stars that no longer exist. The coordinates still work, though.","殲滅プロトコル断片":"Annihilate Protocol Fragment","彼らが最後に作ったもの。彼らが滅びた理由かもしれない。":"The last thing they built. Maybe the reason they're gone.","暴走採掘ドローン":"Rogue Mining Drone","最寄りの獲物へ1歩近づき、隣接していれば殴る。単純。だが慣性で滑って勝手に間合いを詰めてくる":"Steps 1 tile toward the nearest prey and swings if adjacent. Simple — but inertia drags it closer than you'd expect.","宇宙海賊":"Space Pirate","間合い2を保って撃つ。近づくと離れ、遠いと寄ってくる。直線武器か押し付けで詰めろ":"Holds range 2 and shoots. Backs off if you close in, closes in if you back off. Close the gap with straight-line weapons or a shove.","宙域クラゲ":"Void Jelly","↑→↓←の決まった巡回。本体の周囲1マス(触手)は敵味方問わず刺す — 敵を触手に押し込め":"Patrols a fixed up-right-down-left loop. Its tentacles (1-tile radius) sting anyone, friend or foe — shove enemies into them.","ハンター機":"Hunter Craft","速い。毎ターン2マス詰めてくる(+慣性)。先に撃つか、軌道上に罠を置け":"Fast. Closes 2 tiles every turn (plus inertia). Shoot first or lay a trap in its path.","古代防衛機構":"Ancient Defense Grid","不動・ドリフトなし。1ラウンドかけて直線を充填(橙)し、次のラウンドにその列を焼き払う(敵味方問わず!)":"Immobile, no drift. Spends 1 round charging a line (orange), then torches that row next round — friend or foe!","装甲種カラパス":"Carapace-Class Armor","分厚い甲殻が武器ダメージを1軽減。だが衝突・激突・爆発(物理)は素通しだ — 撃つな、ぶつけて割れ":"Thick carapace reduces weapon damage by 1. But collisions, rams, and explosions (physical) go right through — don't shoot it, crack it open.","分裂体ミトス":"Mitosis Splitter","倒すと幼体2体に分裂して手数を喰う。機雷や渦のそばで割るか、幼体ごと薙ぎ払え":"Splits into 2 larvae on death, eating up your actions. Pop it near a mine or vortex, or sweep the larvae away too.","ミトス幼体":"Mitosis Larva","分裂体の欠片。1発で消えるが、群れると囓り殺される":"A splitter's fragment. Dies in one hit, but a swarm of them will nibble you to death.","修復網メンダー":"Mender Network","毎ターン、最も傷ついた敵をHP+1修復しながら逃げ回る。放置はジリ貧 — 何を置いても最優先で潰せ":"Heals the most wounded enemy by 1 HP every turn while fleeing. Ignore it and you'll bleed out — kill it first, no matter what.","転移種ブリンカー":"Blinker","位相転移で跳ぶ(慣性も衝突も無視)。間合い2から撃つ。転移先は予告される — 着地点を読んで罠を敷け":"Phase-jumps (ignores inertia and collisions), then shoots from range 2. The landing spot is telegraphed — read it and set a trap.","自爆種ボムスポア":"Bomb Spore","歩く機雷。隣まで来ると自爆(周囲1マスに2ダメージ)。遠くで撃ち抜くか、押し返して敵の群れで爆ぜさせろ":"A walking mine. Self-destructs when adjacent (2 damage to everyone within 1 tile). Snipe it from afar, or shove it into an enemy cluster.","アポカリプス・コア":"Apocalypse Core","中心墓所の主":"Lord of the Final Graveyard","十字の射線を読め。機雷を産む — だが機雷は、こちらの武器にもなる。":"Read the cross-shaped line of fire. It spawns mines — but mines can be your weapon too.","不動。十字に充填→焼却を繰り返し、合間に機雷を産み落とす。レーンを外し続けろ":"Immobile. Repeats charge-then-torch in a cross pattern, dropping mines in between. Keep dodging the lanes.","グレイヴ・ローラー":"Grave Roller","墓所の轢断者":"The Graveyard's Crusher","照準→轢断の2拍子。装甲は銃を弾く — 機雷と岩の上へ誘い出して自滅させろ。":"A two-beat aim-then-crush pattern. Its armor deflects gunfire — lure it over mines and rocks to self-destruct.","装甲突進ボス。1ラウンドかけて照準(橙レーン)し、次のラウンドにそのレーンを轢断する(最初にぶつかった者に2、自分も軋む)。障害物が天敵":"Armored charger boss. Spends 1 round aiming (orange lane), then crushes that lane next round (2 damage to the first thing it hits, and it jolts itself too). Obstacles are its bane.","マザー・ミトス":"Mother Mitosis","増殖の女王":"Queen of the Swarm","群れを産みながら位相転移で逃げ回る。手数で溺れる前に、転移先を読んで追い詰めろ。":"Spawns broods while phase-jumping away. Read its landing spots and corner it before its swarm drowns you.","自分では殴らない。毎ターン幼体や自爆種を産み付け、近づけば位相転移で逃げる。巣ごと焼く速度勝負":"Never attacks directly. Spawns larvae or bomb spores every turn and phase-jumps away if approached. A race to burn the whole nest down.","岩塊":"Rock Debris","漂う岩。ぶつかれば双方1ダメージ。撃ち砕いて道を開けるか、敵を叩きつけろ":"A drifting rock. Colliding deals 1 damage to both sides. Shoot it clear or slam an enemy into it.","係留機雷":"Tethered Mine","触れるな。壊れると周囲1マス全てに2ダメージ(誘爆あり)。敵を押し込む最高の罠":"Don't touch it. Breaking it deals 2 damage to everyone within 1 tile (can chain-detonate). The best trap for shoving enemies into.","残骸ベルト":"Debris Belt","海賊の墓場":"Pirates' Graveyard","外縁墓標":"Outer Rim Headstone","沈黙の前哨":"Silent Outpost","歪んだ回廊":"Warped Corridor","黒灯台":"Black Lighthouse","虚無潮流":"Void Current","終端庭園":"Terminal Garden","中心墓所":"Final Graveyard","狩人型":"Hunter Type","宇宙全体を罠に変える人":"The one who turns all of space into a trap","軌道を読み、危険を選び、罠を編む。深淵で最も恐れられる種類の船長だ。":"Reads trajectories, courts danger, weaves traps. The most feared kind of captain in the abyss.","ただし保険には入らないタイプ。":"Just don't expect them to carry insurance.","海賊型":"Pirate Type","ぶつかってから考える人":"The one who rams first and thinks later","危険ルートに鼻歌で突っ込み、体当たりで道を開く。その勢いは数字を超える。":"Hums a tune while charging into danger routes, ramming a path open. The momentum defies the numbers.","燃料計はたぶん飾りだと思っている。":"Probably thinks the fuel gauge is just decoration.","技師型":"Engineer Type","爆発を芸術と呼ぶ人":"The one who calls explosions art","安全マージンの上に、最小の手数で最大の衝突を設計する。整備班の信頼が厚い。":"Designs maximum collisions with minimum moves, all within a safety margin. The maintenance crew trusts them deeply.","精算が地味なのは保険料のせい。":"The payout looks modest only because of the insurance premiums.","蛮勇型":"Brawler Type","装甲を信じて直進する人":"The one who trusts the armor and charges straight ahead","考えるより先に船体が動く。だが宇宙では、それで通ることが結構ある。":"The hull moves before the thought finishes. Out here, that works more often than it should.","修理班からの請求書は見ない主義。":"Makes a point of never reading the repair bill.","狙撃型":"Sniper Type","最後の1マスまで読む人":"The one who reads it out to the very last tile","危険を選び、しかし引き金は焦らない。レーンの先の未来が見えている。":"Chooses danger, but never rushes the trigger. Sees the future waiting down the lane.","読みすぎて燃料が先に尽きる日もある。":"Some days the overthinking burns through the fuel first.","山師型":"Gambler Type","引き金と契約だけが早い人":"The one who's only quick with triggers and contracts","レア遺物の匂いに迷いがない。深淵はあんたみたいな船長のためにある。":"Never hesitates at the scent of a rare relic. The abyss exists for captains like you.","帰り道のことは帰り道に考える。":"Worries about the way home once already on it.","測量型":"Surveyor Type","石橋を叩いてから撃つ人":"The one who tests the bridge before shooting","全ての射撃に根拠がある。「生存率」という言葉が服を着て歩いている。":"Every shot has a reason behind it. \"Survival rate\" walking around in a coat.","乾杯すら誰よりも慎重にやる。":"Even raises a toast more carefully than anyone else.","商人型":"Merchant Type","儲かったら帰る人":"The one who heads home once the profit's in","欲をかかず、確実に持ち帰る。母港で一番愛されるのはこういう船長だ。":"No greed, just a sure thing brought home. The most beloved captain type back at port.","伝説にはならないが、長生きはする。":"Never becomes a legend, but lives a long life.","👑伝説":"👑Legend","💥轢断魔":"💥Crusher","☠鉄の契約者":"☠Iron Contractor","🫀九死一生":"🫀Near-Death Survivor","✨無傷の帰還者":"✨Unscathed Returner","旗艦":"FS","随伴機":"Drone","LEAP OR KEEP — 船長診断":"LEAP OR KEEP — CAPTAIN TYPE","墓所制圧":"Tomb conquered","最大連鎖":"Best chain","推定艦隊比":"Est. fleet share","SEEDで同じ宇宙に挑める":"dare the same universe at SEED","受信した航海記録":"Incoming voyage record","あんたは何型だ?":"What type are you?","⚔ 挑戦状リンクをコピー":"⚔ Copy challenge link","⚔ コピーした — 相手に送りつけろ":"⚔ Copied — go throw the gauntlet","同じシード=同じ宇宙。敵も機雷も同じ配置で、あんたの腕だけが変数だ":"Same seed = same universe. Same foes, same mines — your skill is the only variable","この航海と同じシード(同じ宇宙・同じ配置)に相手を招待するURLをコピー":"Copy a URL that invites someone into this exact universe (same seed, same layout)","Xの投稿画面が開く(診断結果+スコア+挑戦状URL入り)":"Opens an X post (type + score + challenge URL included)","1200×675の診断カード画像をダウンロード — 投稿に添付できる":"Download the 1200×675 captain-type card image — attach it to your post","𝕏 結果をポスト":"𝕏 Post result","🖼 カード画像を保存":"🖼 Save card image","撃破!":"destroyed!","制動(その場)":"braking (holding)","動かない":"not moving","✦位相転移(慣性・衝突無視)":"phase warp (ignores drift/collision)","選び直す":"reselect","方向:":"direction:","本当に帰る? 深淵はまだ、何かを隠しているよ。":"Really heading home? The abyss is still hiding something.","最深部からの生還だ。胸を張れ。":"You made it back from the deepest reach. Stand tall.","こじ開ける(旗艦HP-1) — ロストしたカードを1枚回収":"Force it open (flagship HP-1) — recover 1 lost card","立ち去る":"walk away","こじ開けて調査(60%で遺物 / 40%で何かが目を覚ます)":"Pry it open and investigate (60% a relic / 40% something wakes up)","祈りを捧げる — 次の休息1回、無償で選別できる":"Offer a prayer — your next rest lets you choose for free","石碑のような構造体が漂っている。死文明の墓標だ。微かな信号がまだ脈打っている。":"A monolithic structure drifts in the void. A grave marker of a dead civilization. A faint signal still pulses within.","航路の途中、漂流するコンテナ船。応答はない。ハッチは固く錆びついている。":"A derelict container ship drifts along the route. No response. The hatch is rusted shut.","埃を被ったコンテナの中に、見覚えのある部品が…(旗艦HP-1の代償は次の戦域で支払う)":"Inside the dust-caked container, a familiar-looking part... (the flagship HP-1 cost is paid at the start of next zone)","🪦 静かな墓標":"Silent Gravestone","📡 漂流船":"Derelict Ship","了解、行くぞ":"Understood, let's move","サルベージ屋の心得 (30秒で読める)":"The Salvager's Creed (30-second read)","❶ 毎ターン<b>カードを2枚</b>選ぶ。1枚目はクリックした側、2枚目は自動で<b>もう片方の側</b>(▲航行/▼戦闘)<br>":"❶ Pick <b>2 cards</b> every turn. The 1st is whichever half you click; the 2nd auto-fills <b>the other half</b> (▲Nav/▼Combat)<br>","❷ 行動は<b>船とドローンの好きな方</b>にやらせていい。順番も自由。両方同じユニットでもいい<br>":"❷ Assign actions to <b>either the ship or the drone</b>, any order. Both can go to the same unit<br>","❸ <b>🌀慣性</b>: 移動した者は次のラウンド開始時、同方向へ勝手に1マス滑る。<b>半透明の影が滑り先</b>。止まりたければ『制動』<br>":"❸ <b>🌀Drift</b>: whoever moves slides 1 more tile the same direction next round start. <b>The translucent ghost shows where.</b> Play 'Brake' to stop<br>","❹ <b>赤いマス</b>=このラウンド終わりに敵が撃つ場所(数字=ダメージ)。<b>敵も喰らう</b> — 触手や機雷に押し込め<br>":"❹ <b>Red tiles</b> = where enemies will fire at round's end (number = damage). <b>Enemies take it too</b> — shove them into tentacles or mines<br>","❺ カード=寿命。休息で<b>1枚永久ロスト</b>。被弾はカードで無効化できるが、それも永久に失う<br>":"❺ Cards = lifespan. Resting <b>permanently loses 1 card</b>. You can burn a card to cancel damage, but that's lost forever too<br>","❻ <b>船体はゾーンを越えて持ち越し</b>。回復は応急パッチ/整備ドック/物理キルの残骸修理だけ<br>":"❻ <b>Hull carries over between zones.</b> Healing only comes from patch kits / the repair dock / physkill wreckage salvage<br>","⟲ 敵ターン前なら<b>何度でもやり直せる</b>。怖がらず試せ":"⟲ You can <b>redo as many times as you want</b> before the enemy turn. Don't be afraid to experiment","❶ 手札からカードの<b>▲上半分(航行)</b>をクリック — 1枚目はクリックした側を使う":"❶ Click a card's <b>▲top half (Nav)</b> from your hand — the 1st pick uses whichever half you click","❷ 2枚目のカードをクリック — 自動で<b>▼下半分(戦闘)</b>になる":"❷ Click a 2nd card — it auto-becomes <b>▼bottom half (Combat)</b>","❸ 光るマスをクリックで移動。<b>端はループする</b>。黄色い機雷の近くに敵を誘うと…?":"❸ Click a glowing tile to move. <b>Edges wrap around.</b> Lure an enemy near a yellow mine and...?","❹ 赤く光る敵をクリックで攻撃(届かなければ「不発にする」でもOK)":"❹ Click a red-glowing enemy to attack (if out of range, 'fizzle' is fine too)","❺ <b>Enter</b>か「敵ターンへ」で確定。⟲でターン丸ごとやり直せる":"❺ Confirm with <b>Enter</b> or 'End Turn'. ⟲ redoes the whole turn","❻ 薄い影=<b>慣性の滑り先</b>。敵を機雷に押し込む/ぶつけると<b>物理キル</b>=残骸から回収!":"❻ Faint ghost = <b>where drift will slide you</b>. Shove/ram an enemy into a mine for a <b>physkill</b> = salvage from the wreck!","⚠ WARNING ⚠":"⚠ WARNING ⚠","桁外れのエネルギー反応":"An off-the-charts energy signature","交戦開始":"Engage","🏠 帰還する (KEEP)":"🏠 Head Home (KEEP)","🚀 跳ぶ (LEAP)":"🚀 Leap Deeper (LEAP)","— One more leap. —":"— One more leap. —","📡 受信した航海記録":"📡 Incoming voyage log","死んだ文明の遺物は、深宇宙でいちばん高く売れる。":"Relics of dead civilizations fetch the highest price in deep space.","あんたは深宇宙サルベージャー。ボロ船と相棒のドローンで、墓場と化した星域に潜る。":"You're a deep-space salvager. A junker hull and a drone buddy, diving into a graveyard sector.","ゾーンを跳ぶたびに遺物は良くなり、敵は凶悪になる。":"Every zone you leap, the relics get better and the enemies get meaner.","カードは行動であり、燃料であり、命だ。":"Cards are actions. Cards are fuel. Cards are life.","全部失えば、船は漂う棺になる。":"Lose them all, and your ship becomes a drifting coffin.","どこまで潜って、いつ帰る? — それだけが、この仕事の問いだ。":"How deep, and when do you turn back? That's the only question this job asks.","出 撃":"LAUNCH","📚 訓練航行":"📚 Training Run","3分の訓練航行。2枚プレイ・慣性・物理キルを実戦形式で覚える(戦績に影響なし)":"A 3-minute training run. Learn 2-card play, drift, and physical kills hands-on (does not affect your record)","🛠 格納庫":"🛠 Hangar","持ち帰った価値(クレジット)でカードを解放し、遺物をインストールする":"Spend credits earned from salvage to unlock cards and install relics","🧭 型図鑑":"🧭 Captain Codex","全部の型で生きて帰れるか?":"Can you make it home as every type?","🏆 戦績":"🏆 Track Record","生還":"RETURNED","挑戦:":"Challenge: ","生還するたび次の深淵が解放される再挑戦の梯子。":"A ladder of rising stakes — every return unlocks the next abyss.","🔇 SE OFF":"🔇 SFX OFF","🔊 SE ON":"🔊 SFX ON","盤面を俯瞰3D風に傾ける":"Tilt the board into a pseudo-3D overhead view","📐 俯瞰":"📐 Tilt","▦ フラット":"▦ Flat","演出を軽量化(敵ターン高速・シェイク/紙吹雪OFF)。周回プレイ向け":"Lighten the effects (fast enemy turns, no shake/confetti). Good for repeat runs","⚡ 演出ライト":"⚡ FX Lite","✨ 演出フル":"✨ FX Full","Switch UI language (JP / EN)":"Switch UI language (JP / EN)","🌐 English":"🌐 English","🌐 日本語":"🌐 日本語","v0.6.0-alpha — シード:":"v0.6.0-alpha — Seed: ","(URLに ?seed=数字 で固定可)":" (pin it via ?seed=number in the URL)","船体を選べ — それが今回の「流儀」になる":"Pick a hull — it sets your style for this run","旗艦HP":"Flagship HP ","/ 随伴機HP":" / Drone HP ","この船で出る":"Launch with this ship","クレジットで就役させる(恒久解放)":"Commission it with credits (permanent unlock)","⚙ 強化 — どれを「+」にする?(表示は強化後の姿)":"⚙ Upgrade — which card gets the \"+\"? (shown as its upgraded form)","🔥印つきの強化は使い方そのものが変わる(無反動化・攻撃付与・制動付与)。":"Upgrades marked 🔥 change how the card works entirely (recoilless, adds an attack, adds braking).","🛠 整備ドック — ひとつだけ選べ":"🛠 Refit Dock — pick just one","強化は投資、補給は保険。船体は次のゾーンに持ち越される — どうせ死なない、は終わりだ。":"An upgrade is an investment; resupply is insurance. Your hull carries over to the next zone — \"I won't die anyway\" is over.","⚙ 強化":"⚙ Upgrade","カード1枚を恒久強化(+)。":"Permanently upgrade (+) one card.","将来へ複利で効く。":"Compounds in your favor down the road.","⛔ 契約『補給封鎖』により使用不可 — 回復は物理キルの装甲板だけだ":"⛔ Disabled by the 'Supply Blockade' contract — the only healing left is armor plating from physical kills","🔧 補給 ⛔":"🔧 Resupply ⛔","契約『補給封鎖』発動中。":"Contract 'Supply Blockade' is active.","🔧 補給":"🔧 Resupply","随伴機を完全復帰。":"Fully restores the drone.","📦 物資回収":"📦 Scrap Salvage","売却価値+1。":"Sale value +1.","地味だが、確実。":"Unglamorous, but reliable.","帰還で確定した売却価値がクレジットになる。ここで買ったカードは":"Sale value locks in as credits when you make it home. Cards bought here join your ","所持コレクション":"owned collection","に加わり、出撃前のデッキ編成で使える。":", and are available when you build your deck before launch.","技術解放(ブラックマーケット)":"Tech Unlocks (Black Market)","解放済み":"Unlocked","で解放":" to unlock","インストール済み遺物":"Installed Relics","(なし — 遺物を持ち帰り、サマリーでインストールを選べ)":"(None yet — bring a relic home and choose Install on the summary screen)","出撃デッキ編成 — 10枚を選べ":"Build Your Deck — Pick 10","これがこのランの全寿命だ。攻め・守り・機動・切り札(🔥)の配分を考えろ。":"This is your entire lifespan for the run. Balance offense, defense, mobility, and trump cards (🔥).","☠ 航行契約":"☠ Voyage Contracts","— 任意。盛るほどスコア倍率と危険手当が増える(自分の苦手だけ避けて選べ)":"— Optional. Stack more for a bigger score multiplier and hazard pay (just avoid the ones that hurt you most)","この編成で出撃":"Launch with this loadout","出撃ロードアウト — 戦闘に持ち込む":"Combat Loadout — choose the ","枚を選べ":" cards you're bringing into battle","この":"These ","枚が次の戦闘の":" cards are the ","全リソース":"entire resource pool","だ。毎ターン2枚使い、約3ターンで尽きる。":" for the next fight. You spend 2 per turn, so it's gone in about 3 turns.","尽きると":"Run out and it's ","強制休息=1枚永久ロスト":"forced rest — one card lost forever","。残りは予備として船倉に置いていく(この戦闘では使えない)。":". The rest stay in the hold as reserves (unusable in this fight).","セオリー":"Rule of thumb",": 攻撃の下側を厚く、『制動』持ちを1枚、修理/シールドを敵が強いほど多めに。カードにマウスを乗せると詳細。":": load up on attack-side bottoms, keep one 'brake' card, and bring more repair/shield the tougher the enemies get. Hover a card for details.","次の戦域の敵 (スキャナー情報)":"Enemies in the Next Sector (Scanner Intel)","出撃":"Launch","おまかせ編成":"Auto-Load","あと":"Pick ","枚選んで(カードをクリック)":" more (click a card)","敵の行動予定 (この順に動く)":"Enemy Action Order (they act in this order)","掃討完了":"All clear","リストにカーソルで対象マスを盤面に表示":"Hover an entry to highlight its target cell on the board","覚えておけ":"Remember This","・動いたら次R勝手に1マス滑る(<b>慣性</b>)。影が滑り先":"・Move, and next round you auto-slide 1 tile (<b>Drift</b>). The shadow shows where","・止まる/曲がるにはカードが要る。<b>直進はタダ、精密は有料</b>":"・Stopping or turning costs a card. <b>Straight is free, precision costs</b>","の順に行動。赤マスから逃げろ":" in order. Run from the red tiles","・手札が尽きると休息=<b>1枚永久ロスト</b>。カード=寿命":"・Empty hand means rest = <b>one card lost forever</b>. Cards are lifespan","航行記録":"Voyage Log","🛡 シールドが":"🛡 Shield blocked ","を弾いた!":"!","装甲で受けるか、カードを燃やして無効化するか。燃やしたカードは永遠に失われる(寿命と引き換えの命)。":"Take it on the hull, or burn a card to negate it. A burned card is lost forever — life traded for lifespan.","または、カードを燃やして":"Or burn a card for ","完全無効化":"full negation","(永久ロスト):":" (lost forever):","強制休息 — 手札が尽きた":"Forced Rest — Hand Empty","消耗カードはすべて手札に戻る。だが1枚だけ、宇宙に手放さなければならない。":"All spent cards return to your hand. But one has to be surrendered to the void.","このターン、敵は待ってくれない。":"The enemy won't wait this turn.","どれを失うかは宇宙が決める。タダで済むが、◆遺物カードが流れるかもしれない":"The universe decides what you lose. Free, but a ◆relic card might go with it","成り行きに任せる (ランダム・無償)":"Leave it to fate (random, free)","船体を軋ませて選別する。失うカードを自分で選べるが、旗艦のHPを1払う":"Strain the hull to choose yourself. You pick what's lost, but it costs 1 flagship HP","<br><b>HP1のため選べない</b>":"<br><b>Can't choose — HP is at 1</b>","自ら選ぶ (旗艦HP":"Choose yourself (Flagship HP ","選別 — どれをエアロックから出す?":"Cull — what goes out the airlock?","船体がHP1分軋む。選んだカードは永遠に失われる。":"The hull strains for 1 HP. Whatever you pick is gone forever.","やはり成り行きに任せる":"Leave it to fate after all","残骸から何を剥ぎ取る?":"What do you strip from the wreck? ","敵をぶつけて壊す — それがこの宇宙の正しい錬金術。":"Smash enemies into things to break them — that's the correct alchemy out here.","装甲板を引き剥がして船体に当てがう。船体は次のゾーンへ持ち越されるぞ":"Pry off a plate and bolt it to the hull. Your hull carries over to the next zone","🔧 装甲板 — 旗艦HP+1":"🔧 Armor Plate — Flagship HP+1","または消耗カードを1枚修復:":"Or repair one spent card:","(消耗パイルは空 — 装甲板を貰っておけ)":"(Spent pile is empty — take the armor plate)","中心墓所 — 制圧":"Core Tomb — Secured","死んだ文明の最後の怒りが、静かに眠りについた。":"The last fury of a dead civilization has quietly gone to sleep.","この宇宙であんたより深くまで行った者はいない。":"No one in this universe has gone deeper than you.","あとは、帰るだけだ。":"All that's left is to go home.","凱旋する":"Return in Triumph","戦域クリア!":"Sector Clear!","スキャナーに反応なし。漂う残骸と、静寂。消耗したカードは手札に戻る(ロストは戻らない)。":"Scanner's quiet. Drifting wreckage and silence. Spent cards return to your hand (lost ones don't).","続行":"Continue","どれを回収する?":"Which one do you salvage?","やめる":"Cancel","航路選択 —":"Route Select — ","の深部へ":" — Into the Depths","スキャナーが2本の航路を検出。どちらを抜けても次の戦域だ。":"Scanner detects two routes. Either one leads to the next sector.","🟢 安全ルート":"🟢 Safe Route","敵:":"Enemies: ","報酬: コモン遺物":"Reward: Common relic","🔴 危険ルート":"🔴 Danger Route","報酬:":"Reward: ","レア遺物":"Rare relic","遺物発見 —":"Relic Found — ","★レア":"★Rare","封印(Seal)":"Seal",": カーゴへ。売却価値":": Into cargo. Sale value ","— 帰還すれば確定し、アンロックに数えられる":" — locks in when you make it home, and is the ","唯一":"only","の方法。":" way to count toward unlocks.","…ただし、今のあんたを助けはしない。":"…but it won't help you right now.","展開(Deploy)":"Deploy","』としてデッキに追加。":"' and add it to your deck.","売却価値":"The sale value of ","は放棄する。そしてこのカードを失えば(休息・被弾・燃料)、遺物そのものが永遠に消える。":" is forfeit. And if you lose this card (rest, damage, fuel), the relic itself is gone forever.","…それでも、今ここで力が要るなら。":"…but if you need the power right now.","封印する — 家まで持って帰る":"Seal — carry it all the way home","展開する — 今、力が要る":"Deploy — I need it now","(デッキ上限)":"(deck limit reached)","ボス撃破チェックポイント ZONE":"Boss-Kill Checkpoint ZONE","— ここが最深部だ":" — this is rock bottom","— 跳ぶか、帰るか。":" — leap, or go home.","🏠 KEEP — 帰還する":"🏠 KEEP — Go Home","(カーゴは空っぽだ)":"(cargo's empty)","素の価値:":"Base value: ","× 深度倍率":" × depth multiplier ","= 確定報酬":"= guaranteed payout ","健在のまま帰還すればインストール候補(売却価値はない)。":"Bring it home intact and it's install-eligible (no sale value).","🚀 LEAP — さらに深く":"🚀 LEAP — Go Deeper","これより深くは、何もない。スキャナーは沈黙している。":"There's nothing deeper than this. The scanner's gone silent.","次:":"Next: ","— 敵はさらに凶悪":" — enemies get even nastier","次のボス(ZONE":"Survive to the next boss (ZONE",")まで生きれば深度倍率":") and your depth multiplier goes ","遺物のレアリティ上昇":"Relic rarity goes up","(レア率UP)":" (higher rare odds)","燃料コスト:":"Fuel cost: ","残りカード:":"Cards remaining: ","M I A":"M I A","ラン記録":"Run Record","★ 自己ベスト更新! ★":"★ New Personal Best! ★","到達ゾーン":"Deepest Zone","深度倍率":"Depth Multiplier","総ラウンド":"Total Rounds","物理キル":"Physical Kills","休息/被弾/燃料で失った":"Lost to Rest/Damage/Fuel","🧭 船長診断":"🧭 Captain Diagnosis","こぶし:":"Fists: ","物理":"Physical","砲撃":"Gunnery","／ リスク:":" / Risk: ","山師":"Gambler","堅実":"Steady","／ 判断:":" / Judgment: ","計画":"Planner","即興":"Improviser","図鑑":"Codex ","📜 航海記録":"📜 Voyage Chronicle","精算 — 所持クレジット:":"Settlement — Credits On Hand: ","遺物は":"A relic can be either ","売却":"sold","(クレジット=格納庫でカード解放)か":" (credits, spend at the Hangar) or ","インストール":"installed","(遺物カードを恒久コレクションへ)か。両方は取れない。":" (adds the relic card to your permanent collection). Not both.","封印遺物なし — 命だけ持って帰った。それも才能だ。":"No sealed relics — you brought home your life and nothing else. That's a skill too.","展開して生還した遺物:":"Relics deployed and brought home alive: ","インストール済":"Installed","使い込んだ遺物を母港で完全修復し、恒久コレクションへ(売却益はない)":"Fully restore the worn relic at home port and add it to your permanent collection (no sale value)","永遠に失われた遺物:":"Relics lost forever: ","相当)":" equivalent)","— 使った力の代金だ。":" — the price of the power you used.","クレジットの使い道は":"Spend your credits at the ","で(タイトル画面から)。":" (from the title screen).","失われたもの":"What Was Lost","カーゴの遺物(価値":"The relics in cargo (value ",")は星間に散った。":") scattered into the void.","それでも回収班が残骸から":"Still, a recovery crew pulled ","ぶん拾い上げた — 失敗ランも無駄ではない。":" from the wreckage — even a failed run isn't wasted.","格納庫の資産(₢":"Your Hangar assets (₢","とコレクション)は次のあんたが使う。":" and your collection) carry over to your next captain.","もう一度跳ぶ":"Leap Again","タイトルへ":"To Title","静かな墓標":"A Silent Marker","漂流船":"Adrift","— ジャンプ航路上の遭遇":" — an encounter on the jump route"};
+const EN_RULES=[["^ZONE (\\d+)/(\\d+) ?《(.+)》$","ZONE $1/$2 “$3”"],["^ZONE (\\d+) ?《(.+)》$","ZONE $1 “$2”"],["^— ZONE (\\d+) ?《(.+)》 ?—$","— ZONE $1 “$2” —"],["^(\\d+)回\\s*(.*)$","×$1 $2"],["^(\\d+) / (\\d+) / (\\d+)枚$","$1 / $2 / $3 cards"],["^SCORE — 挑戦: (.+) / (.+)$","SCORE — Abyss: $1 / $2"],["^([^぀-ヿ㐀-鿿]*)新たな挑戦『(.+)』が解放された!$","$1New challenge “$2” unlocked!"],["^推定艦隊比 (\\d+)%$","Est. fleet share $1%"],["^図鑑 (\\d+)/(\\d+)$","Codex $1/$2"],["^([^぀-ヿ㐀-鿿]*)ZONE(\\d+)まで(\\d+)ラウンド — その足取りに性格が出てる。$","$1ZONE $2 in $3 rounds — the gait tells on you."],["^▸?\\s*《(.+)》\\s*第(\\d+)戦域 — 警報!! 敵影(\\d+)。仕事の時間だ。$","▸ “$1” sector $2 — ALERT!! $3 hostiles. Time to work."],["^《(.+)》$","“$1”"],["^(\\d+) ([^぀-ヿ㐀-鿿]*)([぀-ヿ㐀-鿿].*)$","$1 $2$3"],["^(.+) HP(\\d+)$","$1 HP$2"],["^(.+)へ攻撃(\\d+)$","hits $1 for $2"],["^(.)へ移動 / (.+)$","drifts $1 / $2"],["^(.)へ移動 / ?$","drifts $1 /"],["^(.)へ移動$","drifts $1"],["^・(.+)$","• $1"],["^(.+) ▲$","$1 ▲"],["^(.+) ▼$","$1 ▼"],["^▼戦闘(.+)$","▼COMBAT$1"],["^▲航行(.+)$","▲NAV$1"],["^手札から(\\d+)枚選べ —\\s*$","Pick $1 cards — "],["^操縦: (.+) — もう片方のユニットをクリックで交代 / ホバーで滑り先プレビュー$","Piloting: $1 — click the other unit to swap / hover to preview drift"],["^ラウンド (\\d+) —(.*)$","ROUND $1 —$2"],["^(\\S+) (\\d+)枚$","$1 $2 cards"],["^(\\d+)枚$","$1 cards"],["^挑戦: (.+)$","Abyss: $1"],["^(.*)格納庫 \\(₢(\\d+)\\)$","$1Hangar (₢$2)"],["^出撃(\\d+)回 / 生還(\\d+)回 / 最深 ZONE(\\d+) / ベストスコア (\\d+) / 所持(\\d+)種$","Sorties $1 / Survived $2 / Deepest ZONE$3 / Best score $4 / Cards owned $5"],["^v(.+) — シード: (\\d+) \\(URLに \\?seed=数字 で固定可\\)$","v$1 — seed: $2 (pin it with ?seed=N in the URL)"],["^光るマスをクリックで移動\\(ちょうど(\\d+)マス\\)(.*)$","Click a glowing tile to move (exactly $1 tiles)$2"],["^移動(\\d+)(\\(直線\\))?$","Move $1$2"],["^攻撃(\\d+) 射程(\\d+)$","Attack $1, Range $2"],["^シールド(\\d+)\\(このラウンド\\)$","Shield $1 (this round)"],["^修理(\\d+)\\(HP回復\\)$","Repair $1 (heal)"],["^旗艦(.+)$","FS $1"],["^随伴機(.+)$","Drone $1"],["^(.+)HP\\+(\\d+)$","$1 HP+$2"],["^(.+)HP-(\\d+)$","$1 HP-$2"],["^ZONE (\\d+)$","ZONE $1"],["^⚔ この宇宙に挑む — SEED (\\d+)$","⚔ Dare this universe — SEED $1"],["^『(.+)』$","“$1”"],["^— (.+) —$","— $1 —"],["^連鎖×(\\d+)🎆$","Chain ×$1🎆"],["^機雷が誘爆! 連鎖(\\d+)発目!$","Mine sympathetic detonation! Chain link $1!"],["^誘爆 ×2!$","CHAIN ×2!"],["^連鎖爆発 ×3!!$","CHAIN BLAST ×3!!"],["^花火大会 ×(\\d+)!!!$","FIREWORKS ×$1!!!"],["^物理キル ×(\\d+)!!$","PHYSICS KILL ×$1!!"],["^物理キル!$","PHYSICS KILL!"],["^(.+) 撃破! 宇宙塵に還った。$","$1 destroyed! Reduced to stardust."],["^(.+) が重力渦に引き込まれた$","$1 was dragged into the gravity well"],["^(.+)の甲殻が(.+)を弾いた — 物理でぶつけろ$","$1's carapace deflected $2 — hit it with something physical"],["^(.+) のシールドが(.+)を弾いた$","$1's shield deflected $2"],["^(.+) が (.+) を修復した\\(HP(\\d+)\\) — 先に修復網を潰せ$","$1 repaired $2 (HP$3) — take out the repair network first"],["^(.+) の産卵は妨害された — マスが塞がっている$","$1's spawn was disrupted — the tile is blocked"],["^(.+) が(.+)を産み落とした…$","$1 laid $2..."],["^(.+) が轢断突進!!$","$1 charges to ram!!"],["^(.+) が (.+) を轢いた!$","$1 ran over $2!"],["^(.+) の自爆装置が空転 — 予告地点からずらされた!$","$1's detonator spun uselessly — shoved off its marked spot!"],["^(.+) の自爆装置が作動!$","$1's detonator triggers!"],["^(.+)の攻撃が(.+)に当たった! 同士討ちだ$","$1's attack hit $2! Friendly fire"],["^(.+) が直線を焼き払った!$","$1 scorched the line!"],["^☀ 太陽フレア接近 — 次のラウンド頭、第(\\d+)行を焼く\\(敵味方無差別\\)。退避するか、敵を置き去りにしろ$","☀ Solar flare incoming — it burns row $1 at next round start (hits everyone). Evacuate, or leave the enemy behind"],["^☀ 太陽フレア直撃! 第(\\d+)行が焼かれた$","☀ Solar flare strikes! Row $1 was burned"],["^残骸サルベージ — 『(.+)』を手札に回収した$","Wreckage salvage — recovered '$1' to hand"],["^『(.+)』を強化\\(\\+\\) — 母船の整備班が唸りを上げた$","'$1' upgraded (+) — the mothership's crew worked their magic"],["^補給を受けた — 旗艦(\\d+)/(\\d+)、随伴機は完全復帰。$","Resupplied — flagship $1/$2, drone fully restored."],["^残骸の装甲板を船体に当てがった — 旗艦HP(\\d+)$","Patched hull plating from the wreckage — flagship HP$1"],["^(.+) が (.+) に叩きつけられた!$","$1 was slammed into $2!"],["^(.+): 『(.+)』(.+)$","$1: '$2' $3"],["^(.+): 突進(\\d+)! (.+)$","$1: charge $2! $3"],["^標的に艦体を叩き込んだ$","slammed the hull into the target"],["^空振り — 慣性だけが残った$","missed — only the drift remains"],["^(.+): 『(.+)』フルパワー斉射 — 反動で後方へ流される!$","$1: '$2' full-power volley — recoil pushes it backward!"],["^(.+): 『(.+)』安定化済み斉射$","$1: '$2' stabilized volley"],["^(.+): 『(.+)』→ (.+) を撃ち飛ばした$","$1: '$2' → knocked $3 flying"],["^(.+): 『(.+)』→ (.+) に銛を打ち込んだ。来い!$","$1: '$2' → harpooned $3. Come here!"],["^(.+): 死者の星図に従い、空間を跳んだ$","$1: followed the dead men's star chart and warped through space"],["^(.+): 『(.+)』→ (.+)$","$1: '$2' → $3"],["^(.+): 『(.+)』— 周囲一掃!$","$1: '$2' — clears the surroundings!"],["^(.+): 『(.+)』起動 — 古代の殺意が目覚める$","$1: '$2' activates — an ancient malice awakens"],["^(.+): 『(.+)』→ (.+) を突き放した$","$1: '$2' → pushed $3 away"],["^(.+): 『(.+)』→ (.+) を引き寄せた。落ちてこい$","$1: '$2' → pulled $3 in. Fall toward me"],["^(.+): 『(.+)』— 重力が牙を剥く$","$1: '$2' — gravity bares its teeth"],["^(.+): 『(.+)』→ (.+) の慣性を書き換えた$","$1: '$2' → rewrote $3's drift"],["^(.+): 『(.+)』→ (.+)\\((\\d+)ダメージ\\)$","$1: '$2' → $3 ($4 damage)"],["^(.+): 『(.+)』— (.+)×(\\d+)を展開した$","$1: '$2' — deployed $3 x$4"],["^(.+): 『(.+)』修理完了 \\(HP(\\d+)\\)$","$1: '$2' repair complete (HP$3)"],["^(.+): 『(.+)』シールド展開\\((\\d+)\\)(.*)$","$1: '$2' shield deployed ($3)$4"],["^\\+制動$","+brake"],["^(.+): 『(.+)』— (.+)を回収した$","$1: '$2' — recovered $3"],["^『(.+)』の(上|下)側は不発 — 宇宙は広い、当てが外れることもある$","'$1'’s $2 half fizzled — space is vast, and sometimes the shot goes wide"],["^『(.+)』は燃え尽きた — ロストアクションの代償。$","'$1' burned out — the price of a lost action."],["^『(.+)』をカーゴに封印した。家まで持って帰るんだ。$","Sealed '$1' in the cargo hold. Carry it all the way home."],["^『(.+)』を展開! 『(.+)』がデッキに加わった。売却価値は放棄した — カードを失えば、遺物ごと永遠に消える。$","Deployed '$1'! '$2' joins the deck. Its sale value is forfeit — lose the card and the relic is gone forever."],["^《(.+)》を抜けた。帰還判断はまだ遠い — 航行補給で船体\\+(-?\\d+)(.*)。次は《(.+)》。$","Cleared 《$1》. The call to head home is still a ways off — resupply restored hull +$2$3. Next: 《$4》."],["^、『(.+)』を復帰$",", restored '$1'"],["^『(.+)』を燃料に変換 — ジャンプ! 報酬倍率x(\\S+)で(.+)へ。$","Converted '$1' to fuel — jump! Reward multiplier x$2 to $3."],["^(.+) が漂流コンテナを回収 — 売却価値\\+(\\d+)$","$1 recovered a drifting container — sale value +$2"],["^(.+) に(\\d+)ダメージ \\(残HP(\\d+)\\)$","$1 takes $2 damage (HP left $3)"],["^物理キル ×(\\d+)!!$","PHYS KILL x$1!!"],["^物理キル!$","PHYS KILL!"],["^分裂!$","SPLIT!"],["^装甲!$","ARMOR!"],["^渦に固定$","pinned by well"],["^接触$","contact"],["^衝突!$","COLLISION!"],["^🌀吸引$","🌀pull"],["^-(\\d+)$","-$1"],["^(.+)、沈黙。$","$1, silenced."],["^転移$","warp"],["^✦$","✦"],["^\\+1修復$","+1 repair"],["^回避!$","DODGE!"],["^トドメ!$","FINISH!"],["^🔥カードロスト$","🔥CARD LOST"],["^コンテナ回収! 価値\\+(\\d+)$","Container recovered! Value +$1"],["^\\+1🔧$","+1🔧"],["^([一二三四五六七八九十百千]+)連鎖!$","chain x$1!"],["^機雷が誘爆! 連鎖(\\d+)発目!$","Mine chain-detonates! Blast #$1!"],["^誘爆 ×(\\d+)!$","chain blast x$1!"],["^連鎖爆発 ×(\\d+)!!$","chain explosion x$1!!"],["^花火大会 ×(\\d+)!!!$","fireworks x$1!!!"],["^(.+)、(.+)砕けた — 引き金は引いていない$","$1, shattered by $2 — no one pulled a trigger"],["^(.+)が(.+)宇宙塵になった。これがこの宇宙の正しい錬金術$","$1 turned to stardust via $2. This is the universe's true alchemy"],["^誘爆が(\\d+)連鎖 — 盤面がまるごと花火大会になった$","A chain of $1 detonations — the whole board became a fireworks show"],["^爆発が爆発を呼び、(\\d+)発の連鎖が闇を昼に変えた$","One blast called the next, $1 explosions turning darkness into day"],["^誘爆が連鎖して、盤面が一瞬だけ花火大会になった$","The detonations chained, and for one moment the board became a fireworks show"],["^爆発が爆発を呼んだ。誰も止めなかったし、止める気もなかった$","One blast called the next. No one stopped it, and no one meant to"],["^(\\d+)連続撃破 — もはや誰も数えていなかった$","$1 kills in a row — nobody was counting anymore"],["^(\\d+)連続撃破 — 静寂が戻るまで、誰も口を開かなかった$","$1 kills in a row — no one spoke until the silence came back"],["^船体、残り1。警報の中で、それでも舵は離さなかった$","Hull down to 1. Alarms blaring, and still no one let go of the helm"],["^(.+)が装甲を裂いた。残りHP1 — ここからが船長の仕事$","$1 tore through the armor. HP down to 1 — this is where the captain earns it"],["^『(.+)』を炎に焼べて(\\d+)ダメージを打ち消した — 寿命で命を買い戻す取引$","Fed '$1' to the flames to cancel $2 damage — a trade of lifespan to buy back a life"],["^(.+)の一撃が(.+)に吸い込まれた。同士討ちは、誘い込んだ者の戦果だ$","$1's strike found $2 instead. Friendly fire is the credit of whoever baited it"],["^太陽フレアが(.+)を焼き払った。退避しなかったのは敵のほうだ$","The solar flare burned $1 away. It was the enemy who failed to evacuate"],["^(.+)が重力渦に呑まれて、描いていた未来ごと狂った$","$1 was swallowed by the gravity well, and whatever future it had planned went with it"],["^《(.+)》(.+)、沈黙。深淵が一拍だけ、静かになった$","《$1》$2, silenced. The abyss went quiet, just for one breath"],["^『(.+)』を展開 — 眠っていた力を、いま叩き起こした$","Deployed '$1' — waking a power that had been sleeping"],["^『(.+)』をカーゴに封印 — 家まで持って帰る、という約束$","Sealed '$1' in the cargo hold — a promise to carry it home"],["^『(.+)』を燃料に、ZONE(\\d+)へ跳んだ\\(残カード(\\d+)枚=寿命\\)$","Burned '$1' as fuel and jumped to ZONE$2 (cards left: $3 = your lifespan)"],["^船体を軋ませ、自らの手で『(.+)』を手放した$","The hull groaned as you let go of '$1' with your own hand"],["^成り行きの休息 — 『(.+)』が静かに宇宙へ流れていった$","A rest left to chance — '$1' drifted quietly into space"],["^船体(\\d+)で戦域を制圧 — 紙一重を、勝ちと呼ぶ$","Cleared the sector at $1 hull — call a razor's edge a win"],["^帰還。母港の灯りが、ちゃんと待っていた$","Home. The lights of port were waiting, just as they should be"],["^生還。$","Survived."],["^船体崩壊 — 最後の通信は、ノイズに溶けた$","Hull failure — the last transmission dissolved into static"],["^全カード喪失 — 船はもう、漂うだけの棺だ$","All cards lost — the ship is nothing now but a drifting coffin"],["^ここで船長は、言葉にならない何かを刻んだ — 後から思えば、それが航海の頂点だった$","Here the captain marked something beyond words — in hindsight, the high point of the voyage"],["^([←→↑↓]+)へ移動$","moves $1"],["^触手(\\d+)$","tentacle $1"],["^(.+)へ攻撃(\\d+)$","attacks $1 for $2"],["^攻撃(\\d+)\\(予告地点\\)$","attack $1 (marked tile)"],["^照準中 — 次R轢断突進$","aiming — next round: ramming charge"],["^充填中 — 次R直線発射$","charging — next round: line blast"],["^💥 自爆! 周囲1マスに(\\d+)$","💥 Self-destructs! $1 to all adjacent tiles"],["^🦏 轢断突進! レーン上の最初の1体に(\\d+)$","🦏 Ramming charge! $1 to the first unit in its lane"],["^直線を発射! \\((\\d+)ダメージ\\)$","Fires a line! ($1 damage)"],["^(.+)を修復\\+1$","repairs $1 +1"],["^(.+)を産み付ける\\(マーカー地点\\)$","spawns $1 (at marker)"],["^ZONE (\\d+)/(\\d+)$","ZONE $1/$2"],["^出撃(\\d+)回$","$1 launches"],["^生還(\\d+)回$","$1 returns"],["^最深 ZONE(\\d+)$","Deepest ZONE$1"],["^ベストスコア (\\d+)$","Best score $1"],["^所持(\\d+)種$","$1 owned"],["^₢(\\d+)$","₢$1"],["^₢(\\d+)で就役$","₢$1 to commission"],["^₢(\\d+)で解放$","₢$1 to unlock"],["^光るマスをクリックで移動\\(ちょうど(\\d+)マス\\)","Click a glowing tile to move (exactly $1 tiles)"],["^対象を最大(\\d+)体クリック → 確定$","Click up to $1 targets → confirm"],["^確定\\((\\d+)体\\)$","Confirm ($1)"],["^敵ターンへ \\(Enter\\)$","To Enemy Turn (Enter)"],["^不発にする$","Fizzle it out"],["^戻る$","Back"],["^⟲ ターンやり直し$","⟲ Redo Turn"],["^方向:$","Direction:"]];
+/* I18N-DICT-END */
+let EN_RULES_C=[];
+function trText(s){
+  if(LANG!=="en"||!s) return s;
+  const t=s.trim(); if(!t||!/[　-鿿！-｠぀-ヿ]/.test(t)) return s;
+  const hit=EN_EXACT[t];
+  if(hit!=null) return s.replace(t,()=>hit);
+  for(const [re,tpl] of EN_RULES_C){
+    const m=re.exec(t);
+    if(m) return s.replace(t,()=>tpl.replace(/\$(\d)/g,(x,i)=>{const g=m[+i]??"";return EN_EXACT[g]??(g&&g!==t?trText(g):g);})); // 捕獲群は再帰翻訳(旗艦ヴァグランツ→FS Vagrants等の入れ子)
+  }
+  return s;
+}
+function translateDom(root){
+  if(LANG!=="en"||!root) return;
+  if(root.nodeType===3){ root.nodeValue=trText(root.nodeValue); return; }
+  const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+  let n; while(n=w.nextNode()) n.nodeValue=trText(n.nodeValue);
+  const list=root.matches&&root.matches("[data-tt]")?[root,...root.querySelectorAll("[data-tt]")]:root.querySelectorAll("[data-tt]");
+  for(const el of list) el.dataset.tt=el.dataset.tt.split(/<br\/?>/).map(x=>trText(x)).join("<br>");
+}
+function initI18n(){
+  const q=new URLSearchParams(location.search).get("lang");
+  LANG=q||META.lang||"ja";
+  if(q&&META.lang!==q){ META.lang=q; saveMeta(); }
+  document.documentElement.lang=LANG;
+  EN_RULES_C=EN_RULES.map(([r,t])=>{ try{ return [new RegExp(r),t]; }catch(e){ return null; } }).filter(Boolean);
+  // 以後の描画は全て自動翻訳(モーダル後差し込み・fxスタンプ含む)
+  new MutationObserver(muts=>{
+    if(LANG!=="en") return;
+    for(const m of muts) for(const nd of m.addedNodes) translateDom(nd);
+  }).observe(document.getElementById("app"),{childList:true,subtree:true});
+}
+
 function startGame(seed){
   S=newRun(seed, null, {hard:META.hard});
   S.screen="title";
@@ -2423,8 +2528,13 @@ function drainFx(){
   if(!board){ enc.fxQueue.length=0; return; }
   let layer=document.getElementById("fx");
   if(!layer){ layer=document.createElement("div"); layer.id="fx"; board.appendChild(layer); }
-  let stampN=0; // 同時スタンプは縦にずらす(重なり潰れ防止)
   for(const ev of enc.fxQueue.splice(0)){
+    // 遅延付きイベント(連鎖の波及演出): 時間になったらキューへ戻して再ドレイン
+    if(ev.d){
+      const e=ev, delay=ev.d; e.d=0;
+      setTimeout(()=>{ if(S&&S.enc===enc){ enc.fxQueue.push(e); drainFx(); } },delay);
+      continue;
+    }
     if(ev.type==="hitflash"){
       const el=document.querySelector(`.unit[data-uid="${ev.unitId}"]`);
       if(el){ el.classList.remove("hitfx"); void el.offsetWidth; el.classList.add("hitfx"); }
@@ -2432,7 +2542,34 @@ function drainFx(){
       continue;
     }
     if(ev.type==="shake"){
-      if(!META.fxLite){ board.classList.remove("shake"); void board.offsetWidth; board.classList.add("shake"); }
+      if(!META.fxLite){
+        const cls=ev.n>=3?"shake3":(ev.n===2?"shake2":"shake"); // 連鎖段数でパンチが強くなる
+        board.classList.remove("shake","shake2","shake3"); void board.offsetWidth; board.classList.add(cls);
+      }
+      continue;
+    }
+    if(ev.type==="chainx"){
+      // 連鎖コンボカウンタ: 一箇所で数字が育つ(重ね置きしない — スタンプ重畳の文字化け対策)
+      let el=document.getElementById("fxchain");
+      if(!el){ el=document.createElement("div"); el.id="fxchain"; layer.appendChild(el); }
+      el.textContent=trText(ev.n>=4?`花火大会 ×${ev.n}!!!`:(ev.n===3?"連鎖爆発 ×3!!":"誘爆 ×2!")); // 既存要素の更新はObserver対象外なので直接翻訳
+      el.style.fontSize=(1.6+0.35*Math.min(ev.n,6))+"rem";
+      el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop");
+      clearTimeout(UI._chainT); UI._chainT=setTimeout(()=>el.remove(),950);
+      sfx("salvage");
+      continue;
+    }
+    if(ev.type==="beam"){
+      // 誘爆ビーム: 爆心→巻き込み先(なぜ連鎖したかを見せる)
+      const p1=cellCenter(ev.x1,ev.y1,board), p2=cellCenter(ev.x2,ev.y2,board);
+      if(p1&&p2){
+        const dx=p2.x-p1.x, dy=p2.y-p1.y;
+        const el=document.createElement("span"); el.className="fxbeam";
+        el.style.left=p1.x+"px"; el.style.top=p1.y+"px";
+        el.style.width=Math.hypot(dx,dy)+"px";
+        el.style.transform=`rotate(${Math.atan2(dy,dx)}rad)`;
+        layer.appendChild(el); setTimeout(()=>el.remove(),280);
+      }
       continue;
     }
     if(ev.type==="confetti"){
@@ -2450,7 +2587,13 @@ function drainFx(){
     if(ev.type==="stamp"){
       const pos=cellCenter(ev.x,ev.y,board)||{x:board.clientWidth/2,y:board.clientHeight/2};
       const el=document.createElement("div"); el.className="fxstamp"+(ev.big?" big":"");
-      el.textContent=ev.text; el.style.left=pos.x+"px"; el.style.top=(pos.y - 34*stampN++)+"px";
+      // 縦ずらしは時間減衰式(連鎖の遅延スタンプは別ドレインで来るのでローカルカウンタでは重なる)
+      const now=performance.now();
+      if(now-(drainFx._sT||0)<450) drainFx._sN=(drainFx._sN||0)+1; else drainFx._sN=0;
+      drainFx._sT=now;
+      const sx=Math.max(90,Math.min(board.clientWidth-90,pos.x)); // 盤端で見切れない
+      const sy=Math.max(40,pos.y) - 34*drainFx._sN;
+      el.textContent=ev.text; el.style.left=sx+"px"; el.style.top=sy+"px";
       layer.appendChild(el); setTimeout(()=>el.remove(),1100);
       sfx("salvage");
       continue;
@@ -2471,10 +2614,25 @@ function drainFx(){
       if(m) el.style.fontSize=(0.9+Math.min(3,+m[1])*0.28)+"rem";
       layer.appendChild(el); setTimeout(()=>el.remove(),1100);
     } else if(ev.type==="boom"){
-      // 大物撃破はヒットストップ(90msだけ世界が止まる)
+      // 大物撃破はヒットストップ(連鎖が深いほど長く世界が止まる)
       if(ev.big && !META.fxLite){
         const st=document.createElement("style"); st.textContent="*{animation-play-state:paused!important}";
-        document.head.appendChild(st); setTimeout(()=>st.remove(),90);
+        document.head.appendChild(st); setTimeout(()=>st.remove(),ev.stop||90);
+        // 爆発中はHUDを沈めて盤面に視線を固定
+        const app=document.getElementById("app");
+        if(app){ app.classList.add("boomdim"); clearTimeout(UI._boomdimT); UI._boomdimT=setTimeout(()=>app.classList.remove("boomdim"),500); }
+      }
+      if(ev.core && !META.fxLite){
+        // 白い芯: 白→黄→橙→赤の発光階層
+        const core=document.createElement("span"); core.className="fxcore";
+        core.style.left=pos.x+"px"; core.style.top=pos.y+"px";
+        layer.appendChild(core); setTimeout(()=>core.remove(),300);
+        const sh=document.createElement("span"); sh.className="fxshock"; // 着弾ショックリング(瞬間と熱の分離)
+        sh.style.left=pos.x+"px"; sh.style.top=pos.y+"px";
+        layer.appendChild(sh); setTimeout(()=>sh.remove(),340);
+        const sc=document.createElement("span"); sc.className="fxscorch"; // 焦げ跡の残光
+        sc.style.left=pos.x+"px"; sc.style.top=pos.y+"px";
+        layer.appendChild(sc); setTimeout(()=>sc.remove(),1400);
       }
       sfx("boom");
       const ring=document.createElement("span"); ring.className="fxring";
@@ -2550,7 +2708,8 @@ function renderTitle(app){
     ${UI.sharedResult?`<div class="panel" style="max-width:430px; margin:10px auto; padding:10px 16px; border-color:var(--gold);">
       <div style="font-size:.85rem; color:var(--dim);">📡 受信した航海記録</div>
       <div style="font-size:1.2rem; font-weight:900; color:var(--gold);">『${esc(UI.sharedResult.n||"?")}』 <span style="color:var(--cyan); font-size:.9rem; font-weight:700;">${esc(UI.sharedResult.t||"")}</span></div>
-      <div class="muted" style="font-size:.85rem;">SCORE ${Number(UI.sharedResult.s)||0} / ZONE ${Number(UI.sharedResult.z)||1}${UI.sharedResult.b?" / 墓所制圧👑":""} — <b style="color:var(--txt)">あんたは何型だ?</b></div>
+      <div class="muted" style="font-size:.85rem;">SCORE ${Number(UI.sharedResult.s)||0} / ZONE ${Number(UI.sharedResult.z)||1}${UI.sharedResult.b?" / 墓所制圧👑":""}${Number(UI.sharedResult.ch)>=2?` / 連鎖×${Number(UI.sharedResult.ch)}🎆`:""} — <b style="color:var(--txt)">あんたは何型だ?</b></div>
+      ${UI.sharedResult.sd!=null?`<button class="primary cue" style="margin-top:8px;" onclick="H.challenge(${Number(UI.sharedResult.sd)||0})" data-tt="${attrEsc("同じシード=同じ宇宙。敵も機雷も同じ配置で、あんたの腕だけが変数だ")}">⚔ この宇宙に挑む — SEED ${Number(UI.sharedResult.sd)||0}</button>`:""}
     </div>`:""}
     <p class="muted" style="max-width:560px;margin:18px auto; line-height:1.9; text-align:left;">
       死んだ文明の遺物は、深宇宙でいちばん高く売れる。<br>
@@ -2577,6 +2736,7 @@ function renderTitle(app){
       <button onclick="H.toggleMute()">${META.muted?"🔇 SE OFF":"🔊 SE ON"}</button>
       <button onclick="H.toggleTilt()" data-tt="${attrEsc("盤面を俯瞰3D風に傾ける")}">${META.tilt?"📐 俯瞰":"▦ フラット"}</button>
       <button onclick="H.toggleFxLite()" data-tt="${attrEsc("演出を軽量化(敵ターン高速・シェイク/紙吹雪OFF)。周回プレイ向け")}">${META.fxLite?"⚡ 演出ライト":"✨ 演出フル"}</button>
+      <button onclick="H.toggleLang()" data-tt="${attrEsc("Switch UI language (JP / EN)")}">${LANG==="en"?"🌐 English":"🌐 日本語"}</button>
     </p>
     <p class="muted" style="margin-top:10px;">出撃${META.runs}回 / 生還${META.wins}回 / 最深 ZONE${META.bestZone} / ベストスコア ${META.bestScore} / 所持${coll.length}種<br>
     v0.6.0-alpha — シード: ${S.seed} (URLに ?seed=数字 で固定可)</p>
@@ -3037,7 +3197,7 @@ function renderBattle(app){
       const drift=u.drift?`<span class="drift">${DIRS[u.drift].ch}</span>`:"";
       const badge=u.side==="enemy"&&badgeOf[u.id]?`<span class="badgeN">${badgeOf[u.id]}</span>`:"";
       inner+=`<div class="unit ${pcls}${ucls}" data-uid="${u.id}" ${uclick} ${ehover} data-tt="${utt}">
-        <div class="uinner">${badge}${drift}${unitSvg(u)}<span class="nm">${esc(u.name.slice(0,6))}</span><div class="hp">${hp}</div></div></div>`;
+        <div class="uinner">${badge}${drift}${unitSvg(u)}<span class="nm">${esc(trText(u.name).slice(0,LANG==="en"?14:6))}</span><div class="hp">${hp}</div></div></div>`;
     }
     const ttAttr=cellTT.length?`data-tt="${attrEsc(cellTT.join("<br>"))}"`:"";
     grid+=`<div class="${cls}" data-xy="${key}" ${ttAttr} ${click} ${hover}>${inner}</div>`;
@@ -3487,7 +3647,7 @@ function renderSummary(app){
     <div class="panel" style="margin-top:18px;">
       <h3>ラン記録</h3>
       <div style="text-align:center; margin:6px 0 12px;">
-        <div class="muted">SCORE — 挑戦: ${esc(ASC_DEFS[run.asc].name)} / ${esc(shipDef(run.shipId).name)}${(run.contracts||[]).length?` / <span style="color:var(--amber)">☠契約${run.contracts.length} ×${LK.contractMult(run).toFixed(1)}</span>`:""}</div>
+        <div class="muted">SCORE — 挑戦: ${esc(ASC_DEFS[run.asc].name)} / ${esc(shipDef(run.shipId).name)}${(run.contracts||[]).length?` / <span style="color:var(--amber)">☠契約${run.contracts.length} ×${LK.contractMult(run).toFixed(1)}</span>`:""}${(run.chainBest||0)>=2?` / <span style="color:var(--gold)">🎆最大連鎖×${run.chainBest}</span>`:""}</div>
         <div id="scoreNum" style="font-size:3.2rem; font-weight:900; color:var(--gold); text-shadow:0 0 24px #ffd70055; letter-spacing:.04em;">0</div>
         ${run.newBest?'<div class="bestburst">★ 自己ベスト更新! ★</div>':(run.rank&&run.rank<=5?`<div style="color:var(--cyan);font-weight:800;">🏆 歴代${run.rank}位</div>`:"")}
         ${run.win&&(run.contracts||[]).length>=3?`<div style="color:var(--gold);font-weight:800;">☠ 称号『${run.contracts.length>=5?"狂気の契約者":"鉄の契約者"}』 — 契約${run.contracts.length}件を生き延びた</div>`:""}
@@ -3520,8 +3680,9 @@ function renderSummary(app){
         　<span data-tt="${attrEsc("8種の型図鑑: "+Object.keys(CAPTAIN_TYPES).map(k=>((META.types||{})[k]?"●":"○")+CAPTAIN_TYPES[k].name).join(" "))}">図鑑 ${Object.keys(META.types||{}).length}/8</span>
       </div>
       <div class="opts" style="justify-content:center;">
-        <button class="primary cue" onclick="H.shareX()" data-tt="${attrEsc("Xの投稿画面が開く(診断結果+スコア+ゲームURL入り)")}">𝕏 結果をポスト</button>
+        <button class="primary cue" onclick="H.shareX()" data-tt="${attrEsc("Xの投稿画面が開く(診断結果+スコア+挑戦状URL入り)")}">𝕏 結果をポスト</button>
         <button onclick="H.saveCard()" data-tt="${attrEsc("1200×675の診断カード画像をダウンロード — 投稿に添付できる")}">🖼 カード画像を保存</button>
+        <button onclick="H.copyChallenge(this)" data-tt="${attrEsc("この航海と同じシード(同じ宇宙・同じ配置)に相手を招待するURLをコピー")}">⚔ 挑戦状リンクをコピー</button>
       </div>
     </div>
     ${(()=>{const ch=LK.voyageChronicle(S); if(!ch.length) return "";
@@ -3833,13 +3994,30 @@ const H={
   restart(){ startGame(); H.begin(); },
   toTitle(){ startGame(); },
   // ---- 共有(なばて公開ループ: 診断→X→流入→診断) ----
+  shareUrl(){ // 診断+挑戦状(シード)入り共有URL — 読んだ人がそのまま同じ宇宙に挑める
+    const run=S.run, ct=run.captain;
+    return `${SHARE_URL}?r=${encResult({n:ct.name,t:ct.title,s:run.score??LK.runScore(S),z:run.zone,w:run.win?1:0,b:run.bossKilled?1:0,sd:run.seed,ch:run.chainBest||0})}`;
+  },
   shareX(){
     const run=S.run, ct=run.captain;
     if(!ct) return;
-    const text=`【船長診断】私は『${ct.name}』 — ${ct.title}。SCORE ${run.score??LK.runScore(S)} / ZONE ${run.zone}${run.bossKilled?" / 墓所制圧👑":""}${ct.subs.length?` ${ct.subs[0]}`:""}`;
-    const url=`${SHARE_URL}?r=${encResult({n:ct.name,t:ct.title,s:run.score??LK.runScore(S),z:run.zone,w:run.win?1:0,b:run.bossKilled?1:0})}`;
-    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}&hashtags=LeapOrKeep`,"_blank");
+    const sc=run.score??LK.runScore(S);
+    const text=LANG==="en"
+      ? `[Captain Type] I'm "${trText(ct.name)}" — ${trText(ct.title)}. SCORE ${sc} / ZONE ${run.zone}${run.bossKilled?" / Tomb conquered👑":""}${(run.chainBest||0)>=3?` / Best chain ×${run.chainBest}🎆`:""} Dare my universe↓`
+      : `【船長診断】私は『${ct.name}』 — ${ct.title}。SCORE ${sc} / ZONE ${run.zone}${run.bossKilled?" / 墓所制圧👑":""}${(run.chainBest||0)>=3?` / 最大連鎖×${run.chainBest}🎆`:""}${ct.subs.length?` ${ct.subs[0]}`:""} 同じ宇宙に挑めるURL↓`;
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(H.shareUrl())}&hashtags=LeapOrKeep`,"_blank");
   },
+  copyChallenge(btn){
+    const ct=S.run.captain;
+    if(!ct) return;
+    navigator.clipboard.writeText(H.shareUrl()).then(()=>{
+      if(btn) btn.textContent="⚔ コピーした — 相手に送りつけろ";
+      sfx("good");
+    });
+  },
+  challenge(sd){ location.href=location.pathname+"?seed="+sd; }, // 挑戦状を受ける: 同じシード=同じ宇宙
+  toggleLang(){ LANG=LANG==="en"?"ja":"en"; META.lang=LANG; saveMeta(); document.documentElement.lang=LANG; render(); },
+
   saveCard(){
     const run=S.run, ct=run.captain;
     if(!ct) return;
@@ -4022,29 +4200,30 @@ function drawShareCard(ct,run){
   g.strokeStyle="#39d0ff44"; g.lineWidth=2; g.strokeRect(14,14,W-28,H2-28);
   g.textAlign="center";
   g.fillStyle="#39d0ff"; g.font="700 30px sans-serif";
-  g.fillText("LEAP OR KEEP — 船長診断",W/2,76);
+  g.fillText(trText("LEAP OR KEEP — 船長診断"),W/2,76);
   g.fillStyle="#ffd24a"; g.font="900 120px sans-serif";
   g.shadowColor="#ffd24a55"; g.shadowBlur=30;
-  g.fillText(`『${ct.name}』`,W/2,250);
+  g.fillText(trText(`『${ct.name}』`),W/2,250);
   g.shadowBlur=0;
   g.fillStyle="#7fd4ff"; g.font="800 40px sans-serif";
-  g.fillText(`— ${ct.title} —`,W/2,320);
+  g.fillText(trText(`— ${ct.title} —`),W/2,320);
   g.fillStyle="#ffb347"; g.font="600 30px sans-serif";
-  g.fillText(ct.jab,W/2,388);
-  g.fillStyle="#e8edf7"; g.font="700 34px sans-serif";
+  g.fillText(trText(ct.jab),W/2,388);
+  g.fillStyle="#e8edf7"; g.font="700 32px sans-serif";
   const sd=shipDef(run.shipId);
-  g.fillText(`SCORE ${run.score??0}　/　ZONE ${run.zone}　/　${sd.name}${run.bossKilled?"　/　墓所制圧👑":""}`,W/2,470);
-  if(ct.subs.length){ g.fillStyle="#ffd24a"; g.font="600 28px sans-serif"; g.fillText(ct.subs.join("　"),W/2,524); }
+  g.fillText(`SCORE ${run.score??0}　/　ZONE ${run.zone}　/　${trText(sd.name)}${run.bossKilled?`　/　${trText("墓所制圧")}👑`:""}${(run.chainBest||0)>=2?`　/　${trText("最大連鎖")}×${run.chainBest}🎆`:""}`,W/2,470);
+  if(ct.subs.length){ g.fillStyle="#ffd24a"; g.font="600 28px sans-serif"; g.fillText(ct.subs.map(s=>trText(s)).join("　"),W/2,524); }
   g.fillStyle="#9aa7c4"; g.font="600 26px sans-serif";
-  g.fillText(`推定艦隊比 ${ct.rarity}%　#LeapOrKeep`,W/2,586);
+  g.fillText(`${trText("推定艦隊比")} ${ct.rarity}%　#LeapOrKeep`,W/2,586);
   g.fillStyle="#56e39f"; g.font="700 26px sans-serif";
-  g.fillText(SHARE_URL.replace("https://",""),W/2,632);
+  g.fillText(`${SHARE_URL.replace("https://","")}　—　${trText("SEEDで同じ宇宙に挑める").replace("SEED","SEED "+run.seed)}`,W/2,632);
   return cv;
 }
 
 window.LK=LK; window.H=H; window.render=render;
 window.lkDebug=()=>({S,UI,META});
 loadMeta();
+initI18n();
 const urlSeed=new URLSearchParams(location.search).get("seed");
 const urlResult=new URLSearchParams(location.search).get("r");
 if(urlResult) UI.sharedResult=decResult(urlResult); // 共有リンクから来た人に「お土産」を見せる

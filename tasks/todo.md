@@ -1,3 +1,36 @@
+# Checkpoint — 「あてる」Phase1-3: 連鎖ジュース+挑戦状URL+日英トグル (2026-07-04)
+
+## Status: 完了(シム281+エージェント305 PASS / EN戦闘画面の未翻訳ノード0 / JA無傷確認)
+
+## 戦略(オーナー確定、memory/leap-or-keep-buzz-strategy.md)
+主戦場=AI界隈起点(Zenn/note/X) / 日英トグル / ジュース先行。話題の物理実体=6秒GIF+挑戦状URL。
+
+## Phase 1 — 連鎖の指数感+ジュース
+- [x] dealDamageに連鎖深度(chain)を貫通、chainBlast()で誘爆をリンク数管理(chronicle n=最大連鎖)
+- [x] 連鎖の逐次可視化: fxイベントに遅延d、110ms/段で波及(ロジックは即時=シム無影響)
+- [x] エスカレーション: 単一コンボカウンタ#fxchain(誘爆×2→連鎖爆発×3→花火大会×N、×4で紙吹雪)+シェイク3段+ヒットストップ90→250ms
+- [x] Codex処方: 白芯爆発(白→黄→橙→赤)/着弾ショックリング/連鎖ビーム(爆心→巻き込み先)/焦げ跡残光/爆発中HUD沈み
+- [x] 機雷クラスタ湧き(6割で既存機雷の隣) — 連鎖を「狙える」地形に。スコア+15/誘爆、killStreakは敵限定に是正
+- [x] 検証: sonnetテスター実プレイ(2連鎖・3連鎖を意図的に達成、「狙える」評価)/haiku乱打テスト(回帰ゼロ)/Codex画像批評2巡(「GIF水準」判定)
+- [x] shot.mjsにchain/chain-midシナリオ追加、クリップ撮影をboundingBox方式に(アニメ中でも撮れる)
+
+## Phase 2 — 共有カード+シード挑戦状
+- [x] 共有ペイロードにseed+chainBest追加(?r=)。着地画面に「⚔ この宇宙に挑む — SEED N」ボタン(?seed=リロード)
+- [x] サマリーに「⚔ 挑戦状リンクをコピー」/Xポスト文とカード画像にSEED+最大連鎖表記
+
+## Phase 3 — 日英トグル
+- [x] 機構: MutationObserver(#app)+EN_EXACT完全一致+EN_RULES正規表現(捕獲群は再帰翻訳)。ロジック/プロトコル/セーブは日本語のまま
+- [x] 辞書: tools/i18n/*.part.json 5ファイル(501語+180ルール、sonnet3体で量産+aaa-fix上書き層)→ tools/geni18n.mjs でマーカー間に注入
+- [x] タイトルに🌐トグル+?lang=en。canvas共有カード/Xポスト文は明示trText/LANG分岐
+- [x] 検証: 実ページの未翻訳ノード列挙ハーネス(tmp/i18n-debug.mjs)で battle=0件、summary/title 主要全訳、JAモード無傷
+
+## 残課題(次回)
+- [ ] EN: 深部コンテンツ(イベント/ボス台詞/契約ツールチップ)の訳抜け拾い — debugハーネスをZONE3+/サマリー全パターンに回す
+- [ ] 6秒GIF実撮り(playrun.mjsに連鎖ビート追跡を足して自動化)→ X固定ポスト用素材
+- [ ] shot.mjs boss-jugg/boss-brood シナリオが撮影失敗(改修前からの既存バグ、b.hp代入でundefined)
+
+---
+
 # Checkpoint — 大改修v0.7「120点自走」(2026-06-12 /goal契約)
 
 ## Status: 完了(シム109件PASS / playrunフルラン無事故 / 全演出撮影確認)

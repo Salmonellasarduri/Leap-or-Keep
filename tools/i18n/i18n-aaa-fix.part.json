@@ -1,0 +1,169 @@
+{
+  "exact": {
+    "カーゴ: 空": "CARGO: empty",
+    "帰 還": "R E T U R N E D",
+    "伝 説": "L E G E N D",
+    "自発的帰還 — 生きて帰ることが勝利だ": "Voluntary return — coming home alive is the win",
+    "船体大破 — 深淵はあんたを離さなかった": "Hull shattered — the abyss wouldn't let you go",
+    "全カード喪失 — 燃料も、武器も、希望も尽きた": "All cards lost — fuel, guns, and hope, all spent",
+    "・盤の端は反対側につながっている(壁はない)": "• The board edges wrap to the opposite side (no walls)",
+    "盤の端は反対側につながっている(壁はない)": "The board edges wrap to the opposite side (no walls)",
+    "慣性の滑り先": "drift destination",
+    "赤=今R被弾予定(数字=ダメージ)": "red = hit incoming this R (number = damage)",
+    "橙=次Rに主砲 / 薄い影=": "orange = cannon next R / faint ghost = ",
+    " / 点線=敵の移動予定": " / dotted = enemy path",
+    "▲航行": "▲NAV",
+    "▼戦闘": "▼COMBAT",
+    "航行": "NAV",
+    "戦闘": "COMBAT",
+    "様子見": "sizing you up",
+    "不発にする": "Fizzle it",
+    "戻る": "Back",
+    "ターンやり直し": "Redo turn",
+    "敵ターンへ": "To enemy turn",
+    "1枚目はクリックした側(▲航行/▼戦闘)。先にユニットをクリックして操縦予約もできる": "First card uses the half you clicked (▲NAV/▼COMBAT). Click a unit first to reserve the pilot",
+    "動いたら次R勝手に1マス滑る(": "Move now and you slide 1 tile next R (",
+    "慣性": "inertia",
+    ")。影が滑り先": "). The ghost marks where",
+    "止まる/曲がるにはカードが要る。": "Stopping/turning needs a card. ",
+    "直進はタダ、精密は有料": "straight is free, precision costs",
+    "敵は1→2の順に行動。赤マスから逃げろ": "Enemies act 1→2. Get off the red tiles",
+    "手札が尽きると休息=": "Empty hand forces a rest = ",
+    "1枚永久ロスト": "1 card lost forever",
+    "。カード=寿命": ". Cards = lifespan"
+  },
+  "rules": [
+    [
+      "^ZONE (\\d+)/(\\d+) ?《(.+)》$",
+      "ZONE $1/$2 “$3”"
+    ],
+    [
+      "^ZONE (\\d+) ?《(.+)》$",
+      "ZONE $1 “$2”"
+    ],
+    [
+      "^— ZONE (\\d+) ?《(.+)》 ?—$",
+      "— ZONE $1 “$2” —"
+    ],
+    [
+      "^(\\d+)回\\s*(.*)$",
+      "×$1 $2"
+    ],
+    [
+      "^(\\d+) / (\\d+) / (\\d+)枚$",
+      "$1 / $2 / $3 cards"
+    ],
+    [
+      "^SCORE — 挑戦: (.+) / (.+)$",
+      "SCORE — Abyss: $1 / $2"
+    ],
+    [
+      "^([^぀-ヿ㐀-鿿]*)新たな挑戦『(.+)』が解放された!$",
+      "$1New challenge “$2” unlocked!"
+    ],
+    [
+      "^推定艦隊比 (\\d+)%$",
+      "Est. fleet share $1%"
+    ],
+    [
+      "^図鑑 (\\d+)/(\\d+)$",
+      "Codex $1/$2"
+    ],
+    [
+      "^([^぀-ヿ㐀-鿿]*)ZONE(\\d+)まで(\\d+)ラウンド — その足取りに性格が出てる。$",
+      "$1ZONE $2 in $3 rounds — the gait tells on you."
+    ],
+    [
+      "^▸?\\s*《(.+)》\\s*第(\\d+)戦域 — 警報!! 敵影(\\d+)。仕事の時間だ。$",
+      "▸ “$1” sector $2 — ALERT!! $3 hostiles. Time to work."
+    ],
+    [
+      "^《(.+)》$",
+      "“$1”"
+    ],
+    [
+      "^(\\d+) ([^぀-ヿ㐀-鿿]*)([぀-ヿ㐀-鿿].*)$",
+      "$1 $2$3"
+    ],
+    [
+      "^(.+) HP(\\d+)$",
+      "$1 HP$2"
+    ],
+    [
+      "^(.+)へ攻撃(\\d+)$",
+      "hits $1 for $2"
+    ],
+    [
+      "^(.)へ移動 / (.+)$",
+      "drifts $1 / $2"
+    ],
+    [
+      "^(.)へ移動 / ?$",
+      "drifts $1 /"
+    ],
+    [
+      "^(.)へ移動$",
+      "drifts $1"
+    ],
+    [
+      "^・(.+)$",
+      "• $1"
+    ],
+    [
+      "^(.+) ▲$",
+      "$1 ▲"
+    ],
+    [
+      "^(.+) ▼$",
+      "$1 ▼"
+    ],
+    [
+      "^▼戦闘(.+)$",
+      "▼COMBAT$1"
+    ],
+    [
+      "^▲航行(.+)$",
+      "▲NAV$1"
+    ],
+    [
+      "^手札から(\\d+)枚選べ —\\s*$",
+      "Pick $1 cards — "
+    ],
+    [
+      "^操縦: (.+) — もう片方のユニットをクリックで交代 / ホバーで滑り先プレビュー$",
+      "Piloting: $1 — click the other unit to swap / hover to preview drift"
+    ],
+    [
+      "^ラウンド (\\d+) —(.*)$",
+      "ROUND $1 —$2"
+    ],
+    [
+      "^(\\S+) (\\d+)枚$",
+      "$1 $2 cards"
+    ],
+    [
+      "^(\\d+)枚$",
+      "$1 cards"
+    ],
+    [
+      "^挑戦: (.+)$",
+      "Abyss: $1"
+    ],
+    [
+      "^(.*)格納庫 \\(₢(\\d+)\\)$",
+      "$1Hangar (₢$2)"
+    ],
+    [
+      "^出撃(\\d+)回 / 生還(\\d+)回 / 最深 ZONE(\\d+) / ベストスコア (\\d+) / 所持(\\d+)種$",
+      "Sorties $1 / Survived $2 / Deepest ZONE$3 / Best score $4 / Cards owned $5"
+    ],
+    [
+      "^v(.+) — シード: (\\d+) \\(URLに \\?seed=数字 で固定可\\)$",
+      "v$1 — seed: $2 (pin it with ?seed=N in the URL)"
+    ],
+    [
+      "^光るマスをクリックで移動\\(ちょうど(\\d+)マス\\)(.*)$",
+      "Click a glowing tile to move (exactly $1 tiles)$2"
+    ]
+  ]
+}

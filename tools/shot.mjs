@@ -70,6 +70,31 @@ const SCENARIOS = {
     LK.cardsIn(S,"hand")[0].loc="discard";
     S.enc.step="drift"; S.enc.phase=null;
     LK.driftPhase(S); render();` },
+  // 連鎖花火: 機雷クラスタへ1HP敵が滑り込む→3連鎖(GIF素材の原型)。chain-mid=波及中、chain=スタンプ出揃い
+  "chain-mid": { clip: "#board", delay: 160, script: `
+    H.begin(); H.pickShip("vagrants"); H.confirmLoad(); H.dismissHints();
+    const S=lkDebug().S;
+    S.enc.units=S.enc.units.filter(u=>u.side==="player"||u.side==="enemy");
+    const mk=(id,x,y)=>S.enc.units.push({id,side:"hazard",type:"mine",name:"係留機雷",icon:"☄️",x,y,hp:1,maxHp:1,dmg:2,drift:null,shield:0,alive:true});
+    mk("m1",2,2); mk("m2",3,2); mk("m3",4,2); mk("m4",3,3);
+    const e=LK.enemies(S.enc)[0];
+    e.x=1; e.y=2; e.hp=1; e.drift="right";
+    for(const p of LK.players(S.enc)) p.drift=null;
+    LK.cardsIn(S,"hand")[0].loc="discard";
+    S.enc.step="drift"; S.enc.phase=null;
+    LK.driftPhase(S); render();` },
+  chain: { clip: "#board", delay: 430, script: `
+    H.begin(); H.pickShip("vagrants"); H.confirmLoad(); H.dismissHints();
+    const S=lkDebug().S;
+    S.enc.units=S.enc.units.filter(u=>u.side==="player"||u.side==="enemy");
+    const mk=(id,x,y)=>S.enc.units.push({id,side:"hazard",type:"mine",name:"係留機雷",icon:"☄️",x,y,hp:1,maxHp:1,dmg:2,drift:null,shield:0,alive:true});
+    mk("m1",2,2); mk("m2",3,2); mk("m3",4,2); mk("m4",3,3);
+    const e=LK.enemies(S.enc)[0];
+    e.x=1; e.y=2; e.hp=1; e.drift="right";
+    for(const p of LK.players(S.enc)) p.drift=null;
+    LK.cardsIn(S,"hand")[0].loc="discard";
+    S.enc.step="drift"; S.enc.phase=null;
+    LK.driftPhase(S); render();` },
   "boss-warning": `
     H.begin(); H.pickShip("vagrants"); H.confirmLoad(); H.dismissHints();
     const S=lkDebug().S;
@@ -163,8 +188,11 @@ async function shoot(browser, name, seed) {
   await page.evaluate(script);
   await page.waitForTimeout(typeof sc === "object" && sc.delay !== undefined ? sc.delay : 700);
   const file = path.join(ROOT, "tmp", `shot-${name}.png`);
-  if (typeof sc === "object" && sc.clip) await page.locator(sc.clip).screenshot({ path: file });
-  else await page.screenshot({ path: file });
+  if (typeof sc === "object" && sc.clip) {
+    // 要素スクショはアニメ中に「not stable」で落ちる — 位置だけ取ってページ側でclip撮影
+    const box = await page.locator(sc.clip).boundingBox();
+    await page.screenshot({ path: file, clip: box });
+  } else await page.screenshot({ path: file });
   console.log(`ok: tmp/shot-${name}.png`);
   await page.close();
 }
