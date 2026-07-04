@@ -41,6 +41,11 @@ const SCENES = {
     const S=lkDebug().S;
     for(const c of LK.cardsIn(S,"hand")) c.loc="discard";
     S.enc.step="upkeep"; LK.pump(S); render(); H.restChoose();`,
+  restshift: `${BATTLE_SETUP}
+    const S=lkDebug().S;
+    for(const c of LK.cardsIn(S,"hand")) c.loc="discard";
+    S.enc.step="upkeep"; LK.pump(S); LK.doRest(S,"random"); render();`,
+  "title-moments": `lkDebug().META.moments={legend:1,chain3:1,phys5:1}; lkDebug().META.types={hunter:1}; render();`,
   salvage: `${BATTLE_SETUP}
     const S=lkDebug().S;
     S.enc.units=S.enc.units.filter(u=>u.side==="player"||u.side==="enemy");

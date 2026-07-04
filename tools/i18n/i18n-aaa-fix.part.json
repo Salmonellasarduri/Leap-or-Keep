@@ -31,9 +31,31 @@
     "手札が尽きると休息=": "Empty hand forces a rest = ",
     "1枚永久ロスト": "1 card lost forever",
     "。カード=寿命": ". Cards = lifespan",
-    "旗艦の船体。ゾーンをまたいで持ち越される。回復は応急パッチ/補給/残骸修理のみ。0=ラン終了": "FS hull. Carries over between zones. Repairs only via Quick Patch / resupply / wreck salvage. 0 = run over"
+    "旗艦の船体。ゾーンをまたいで持ち越される。回復は応急パッチ/補給/残骸修理のみ。0=ラン終了": "FS hull. Carries over between zones. Repairs only via Quick Patch / resupply / wreck salvage. 0 = run over",
+    "永久ロスト": "lost forever",
+    "船長診断の型図鑑:": "Captain-type codex:"
   },
   "rules": [
+    [
+      "^(旗艦|随伴機)を\\((\\d+),(\\d+)\\)へ。ドリフトは変わらない$",
+      "Move $1 to ($2,$3). Drift unchanged"
+    ],
+    [
+      "^姿勢制御: (.+)を(.+)\\((\\d+),(\\d+)\\)へ1マス退避\\(慣性そのまま・敵の予告から身をずらせ\\)$",
+      "Attitude control: shift $1 $2 to ($3,$4) — drift unchanged, slip the telegraphs"
+    ],
+    [
+      "^成り行きの休息 — 『(.+)』が宇宙に流れていった。$",
+      "Rest, come what may — “$1” drifted off into space."
+    ],
+    [
+      "^🧭 型図鑑 (\\d+)/(\\d+) — 全部の型で生きて帰れるか\\?$",
+      "🧭 Type Codex $1/$2 — can you make it home as every type?"
+    ],
+    [
+      "^船長診断の型図鑑: (.+)$",
+      "Captain-type codex: $1"
+    ],
     [
       "^(🔓|🔒)(.+): (.+)$",
       "$1$2: $3"

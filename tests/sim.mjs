@@ -745,6 +745,7 @@ function simulateRun(seed, kind) {
         continue;
       }
       if (s.enc.phase === "rest") { P.onRest(s); continue; }
+      if (s.enc.phase === "restshift") { LK.restShiftSkip(s); continue; } // botは姿勢制御を使わない(人間/エージェント向けの主体性)
       if (s.enc.phase === "crashsalvage") {
         const d=LK.cardsIn(s,"discard");
         const ship=LK.unitById(s.enc,"ship");

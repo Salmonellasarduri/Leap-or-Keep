@@ -1,0 +1,132 @@
+{
+  "exact": {
+    "・☄️機雷は": "• ☄️Mines ",
+    "誘爆": "chain-detonate",
+    "する — 敵を押し込めば花火大会だ": " — shove enemies in for a fireworks show",
+    "休息の連鎖がデッキを食い尽くした": "A spiral of rests devoured your deck",
+    "カードは握って死ぬより、使って生きる燃料だ。敵を早く減らせば、休息はそもそも要らない": "Cards are fuel to live by, not to die holding. Kill faster and you won't need to rest at all",
+    "浅い傷は装甲(HP)で受けろ。HPは補給で戻るが、燃えたカードは永遠に戻らない": "Take shallow hits on the hull. HP comes back at resupply — burned cards never do",
+    "燃料に投じたカードが多すぎた": "Too many cards went into the fuel tank",
+    "跳ぶ前に残カード数を見ろ。寿命10枚のうち燃料に回せるのは2枚が限度だ": "Check your card count before leaping. Of a 10-card lifespan, two is all you can spare for fuel",
+    "全カード喪失 — 寿命が敵に届く前に燃え尽きた": "All cards lost — your lifespan burned out before it reached the enemy",
+    "1ターンで必ず2枚減る。毎ターン、ダメージか位置の利のどちらかに変換し続けろ": "Every turn costs two cards, no exceptions. Convert each one into damage or position, every single turn",
+    "全弾を船体で受けた末の轟沈": "Sank taking every hit on the hull",
+    "致命打はカード1枚で無効化できる(手札か消耗から)。船体は通貨、カードは保険 — 両替を覚えろ": "A lethal hit can be negated with one card (hand or discard). Hull is currency, cards are insurance — learn to exchange",
+    "船体大破 — 深淵の圧が上回った": "Hull shattered — the abyss pressed harder",
+    "敵の予告(赤マス)から1歩ずれるだけで大半は空振りする。移動の上半分は回避の道具だ": "One step off the telegraphed red tiles and most attacks whiff. The top half of a card is a dodging tool",
+    "手を離した分、随伴機の整備が進んだ(HP+1)": "Letting go freed up hands — drone maintenance done (HP+1)",
+    "残骸の熱: この戦域中は強化(+)相当": "Wreck heat: counts as upgraded (+) for this sector",
+    "掠り!": "GRAZE!",
+    "痺れを切らした — 距離を詰めてくる": "Lost patience — closing the distance",
+    "🛞 姿勢制御 — 1マスだけ身をよじれる": "🛞 Attitude control — one tile of wiggle room",
+    "エンジンは休んでいても、姿勢制御スラスタは生きている。": "The engine may be resting, but the RCS thrusters are alive.",
+    "1体だけ1マス": "One unit, one tile",
+    "動かせる(慣性はそのまま)。": " of movement (drift unchanged).",
+    "敵の予告から身をずらす、最後の機会だ。": "Your last chance to slip out of the telegraphs.",
+    "そのまま耐える": "Brace and endure",
+    "そのまま耐える(姿勢制御を使わない)": "Brace and endure (skip attitude control)",
+    "いま帰れば": "Return now for",
+    "同じ荷のまま次のボスで帰還なら": "Return at the next boss with the same cargo:",
+    "(これから拾う分は上積み)": "(everything you pick up is on top)",
+    "不動。十字に充填→焼却を繰り返し、合間に機雷を産み落とす。直撃は交点のみ2、翼は掠り1 — 半分逃げれば半分助かる": "Immobile. Charges a cross, then burns it, laying mines in between. Only the intersection hits for 2 — the wings graze for 1. Escape half, save half",
+    "初めての誘爆": "First Sympathetic Blast",
+    "機雷の連鎖を起こす": "Set off a mine chain",
+    "花火大会": "Fireworks Festival",
+    "3連鎖以上の誘爆": "A chain of 3+ detonations",
+    "同士討ちの演出家": "Director of Friendly Fire",
+    "敵の攻撃を敵に当てさせる": "Make an enemy hit an enemy",
+    "静寂を破る者": "Breaker of the Silence",
+    "3連続撃破": "3 kills in a row",
+    "命の両替商": "The Life Exchanger",
+    "カードを燃やして致命打を消す": "Burn a card to negate a lethal hit",
+    "残機1の舵": "Helm at One Hull",
+    "船体1の淵から生きて帰る": "Come home alive from 1 hull",
+    "物理の伝道師": "Apostle of Physics",
+    "1ランで物理キル5回": "5 physics kills in one run",
+    "太陽に焼かせた": "Let the Sun Do It",
+    "太陽フレアで敵を始末": "Finish an enemy with a solar flare",
+    "渦の給仕": "Waiter of the Vortex",
+    "重力渦に敵を呑ませる": "Feed an enemy to the gravity well",
+    "目を閉じさせた者": "The One Who Closed the Eye",
+    "中心墓所の主を討つ": "Slay the master of the Central Tomb",
+    "轢断者を轢いた者": "Roadkiller of the Roadkiller",
+    "墓所の轢断者を討つ": "Slay the tomb's grinder",
+    "産室の消灯": "Lights Out in the Nursery",
+    "増殖の女王を討つ": "Slay the brood queen",
+    "伝説": "Legend",
+    "ボスを討って生きて帰る": "Slay a boss and come home alive",
+    "断固たる帰還": "The Resolute Return",
+    "深度倍率x2以上で生きて帰る": "Return alive at depth multiplier x2+",
+    "瞬間図鑑 — 深淵で起きうるドラマの収集録:": "Moment Codex — a collection of every drama the abyss can stage:"
+  },
+  "rules": [
+    [
+      "^☠ 敗因: (.+)$",
+      "☠ Cause of death: $1"
+    ],
+    [
+      "^▸ 次の一手: (.+)$",
+      "▸ Next move: $1"
+    ],
+    [
+      "^被弾(\\d+)発をカードで打ち消した — 寿命の前借り$",
+      "Negated $1 hits with cards — borrowing against your lifespan"
+    ],
+    [
+      "^残骸の熱が移った — 『(.+)』はこの戦域中\\+扱いだ$",
+      "The wreck's heat transferred — “$1” counts as + for this sector"
+    ],
+    [
+      "^(.+)は十字の翼を掠めただけだ\\(半減\\)$",
+      "$1 only grazed the cross's wing (halved)"
+    ],
+    [
+      "^(.+) が姿勢制御で1マス退避 — エンジンは死んでいても、身はよじれる$",
+      "$1 slips one tile on attitude control — the engine is dead, but the body can twist"
+    ],
+    [
+      "^姿勢制御: (.+)を(.+)\\((\\d+),(\\d+)\\)へ1マス退避\\(慣性そのまま・敵の予告から身をずらせ\\)$",
+      "Attitude control: shift $1 $2 to ($3,$4) — drift unchanged, slip the telegraphs"
+    ],
+    [
+      "^(旗艦|随伴機)を\\((\\d+),(\\d+)\\)へ。ドリフトは変わらない$",
+      "Move $1 to ($2,$3). Drift unchanged"
+    ],
+    [
+      "^自己ベスト\\+(\\d+)!$",
+      "Personal best +$1!"
+    ],
+    [
+      "^\\(自己ベストまであと(\\d+)\\)$",
+      "($1 short of your best)"
+    ],
+    [
+      "^✦NEW (.+)$",
+      "✦NEW $1"
+    ],
+    [
+      "^瞬間図鑑に刻まれた: (.+)$",
+      "Carved into the Moment Codex: $1"
+    ],
+    [
+      "^🏆 瞬間図鑑 (\\d+)/(\\d+) — 深淵はまだ全部の顔を見せていない$",
+      "🏆 Moment Codex $1/$2 — the abyss hasn't shown you all its faces yet"
+    ],
+    [
+      "^●(.+)$",
+      "●$1"
+    ],
+    [
+      "^○(.+)$",
+      "○$1"
+    ],
+    [
+      "^\\?\\?\\? — (.+)$",
+      "??? — $1"
+    ],
+    [
+      "^SCORE (\\d+)$",
+      "SCORE $1"
+    ]
+  ]
+}

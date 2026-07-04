@@ -136,7 +136,7 @@ export function legalChoices(s) {
     const raw = LK.cargoValue(s);
     const mult = LK.rewardMultiplier ? LK.rewardMultiplier(run) : 1;
     const payout = LK.cargoPayoutValue ? LK.cargoPayoutValue(s) : raw;
-    add("keep", `帰還する(ランを勝利で終える — 価値${raw}×x${mult}=${payout}を確定)`);
+    add("keep", `帰還する(ランを勝利で終える — 価値${raw}×x${mult}=${payout}を確定 / SCORE ${LK.scorePreview(s).keep})`);
     if (run.zone < LK.CONFIG.ZONES) {
       const cost = LK.fuelCost(s);
       const cards = LK.aliveCards(s);
@@ -144,7 +144,7 @@ export function legalChoices(s) {
       const combos = kCombos(cards.map(c => c.uid), cost).slice(0, 200);
       for (const combo of combos) {
         const names = combo.map(u => LK.defOf(cards.find(c => c.uid === u)).name).join("+");
-        add(`leap:${combo.join(",")}`, `跳ぶ(燃料: ${names}を永久ロスト / 次のボス帰還で倍率x${mult}->x${nextMult})`);
+        add(`leap:${combo.join(",")}`, `跳ぶ(燃料: ${names}を永久ロスト / 次のボス帰還で倍率x${mult}->x${nextMult}、同じ荷ならSCORE ${LK.scorePreview(s).leap}〜)`);
       }
     }
     return out;
@@ -185,6 +185,12 @@ export function legalChoices(s) {
     if (ship.hp > 1 || run.freeChooseRest > 0)
       for (const c of [...LK.cardsIn(s, "hand"), ...LK.cardsIn(s, "discard")])
         add(`rest_choose:${c.uid}`, `休息(自選${run.freeChooseRest > 0 ? "・無償" : "・旗艦HP-1"}): 『${LK.defOf(c).name}』を手放す`);
+    return out;
+  }
+  if (enc.phase === "restshift") {
+    add("restshift_skip", "そのまま耐える(姿勢制御を使わない)");
+    for (const o of LK.restShiftOptions(s))
+      add(`restshift:${o.unitId}:${o.dir}`, `姿勢制御: ${o.unitId === "ship" ? "旗艦" : "随伴機"}を${o.dir}(${o.x},${o.y})へ1マス退避(慣性そのまま・敵の予告から身をずらせ)`);
     return out;
   }
   if (enc.phase === "drift") { add("drift", "慣性解決(ラウンド頭の滑り — 全員が影の位置へ)"); return out; }
@@ -756,6 +762,8 @@ export function applyChoice(s, id) {
       }
       case "rest_random": return LK.doRest(s, "random");
       case "rest_choose": return LK.doRest(s, "choose", rest[0]);
+      case "restshift": return LK.restShift(s, rest[0], rest[1]);
+      case "restshift_skip": return LK.restShiftSkip(s);
       case "drift": return LK.driftPhase(s);
       case "enemy_turn": LK.enemyPhaseAll(s); return { ok: true };
       case "commit": return LK.commitTurn(s);
