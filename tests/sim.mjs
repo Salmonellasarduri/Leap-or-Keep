@@ -118,8 +118,8 @@ console.log("== rule checks ==");
     ok(LK.aliveCards(s).length === before-1, "rest loses exactly 1 card");
     ok(LK.cardsIn(s,"discard").length === 0, "rest recovers discard");
   } else {
-    ok(s.run.over || s.enc.phase==="rest" || s.enc.phase==="damage" || s.enc.phase==="cleared",
-       "after 3 empty turns: rest or terminal state, got phase=" + (s.enc&&s.enc.phase));
+    ok(s.run.over || ["rest","damage","cleared","crashsalvage"].includes(s.enc.phase),
+       "after 3 empty turns: rest or terminal state, got phase=" + (s.enc&&s.enc.phase)); // Z1機雷2化で誘爆物理キル→crashsalvageも正規遷移
   }
 }
 {
@@ -463,7 +463,7 @@ function shoot(s, targetId){
   const es=LK.enemies(s.enc);
   ok(es.length===3, "swarm: z1 first encounter 2->3 enemies", "n="+es.length);
   ok(es.every(e=>e.maxHp===LK.ENEMY_DEFS[e.type].hp+1), "heavy: all enemies +1 hp");
-  ok(s.enc.units.filter(u=>u.type==="mine").length===2, "minefield: +2 mines (z1 base 0)");
+  ok(s.enc.units.filter(u=>u.type==="mine").length===4, "minefield: +2 mines (z1 base 2 — 初ラン花火保証)");
   const rr=LK.applyResupply(s);
   ok(!rr.ok, "norepair: resupply blocked");
   ok(Math.abs(LK.contractMult(s.run)-2.2)<1e-9, "6 contracts -> x2.2 multiplier");

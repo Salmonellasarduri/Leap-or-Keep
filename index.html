@@ -528,7 +528,7 @@ const ENEMY_DEFS = {
   // ボス3種(ランごとに正体が変わる — bossOf()が抽選): 戦い方が根本から違う
   apex:     {name:"アポカリプス・コア", icon:"👁️", hp:14, dmg:2, boss:true, title:"中心墓所の主",
     hint:"十字の射線を読め。機雷を産む — だが機雷は、こちらの武器にもなる。",
-    desc:"不動。十字に充填→焼却を繰り返し、合間に機雷を産み落とす。レーンを外し続けろ"},
+    desc:"不動。十字に充填→焼却を繰り返し、合間に機雷を産み落とす。直撃は交点のみ2、翼は掠り1 — 半分逃げれば半分助かる"},
   juggernaut:{name:"グレイヴ・ローラー", icon:"🦏", hp:12, dmg:2, boss:true, armor:true, title:"墓所の轢断者",
     hint:"照準→轢断の2拍子。装甲は銃を弾く — 機雷と岩の上へ誘い出して自滅させろ。",
     desc:"装甲突進ボス。1ラウンドかけて照準(橙レーン)し、次のラウンドにそのレーンを轢断する(最初にぶつかった者に2、自分も軋む)。障害物が天敵"},
@@ -543,7 +543,7 @@ const ENEMY_DEFS = {
 // [zone-1] = {e1, safe, danger, hz:[debris,mine], well:重力渦確率, flare:太陽フレア}
 // 敵タイプ=攻略法の語彙(アークナイツ式): 各ゾーンで「いつもの動き」をひとつずつ崩す
 const ZONE_TABLE = [
-  {e1:["miner","miner"],                 safe:["miner","miner"],                 danger:["miner","miner","bomber"],       hz:[1,0]},
+  {e1:["miner","miner"],                 safe:["miner","miner"],                 danger:["miner","miner","bomber"],       hz:[1,2]}, // 機雷2=初ランで必ず誘爆の火種を見せる(看板の露出保証)
   {e1:["miner","warden"],                safe:["pirate","bomber","miner"],       danger:["warden","pirate","mender"],     hz:[1,1]},
   // 各章の3エリア目・第2戦域は必ずボス。帰還判断もこの後だけ発生する。
   {e1:["pirate","jelly","splitter"],     safe:["apex"],                          danger:["apex","miner"],                hz:[1,1], well:.4},
@@ -707,7 +707,7 @@ function startEncounter(state, loadoutUids){
     let tries=0;
     while(tries++<30){
       let x,y;
-      if(t==="mine" && minesPlaced.length && state.rand()<0.6){
+      if(t==="mine" && minesPlaced.length && state.rand()<(run.zone===1?0.85:0.6)){ // Z1はほぼ必ずクラスタ=初ランの花火保証
         // 機雷は6割で既存機雷の隣に寄せる: クラスタ=誘爆連鎖の火種(1発で花火大会が起きる地形)
         const a=minesPlaced[Math.floor(state.rand()*minesPlaced.length)];
         const nb=neighborCells(a.x,a.y);
@@ -1115,14 +1115,15 @@ const ENEMY_AI = {
     return it;
   }},
   apex: { plan(state,u){
-    // ボス: 十字充填→焼却の2拍子+合間に機雷を産む。不動。
+    // ボス: 十字充填→焼却の2拍子+合間に機雷を産む。不動。交点=直撃2/片翼=掠り1(グレイズ — 半分逃げれば半分助かる)
     const enc=state.enc; const it=baseIntent(u);
-    if(u.charge){ it.attackCells=u.charge.map(c=>({...c})); it.dmg=u.dmg; it.fire=true; return it; }
+    if(u.charge){ it.attackCells=u.charge.map(c=>({...c})); it.dmg=u.dmg; it.fire=true; it.cross=u.chargeCross||null; return it; }
     const p=nearestPlayer(enc,u);
     if(p){
       const cells=[...rowCells(p.y),...colCells(p.x)].filter(c=>!(c.x===u.x&&c.y===u.y));
       const seen=new Set();
       it.chargeCells=cells.filter(c=>{const k=c.x+","+c.y; if(seen.has(k))return false; seen.add(k); return true;});
+      it.chargeCross={row:p.y,col:p.x};
     }
     // 機雷産卵(盤上の機雷3個まで)
     const mines=enc.units.filter(x=>x.alive&&x.type==="mine").length;
@@ -1169,7 +1170,31 @@ function baseIntent(u){ return {unitId:u.id, moveTo:null, moveDir:null, brake:fa
 function planIntents(state){
   const enc=state.enc; enc.intents=[];
   const avoid=new Set();
-  for(const u of enemies(enc)) enc.intents.push(ENEMY_AI[u.type].plan(state,u,avoid));
+  for(const u of enemies(enc)){
+    // 苛立ち: 狙い撃ちが2連続空振り(ラップ振動等の空振りループ)→次は攻撃せず距離を詰める。退屈の根を断つ
+    if((u.whiffs||0)>=2 && !(ENEMY_DEFS[u.type]||{}).boss){
+      u.whiffs=0;
+      enc.intents.push(irkedIntent(state,u,avoid));
+      continue;
+    }
+    enc.intents.push(ENEMY_AI[u.type].plan(state,u,avoid));
+  }
+}
+// 痺れを切らした敵: 最大2歩、最寄りのプレイヤーへ直進(攻撃なし)。次ラウンドから通常AIに戻る
+function irkedIntent(state,u,avoid){
+  const enc=state.enc; const it=baseIntent(u); it.irked=true;
+  let pos={x:u.x,y:u.y};
+  for(let s=0;s<2;s++){
+    const p=nearestPlayer(enc,pos);
+    if(!p) break;
+    const k=dirBetween(pos,p);
+    if(!k) break;
+    const d=DIRS[k], nx=wrap(pos.x+d.x), ny=wrap(pos.y+d.y);
+    if(unitAt(enc,nx,ny)||avoid.has(nx+","+ny)) break;
+    pos={x:nx,y:ny}; it.moveDir=k;
+  }
+  if(pos.x!==u.x||pos.y!==u.y){ it.moveTo=pos; avoid.add(pos.x+","+pos.y); }
+  return it;
 }
 
 function execIntent(state, it){
@@ -1216,6 +1241,7 @@ function execIntent(state, it){
   if(it.aimDir) u.rushDir=it.aimDir;
   if(it.chargeCells){
     u.charge=it.chargeCells;
+    u.chargeCross=it.chargeCross||null; // 十字の交点(直撃判定用)。充填時にロック
     log(state, it.aimDir ? `${u.name} が照準 — 橙のレーンから退け、轢かれるぞ` : `${u.name} がエネルギー充填中… 直線上から退避せよ`, "warn");
     return;
   }
@@ -1254,6 +1280,7 @@ function execIntent(state, it){
   }
   if(it.attackCells.length){
     fx(state,{type:"flash",cells:it.attackCells.map(c=>({...c})),beam:!!it.fire});
+    let struck=false; // 苛立ち検知: この攻撃が誰か(敵味方問わず)に届いたか
     for(const c of it.attackCells){
       const v=unitAt(enc,c.x,c.y);
       if(!v){
@@ -1262,13 +1289,26 @@ function execIntent(state, it){
         continue;
       }
       // 同士討ち解禁: 予告マスにいる者は敵味方問わず喰らう(誘導が戦術になる)
-      if(it.fire){ if(v.id!==u.id) dealDamage(state,v,it.dmg,u.name+"の主砲"); }
+      if(it.fire){ if(v.id!==u.id){
+        struck=true;
+        let dm=it.dmg;
+        // グレイズ: 十字の交点だけが直撃。片翼は掠り(半減) — 「半分逃げれば半分助かる」のニアミス報酬
+        if(it.cross && !(v.y===it.cross.row && v.x===it.cross.col)){
+          dm=Math.max(1,dm-1);
+          fx(state,{type:"float",x:v.x,y:v.y,text:"掠り!",cls:"good"});
+          log(state,`${v.name}は十字の翼を掠めただけだ(半減)`,"good");
+        }
+        dealDamage(state,v,dm,u.name+"の主砲");
+      } }
       else if(v.id!==u.id){
+        struck=true;
         if(v.side!=="player"){ log(state,`${u.name}の攻撃が${v.name}に当たった! 同士討ちだ`,"good"); chron(state,"friendly",{by:u.name,hit:v.name}); }
         dealDamage(state,v,it.dmg,u.name+"の攻撃");
       }
     }
-    if(it.fire){ u.charge=null; log(state,`${u.name} が直線を焼き払った!`,"bad"); }
+    if(it.fire){ u.charge=null; u.chargeCross=null; log(state,`${u.name} が直線を焼き払った!`,"bad"); }
+    // 苛立ちカウンタ: 狙い撃ち(単体予告)が連続空振り=同じ空振りループに入っている兆候
+    if(!it.fire && !it.aura){ u.whiffs = struck ? 0 : (u.whiffs||0)+1; }
   }
 }
 
@@ -1397,6 +1437,8 @@ function crashSalvagePick(state, uid){
   if(!c||c.loc!=="discard") return {ok:false,msg:"消耗パイルから選んでください"};
   c.loc="hand"; enc.crashSalvage--;
   log(state,`残骸サルベージ — 『${defOf(c).name}』を手札に回収した`,"good");
+  // 残骸の熱: 回収カードはこの戦域中、強化(+)相当で動く(装甲板+1との天秤を本物の二択にする)
+  if(!c.up){ c.hot=true; log(state,`残骸の熱が移った — 『${defOf(c).name}』はこの戦域中+扱いだ`,"good"); }
   pump(state);
   return {ok:true};
 }
@@ -1420,6 +1462,9 @@ function doRest(state, mode, loseUid){
   } else {
     c=hand[Math.floor(state.rand()*hand.length)];
     log(state, `成り行きの休息 — 『${defOf(c).name}』が宇宙に流れていった。`, "warn");
+    // 成り行きの見返り: 身を任せた分、整備が進む(自選HP-1との天秤を本物の二択にする)
+    const dr=unitById(enc,"drone");
+    if(dr&&dr.alive&&dr.hp<dr.maxHp){ dr.hp++; fx(state,{type:"float",x:dr.x,y:dr.y,text:"+1",cls:"good"}); log(state,"手を離した分、随伴機の整備が進んだ(HP+1)","good"); }
   }
   c.loc="lost"; state.run.restCount++;
   chron(state,"rest",{card:defOf(c).name,mode});
@@ -1506,7 +1551,7 @@ function upSpec(spec, up, def, half){
   else if(s.range){ s.range+=1; s.label=s.label.replace("射程"+spec.range, "射程"+s.range); }
   return s;
 }
-function cardSpec(state, c, half){ const d=defOf(c); return upSpec(d[half], c.up, d, half); }
+function cardSpec(state, c, half){ const d=defOf(c); return upSpec(d[half], c.up||c.hot, d, half); } // hot=残骸の熱(戦域限定+)
 function applyUpgrade(state, uid){
   if(uid){
     const c=cardByUid(state,uid);
@@ -1554,6 +1599,27 @@ function runScore(state){
     + aliveCards(state).length*3 + deployedStatus(state).filter(d=>d.alive).length*8
     + (r.physKills||0)*12 + (r.chainLinks||0)*15 + (r.bossKills||0)*80;
   return Math.round(base*(1+0.25*r.asc)*contractMult(r));
+}
+// 敗因の機械診断: 負けた瞬間に「敗因1行+次の一手」を渡す(負けても得るのは情報 — 工夫の余地を残す)
+function deathCoach(r){
+  if(r.win||!r.over) return null;
+  if(r.reason==="exhausted"){
+    if((r.restCount||0)>=3) return {cause:"休息の連鎖がデッキを食い尽くした",
+      tip:"カードは握って死ぬより、使って生きる燃料だ。敵を早く減らせば、休息はそもそも要らない"};
+    if((r.burnCount||0)>=3) return {cause:`被弾${r.burnCount}発をカードで打ち消した — 寿命の前借り`,
+      tip:"浅い傷は装甲(HP)で受けろ。HPは補給で戻るが、燃えたカードは永遠に戻らない"};
+    if((r.fuelBurnt||0)>=3) return {cause:"燃料に投じたカードが多すぎた",
+      tip:"跳ぶ前に残カード数を見ろ。寿命10枚のうち燃料に回せるのは2枚が限度だ"};
+    return {cause:"全カード喪失 — 寿命が敵に届く前に燃え尽きた",
+      tip:"1ターンで必ず2枚減る。毎ターン、ダメージか位置の利のどちらかに変換し続けろ"};
+  }
+  if(r.reason==="ship"){
+    if((r.burnCount||0)===0) return {cause:"全弾を船体で受けた末の轟沈",
+      tip:"致命打はカード1枚で無効化できる(手札か消耗から)。船体は通貨、カードは保険 — 両替を覚えろ"};
+    return {cause:"船体大破 — 深淵の圧が上回った",
+      tip:"敵の予告(赤マス)から1歩ずれるだけで大半は空振りする。移動の上半分は回避の道具だ"};
+  }
+  return null;
 }
 // ---- 船長診断(3軸8型+サブ称号 — 調査準拠: 全型褒めベース/図星はプレイデータ由来/軽口は自虐とポジの同居) ----
 // 軸: F=こぶし(物理/砲撃) R=リスク(山師/堅実) C=制御(計画/出たとこ勝負)。選択から導く(結果からではなく)
@@ -2065,7 +2131,7 @@ function commitTurn(state){
 // ---- encounter end / run flow ----
 function finishEncounter(state){
   const run=state.run;
-  for(const c of state.run.cards) if(["hand","discard","reserve"].includes(c.loc)) c.loc="pool";
+  for(const c of state.run.cards){ if(["hand","discard","reserve"].includes(c.loc)) c.loc="pool"; c.hot=false; } // 残骸の熱は戦域を跨がない
   const ship=unitById(state.enc,"ship"), drone=unitById(state.enc,"drone");
   chron(state,"clear",{rounds:state.enc.round, hull:ship?ship.hp:0});
   run.shipHp = ship?ship.hp:run.shipHp;
@@ -2206,7 +2272,7 @@ const LK = { CONFIG, CARD_DEFS, RELIC_DEFS, ENEMY_DEFS, ENEMY_AI, ZONE_TABLE, ZO
   unitAt, players, enemies, unitById, tdist, tdelta, wrap, encounterEnemyList, bossOf, log,
   enemyStep, enemyPhaseAll, nextActingEnemy, commitTurn, undoTurn, canUndo, effDamage, driftPhase,
   crashSalvagePick, deployedStatus,
-  SHIP_DEFS, ASC_DEFS, shipDef, fuelCost, runScore, lossCredits, CAPTAIN_TYPES, captainType, voyageChronicle,
+  SHIP_DEFS, ASC_DEFS, shipDef, fuelCost, runScore, deathCoach, lossCredits, CAPTAIN_TYPES, captainType, voyageChronicle,
   voyageMemory, voyageMemoryProse, carryoverRecord, carryoverDigest, cardSpec, upSpec, applyUpgrade, ramOptions, targetables, moveBlocked,
   applyResupply, applyScrapLoot, crashSalvageRepair };
 if(typeof module!=="undefined") module.exports=LK;
@@ -2912,8 +2978,8 @@ function renderEvent(app){
 function cardFaceHtml(c, opts){
   const d=defOf(c);
   opts=opts||{};
-  const st=upSpec(d.top,c.up,d,"top"), sb=upSpec(d.bottom,c.up,d,"bottom");
-  const nm=`${esc(d.name)}${c.up?'<span style="color:var(--gold)">+</span>':""}${d.relic?" ◆":""}`;
+  const st=upSpec(d.top,c.up||c.hot,d,"top"), sb=upSpec(d.bottom,c.up||c.hot,d,"bottom");
+  const nm=`${esc(d.name)}${c.up?'<span style="color:var(--gold)">+</span>':(c.hot?'<span style="color:var(--amber)" data-tt="残骸の熱: この戦域中は強化(+)相当">+🔥</span>':"")}${d.relic?" ◆":""}`;
   const click=opts.onclick?`onclick="${opts.onclick}"`:"";
   return `<div class="card ${opts.selected?"selcard":""} ${d.relic?"relic-card":""} ${opts.mini?"mini":""} ${opts.onclick?"pickable":""}" ${click}>
     <div class="ttl">${nm}</div>
@@ -3238,9 +3304,9 @@ function renderBattle(app){
     // 再クリックで選択解除(L-014): ペア確定後も、まだ何も実行していなければカードクリックで解除
     const unpairable = inPend && !pend.some(q=>q.done);
     const clickAttr = h => clickable?`onclick="H.halfClick('${c.uid}','${h}')"`:(unpairable?`onclick="H.unpair()"`:"");
-    const st=upSpec(d.top,c.up,d,"top"), sb=upSpec(d.bottom,c.up,d,"bottom");
+    const st=upSpec(d.top,c.up||c.hot,d,"top"), sb=upSpec(d.bottom,c.up||c.hot,d,"bottom");
     handHtml+=`<div class="card ${lock?"locked":""} ${d.relic?"relic-card":""}">
-      <div class="ttl">${esc(d.name)}${c.up?'<span style="color:var(--gold)">+</span>':""}${d.relic?" ◆":""}</div>
+      <div class="ttl">${esc(d.name)}${c.up?'<span style="color:var(--gold)">+</span>':(c.hot?'<span style="color:var(--amber)" data-tt="残骸の熱: この戦域中は強化(+)相当">+🔥</span>':"")}${d.relic?" ◆":""}</div>
       <div class="${topCls}" data-tt="${specTT(d.name,st)}" ${clickAttr("top")}><span class="tag">▲航行${st.lost?"🔥":""}</span><br>${labelHtml(st)}</div>
       <div class="${botCls}" data-tt="${specTT(d.name,sb)}" ${clickAttr("bottom")}><span class="tag">▼戦闘${sb.lost?"🔥":""}</span><br>${labelHtml(sb)}</div>
     </div>`;
@@ -3306,7 +3372,8 @@ function renderBattle(app){
       else if(it.attackCells.length){
         const tgt=it.attackCells.map(c=>{const v=unitAt(enc,c.x,c.y);return v&&v.side==="player"?v.name:null;}).filter(Boolean);
         what.push(`<span class="atk">${it.aura?"触手"+it.dmg:(tgt.length?esc(tgt.join("・"))+"へ攻撃"+it.dmg:"攻撃"+it.dmg+"(予告地点)")}</span>`);
-      } else if(!it.healTarget) what.push("様子見");
+      } else if(it.irked) what.push(`<span class="atk">痺れを切らした — 距離を詰めてくる</span>`);
+      else if(!it.healTarget) what.push("様子見");
     }
     return `<div class="intent ${dead?"dead":""}" onmouseenter="H.hl(${i},true)" onmouseleave="H.hl(${i},false)">
       <b>${i+1} ${u?u.icon:""}${u?esc(u.name):"(撃破済み)"}</b>${dead?"":` <span class="muted">HP${u.hp}${u.drift?" 🌀"+DIRS[u.drift].ch:""}</span><br><span class="what">${what.join(" / ")}</span>`}
@@ -3349,7 +3416,8 @@ function renderBattle(app){
         ・止まる/曲がるにはカードが要る。<b>直進はタダ、精密は有料</b><br>
         ・盤の端は反対側につながっている(壁はない)<br>
         ・敵は${enc.intents.length?"1→"+enc.intents.length:"番号"}の順に行動。赤マスから逃げろ<br>
-        ・手札が尽きると休息=<b>1枚永久ロスト</b>。カード=寿命
+        ・手札が尽きると休息=<b>1枚永久ロスト</b>。カード=寿命<br>
+        ・☄️機雷は<b>誘爆</b>する — 敵を押し込めば花火大会だ
       </div></div>
       <div class="panel"><h3>航行記録</h3><div id="log">${logHtml}</div></div>
     </div>
@@ -3653,6 +3721,10 @@ function renderSummary(app){
   <div style="max-width:720px;margin:40px auto;">
     <div class="bigtitle" style="color:${color}">${title}</div>
     <p style="text-align:center;color:var(--amber)">${esc(reason)}</p>
+    ${(()=>{const dc=LK.deathCoach(run); return dc?`<div class="panel" style="max-width:560px;margin:6px auto 0;padding:10px 16px;border-color:var(--cyan);">
+      <div style="color:var(--red);font-weight:800;">☠ 敗因: ${esc(dc.cause)}</div>
+      <div style="color:var(--cyan);margin-top:4px;">▸ 次の一手: ${esc(dc.tip)}</div>
+    </div>`:"";})()}
     <div class="panel" style="margin-top:18px;">
       <h3>ラン記録</h3>
       <div style="text-align:center; margin:6px 0 12px;">
