@@ -24,10 +24,15 @@
 - [x] タイトルに🌐トグル+?lang=en。canvas共有カード/Xポスト文は明示trText/LANG分岐
 - [x] 検証: 実ページの未翻訳ノード列挙ハーネス(tmp/i18n-debug.mjs)で battle=0件、summary/title 主要全訳、JAモード無傷
 
-## 残課題(次回)
-- [ ] EN: 深部コンテンツ(イベント/ボス台詞/契約ツールチップ)の訳抜け拾い — debugハーネスをZONE3+/サマリー全パターンに回す
-- [ ] 6秒GIF実撮り(playrun.mjsに連鎖ビート追跡を足して自動化)→ X固定ポスト用素材
-- [ ] shot.mjs boss-jugg/boss-brood シナリオが撮影失敗(改修前からの既存バグ、b.hp代入でundefined)
+## 残課題の消化(2026-07-04 第2便)
+- [x] EN深部監査: tools/i18n-audit.mjs(22シーン×テキストノード+ツールチップ断片列挙)→ **全シーン未翻訳0件**。
+      要点: ①ツールチップは`<b>`タグ入り→trSeg(タグ保持チャンク翻訳+残JPならタグ剥がし全文翻訳)を追加
+      ②辞書キーは「部分翻訳後」でなく**ソース文字列**で(旗艦→FS変換後をキーにする事故) ③zzzフォールバック層(「A — B」分割再帰/▸・•プレフィクス/絵文字+和文)が長尾を一掃
+- [x] 6秒GIF自動化: tools/gif.mjs(CDPスクリーンキャスト→80msリサンプル→盤面クロップ→gifencでGIF)。
+      chainheroシナリオ=溜め1.2s→3連鎖+DOUBLE KILL→残光、640×444/75f/約3.2MB(X上限内)。
+      罠: 撮影中のrender()呼び出しはfx層ごと盤面を再構築して演出を全滅させる — サルベージモーダルは
+      UI.salvageReady先行+#overlayのCSS非表示で「状態無改変・再render無し」で抑止(tools/gif.mjs内コメント参照)
+- [ ] shot.mjs boss-jugg/boss-brood 撮影失敗 → 別セッションで修理済み(bossTypes={章:正体}方式、i18n-audit.mjsも追従済み)
 
 ---
 

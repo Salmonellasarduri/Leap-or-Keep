@@ -1,0 +1,88 @@
+{
+  "exact": {
+    "FS の船体。ゾーンをまたいで持ち越される。回復は応急パッチ/補給/残骸修理のみ。0=ラン終了": "FS hull. Carries over between zones. Repairs only via Quick Patch / resupply / wreck salvage. 0 = run over",
+    "寿命ゲージ: カード=行動=命。": "Lifespan gauge: cards = actions = life.",
+    "移動: 1方向へ一直線に、表記の数きっかり進む(途中で止まれない)。経路上にユニットがいるとその方向は選べない。盤の端は反対側にループ。": "Move: straight in one direction, exactly the printed number (no stopping short). Blocked paths can't be chosen. Board edges loop to the far side.",
+    "🌀慣性ドリフト: 移動した者は次のラウンド開始時、同じ方向へ自動で1マス滑る(半透明の影=滑り先)。滑りたくなければ『制動』を使え。": "🌀Inertial drift: whoever moved slides 1 more tile the same way at next round's start (the ghost marks where). Don't want to slide? Brake.",
+    "制動: 自分のドリフトを消す。次のラウンドは滑らない。精密な位置取りに。": "Brake: cancel your drift. No sliding next round. For precision positioning.",
+    "周囲の射程内の敵すべてに命中。対象選択は不要。": "Hits every enemy in range around you. No targeting needed.",
+    "🔥ロストアクション: この側を使うと、このカードは消耗ではなく永久ロストになる。寿命と引き換えの切り札。": "🔥Lost action: using this half burns the card forever instead of discarding it. A trump card paid for with lifespan.",
+    "押し: 対象を直線に移動させ、その方向のドリフトを与える。途中で誰かにぶつかると双方1ダメージ。敵同士をぶつけろ。": "Push: shove the target in a line and give it drift that way. Collisions deal 1 damage to both. Slam enemies into each other.",
+    "引き: 対象を自分の手前まで引き、自分向きのドリフトを与える。次のラウンド、奴はさらに滑ってくる——受け止める準備はいいか?": "Pull: drag the target next to you and give it drift toward you. Next round it keeps sliding in — ready to catch it?",
+    "貫通射撃: 直線上・射程内の全ユニットを撃ち抜く(敵も岩も…味方も!)。": "Piercing shot: punches through every unit in a straight line within range (enemies, rocks... allies too!).",
+    "隣接の空きマスに機雷を設置する。自分も触れれば死ぬ。敵の進路・ドリフト先に置け(物理ビルドの心臓)。": "Lays mines on adjacent empty tiles. Touch one and you die too. Put them on enemy paths and drift lanes (the heart of a physics build).",
+    "HPが減っている対象には合計3ダメージ。コンボの締めに。無傷の相手には1しか入らないピーキー砲。": "Deals 3 total to wounded targets. The combo finisher. A peaky gun that only does 1 to the unscathed.",
+    "👆 クリックで操縦予約(次のペアの既定操縦になる)": "👆 Click to reserve the pilot (becomes default for the next pair)",
+    "全敵 HP+1": "All enemies +1 HP",
+    "▸ ⚠ 警告: 桁外れのエネルギー反応 — 墓所の主が目を覚ます。": "▸ ⚠ WARNING: off-the-scale energy signature — the master of the tomb is waking.",
+    "⚠ 警告: 桁外れのエネルギー反応 — 墓所の主が目を覚ます。": "⚠ WARNING: off-the-scale energy signature — the master of the tomb is waking.",
+    "火力押しを罰する — 物理キルは素通しだ": "Punishes gun-rushing — physics kills go right through",
+    "手数勝負 — 同士討ちと爆発で間引け": "A numbers game — thin them out with friendly fire and explosions",
+    "寿命が縮む — 深く跳ぶか、早く帰るか": "Your lifespan shrinks — leap deeper or head home early",
+    "回復は物理キルの装甲板だけ — ぶつけて生きろ": "Only physics-kill armor plates heal you — ram to live",
+    "罠だらけ — だが罠はあんたの武器でもある": "Traps everywhere — but traps are your weapons too",
+    "被弾1点が重い — 完璧な盤面操作を": "Every hit hurts — demand perfect board control"
+  },
+  "rules": [
+    [
+      "^⚠ (\\d+) (.+)が今ラウンド終わりにここを攻撃\\((\\d+)ダメージ\\)$",
+      "⚠ $1 $2 hits this cell at round's end ($3 damage)"
+    ],
+    [
+      "^🔶 (\\d+) (.+)の主砲が次のラウンドにここを焼く\\((\\d+)ダメージ\\)。今のうちに退避を$",
+      "🔶 $1 $2's main gun scorches this cell next round ($3 damage). Move, now"
+    ],
+    [
+      "^FS HP (\\d+) / 随伴機HP (\\d+)$",
+      "FS HP $1 / Drone HP $2"
+    ],
+    [
+      "^FS HP\\+(\\d+)\\(現在 (\\d+)/(\\d+)\\)$",
+      "FS HP+$1 (now $2/$3)"
+    ],
+    [
+      "^• 敵は1→(\\d+)の順に行動。赤マスから逃げろ$",
+      "• Enemies act 1→$1. Get off the red tiles"
+    ],
+    [
+      "^敵は1→(\\d+)の順に行動。赤マスから逃げろ$",
+      "Enemies act 1→$1. Get off the red tiles"
+    ],
+    [
+      "^突進(\\d+): 直進し、最初にぶつかった標的に(\\d+)ダメージして停止\\(突進力=移動距離=威力の単値\\)。何もいなければ全距離進んで滑る。$",
+      "Charge $1: barrel straight ahead, deal $2 damage to the first thing you hit, then stop (one number = move = power). Hit nothing and you travel the full distance, then slide."
+    ],
+    [
+      "^🔒(.+): (.+)$",
+      "🔒$1: $2"
+    ],
+    [
+      "^《(.+)》(.+)$",
+      "“$1” $2"
+    ],
+    [
+      "^▸ ?(.+)$",
+      "▸ $1"
+    ],
+    [
+      "^• ?(.+)$",
+      "• $1"
+    ],
+    [
+      "^(.+) — (.+)$",
+      "$1 — $2"
+    ],
+    [
+      "^([^぀-ヿ㐀-鿿]+) ([぀-ヿ㐀-鿿].*)$",
+      "$1 $2"
+    ],
+    [
+      "^(.+) (\\d+)/(\\d+)$",
+      "$1 $2/$3"
+    ],
+    [
+      "^(.+) /$",
+      "$1 /"
+    ]
+  ]
+}

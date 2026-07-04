@@ -30,9 +30,30 @@
     "敵は1→2の順に行動。赤マスから逃げろ": "Enemies act 1→2. Get off the red tiles",
     "手札が尽きると休息=": "Empty hand forces a rest = ",
     "1枚永久ロスト": "1 card lost forever",
-    "。カード=寿命": ". Cards = lifespan"
+    "。カード=寿命": ". Cards = lifespan",
+    "旗艦の船体。ゾーンをまたいで持ち越される。回復は応急パッチ/補給/残骸修理のみ。0=ラン終了": "FS hull. Carries over between zones. Repairs only via Quick Patch / resupply / wreck salvage. 0 = run over"
   },
   "rules": [
+    [
+      "^(🔓|🔒)(.+): (.+)$",
+      "$1$2: $3"
+    ],
+    [
+      "^旗艦HP\\+(\\d+)\\(現在 (\\d+)/(\\d+)\\)$",
+      "FS HP+$1 (now $2/$3)"
+    ],
+    [
+      "^HP (\\d+)/(\\d+) / 攻撃(\\d+)$",
+      "HP $1/$2 / Attack $3"
+    ],
+    [
+      "^\\(HP(\\d+) / 攻撃(\\d+)\\)$",
+      "(HP$1 / Attack $2)"
+    ],
+    [
+      "^SCORE — 挑戦: (.+) / (.+) /$",
+      "SCORE — Abyss: $1 / $2 /"
+    ],
     [
       "^ZONE (\\d+)/(\\d+) ?《(.+)》$",
       "ZONE $1/$2 “$3”"
