@@ -95,15 +95,17 @@ const SCENARIOS = {
     LK.cardsIn(S,"hand")[0].loc="discard";
     S.enc.step="drift"; S.enc.phase=null;
     LK.driftPhase(S); render();` },
+  // ボス(apex)が湧くのは3の倍数ゾーンの第2戦域のみ。正体はbossOfがbossTypes[章]で抽選するため、
+  // bossType単体の指定は上書きされて効かない — bossTypes={章:正体}で固定する(ゾーン6=第2章)。
   "boss-warning": `
     H.begin(); H.pickShip("vagrants"); H.confirmLoad(); H.dismissHints();
     const S=lkDebug().S;
-    S.run.zone=5; S.run.encIdx=1; S.run.route="danger"; S.run.shipHp=8;
+    S.run.zone=6; S.run.encIdx=1; S.run.route="danger"; S.run.shipHp=8; S.run.bossTypes={2:"apex"};
     LK.finishEncounter(S); S.run.encIdx=1; S.screen="loadout"; H.confirmLoad();`,
   "boss-fight": { delay: 400, script: `
     H.begin(); H.pickShip("vagrants"); H.confirmLoad(); H.dismissHints();
     const S=lkDebug().S;
-    S.run.zone=5; S.run.encIdx=1; S.run.route="danger"; S.run.shipHp=8;
+    S.run.zone=6; S.run.encIdx=1; S.run.route="danger"; S.run.shipHp=8; S.run.bossTypes={2:"apex"};
     LK.finishEncounter(S); S.run.encIdx=1; S.screen="loadout"; H.confirmLoad();
     H.bossEngage();
     const boss=S.enc.units.find(u=>u.type==="apex"); boss.hp=9; render();` },
@@ -144,19 +146,19 @@ const SCENARIOS = {
   "boss-jugg-warning": `
     H.begin(); H.pickShip("vagrants"); H.confirmLoad(); H.dismissHints();
     const S=lkDebug().S;
-    S.run.zone=5; S.run.encIdx=1; S.run.route="danger"; S.run.shipHp=8; S.run.bossType="juggernaut";
+    S.run.zone=6; S.run.encIdx=1; S.run.route="danger"; S.run.shipHp=8; S.run.bossTypes={2:"juggernaut"};
     LK.finishEncounter(S); S.run.encIdx=1; S.screen="loadout"; H.confirmLoad();`,
   "boss-jugg": { delay: 500, script: `
     H.begin(); H.pickShip("vagrants"); H.confirmLoad(); H.dismissHints();
     const S=lkDebug().S;
-    S.run.zone=5; S.run.encIdx=1; S.run.route="danger"; S.run.shipHp=8; S.run.bossType="juggernaut";
+    S.run.zone=6; S.run.encIdx=1; S.run.route="danger"; S.run.shipHp=8; S.run.bossTypes={2:"juggernaut"};
     LK.finishEncounter(S); S.run.encIdx=1; S.screen="loadout"; H.confirmLoad();
     H.bossEngage();
     const b=S.enc.units.find(u=>u.type==="juggernaut"); b.hp=8; render();` },
   "boss-brood": { delay: 500, script: `
     H.begin(); H.pickShip("vagrants"); H.confirmLoad(); H.dismissHints();
     const S=lkDebug().S;
-    S.run.zone=5; S.run.encIdx=1; S.run.route="danger"; S.run.shipHp=8; S.run.bossType="broodmother";
+    S.run.zone=6; S.run.encIdx=1; S.run.route="danger"; S.run.shipHp=8; S.run.bossTypes={2:"broodmother"};
     LK.finishEncounter(S); S.run.encIdx=1; S.screen="loadout"; H.confirmLoad();
     H.bossEngage();
     const b=S.enc.units.find(u=>u.type==="broodmother"); b.hp=6; render();` },
