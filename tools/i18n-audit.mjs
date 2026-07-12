@@ -152,6 +152,7 @@ for (const name of names) {
   page.on("pageerror", e => console.error(`[${name}] pageerror:`, e.message));
   try {
     await page.goto(`http://localhost:${PORT}/index.html?seed=42&lang=en`, { waitUntil: "load" });
+    await page.waitForFunction(() => window.__holoReady || window.__holoFailed); // holo初期化とのレース防止(R23)
     await page.evaluate(() => localStorage.removeItem("lok_meta_v1"));
     await page.evaluate(SCENES[name]);
     await page.waitForTimeout(700);

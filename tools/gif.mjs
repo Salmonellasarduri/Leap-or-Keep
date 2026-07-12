@@ -54,6 +54,7 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 920 } });
 page.on("pageerror", e => console.error("pageerror:", e.message));
 await page.goto(`http://localhost:${PORT}/index.html?seed=${seed}`, { waitUntil: "load" });
+await page.waitForFunction(() => window.__holoReady || window.__holoFailed); // holo初期化待ち(R23: GIF冒頭に2D盤面フレームが混ざるのを防ぐ)
 await page.evaluate(() => localStorage.removeItem("lok_meta_v1"));
 await page.evaluate(sc.script);
 await page.waitForTimeout(300);

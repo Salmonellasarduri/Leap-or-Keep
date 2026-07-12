@@ -1,3 +1,22 @@
+# Checkpoint — Phase 2: ホロ盤面リアルタイム3D化スパイク (2026-07-12)
+
+## Status: 完了(sim 277+agent 305 PASS / 投影整合0.26px / fpsゲートPASS / file://劣化OK / EN監査0件 / Sol 8.9→R2適用)
+
+## 実装(設計・検証全記録は docs/design-phase2-holo.md)
+- [x] holo.js(新規、three.js r185を vendor/three/ にベンドル+動的import+劣化フォールバック)
+- [x] CSS投影(perspective:1050px+rotateX(--tilt))をカメラ再現 — DOM盤面は透明ヒット面として温存(誤差0.26px)
+- [x] ドリフト滑走=500ms慣性オーバーシュート(判定は「前回syncのstep==drift」— gif.mjs直呼び経路でも発火)
+- [x] wrap並行2相/衝突ビート/boom波面リング+火花/hitflashグリッチ/shakeミラー/ヒットストップ同調
+- [x] Sol批評ループR1(8.9/10「出荷可」)→数値処方適用(シアン外殻コマ/輝線波面/グリッド減光/四隅投影点)
+- [x] tools: fps.mjs新規(CPU4x+モバイル、DOM版より軽い実測)/playrun MIME修正/shot・gif・i18n-auditにholo readiness待ち
+- [x] META.holoトグル(タイトル)+EN_EXACT補完+.nojekyll+THIRD_PARTY_LICENSES追記
+
+## 注意
+- mainへのマージ=即GH Pages公開。公開判断はオーナーゲート(GIF素材: tmp/gif-chainhero.gif)
+- HANDOFF-phase2-holo-board.md は消化済みスタンプ付与済み。「4×4」表記は誤り(実際は5×5=CONFIG.GRID)
+
+---
+
 # Checkpoint — 引力ロードマップ(Fable実プレイ由来の8改善) (2026-07-05)
 
 ## Status: 完了(sim 277+agent 305 PASS / EN監査25シーン0件 / 新UX5画面撮影確認)

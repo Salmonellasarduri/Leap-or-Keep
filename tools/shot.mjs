@@ -186,6 +186,7 @@ async function shoot(browser, name, seed) {
   page.on("console", m => { if (m.type() === "error") console.error(`[${name}] console.error:`, m.text()); });
   page.on("pageerror", e => console.error(`[${name}] pageerror:`, e.message));
   await page.goto(`http://localhost:${PORT}/index.html?seed=${seed}`, { waitUntil: "load" });
+  await page.waitForFunction(() => window.__holoReady || window.__holoFailed); // holo初期化とシナリオ実行のレース防止(R23)
   await page.evaluate(() => localStorage.removeItem("lok_meta_v1"));
   await page.evaluate(script);
   await page.waitForTimeout(typeof sc === "object" && sc.delay !== undefined ? sc.delay : 700);

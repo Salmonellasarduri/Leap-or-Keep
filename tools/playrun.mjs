@@ -9,7 +9,7 @@ import path from "node:path";
 const ROOT = path.resolve(import.meta.dirname, "..");
 mkdirSync(path.join(ROOT, "tmp"), { recursive: true });
 const PORT = 8398;
-const MIME = { ".html": "text/html; charset=utf-8" };
+const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript" }; // .js無しだとholo.jsのESM importがMIME検査で死に、視覚QAが常に2D盤面になる(R22)
 const server = createServer(async (req, res) => {
   let p = decodeURIComponent(new URL(req.url, "http://x").pathname);
   if (p === "/") p = "/index.html";

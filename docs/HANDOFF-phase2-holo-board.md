@@ -1,7 +1,9 @@
 # HANDOFF: Phase 2 — ホロ盤面のリアルタイム3D化
 
 > 2026-07-12 作成(Phase 0/1 完了セッションからの引継ぎ)。
-> 新セッションはこのファイルと `docs/research-3d-tabletop-diorama.md`(調査全文)を読んでから着手すること。
+> **⚠ 2026-07-12 このHANDOFFは消化済み。Phase 2 スパイクは実装・検証完了** — 現況と設計・検証結果は
+> **`docs/design-phase2-holo.md`** を読むこと(本書の「4×4盤面」は誤りで実際は5×5=CONFIG.GRID)。
+> 新セッションは design-phase2-holo.md §4(検証結果と残課題)から着手する。
 
 ## ゴール
 
