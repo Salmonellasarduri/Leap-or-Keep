@@ -175,6 +175,26 @@ button[data-tt],.half[data-tt],.unit[data-tt],.cell[data-tt],.pick[data-tt]{curs
   background-size:cover; background-position:center; opacity:0; transition:opacity 1.2s;
   filter:brightness(.45) saturate(.9);}
 #zonebg.on{opacity:.66;}
+/* 卓プレート(サルベージ船オペレーター席)。art/deskbg.webp が無ければ透明のまま */
+#deskbg{position:fixed; inset:0; pointer-events:none; z-index:-2;
+  background-size:cover; background-position:center bottom; opacity:0; transition:opacity 1.2s;}
+#deskbg.on{opacity:1;}
+/* 卓が出ている間: ゾーン背景は上部「窓外の光」へ退き、下部は卓に譲る */
+#deskbg.on ~ #zonebg{-webkit-mask-image:linear-gradient(180deg,#000 0%,#000 28%,transparent 58%);
+  mask-image:linear-gradient(180deg,#000 0%,#000 28%,transparent 58%);}
+#deskbg.on ~ #zonebg.on{opacity:.5;}
+/* 卓が出ている間: ビネットを深めて光だまりを強調 */
+#deskbg.on ~ #vig{background:radial-gradient(ellipse at 50% 42%, transparent 46%, #00000088 100%);}
+/* 手札域の局所スクリーン(Sol指摘#1): 卓の前縁・黄色光とカードの競合を鎮める */
+#deskbg.on::after{content:""; position:absolute; inset:55% 0 0; pointer-events:none;
+  background:linear-gradient(to bottom, transparent 0%, rgba(2,7,15,.28) 24%, rgba(2,7,15,.68) 100%);}
+/* 盤面の接地影(Sol指摘#2): 左上ランプに合わせ右下へ落とす */
+#deskbg.on ~ #app #board{box-shadow:0 0 26px hsl(var(--zh,215) 70% 50% / .14),
+  14px 20px 22px #000c, 4px 6px 8px #000a;}
+/* 操作説明のコントラスト固定(Sol指摘#3): 背景に依存しない暗色ピル */
+#deskbg.on ~ #app #prompt{display:table; margin-left:auto; margin-right:auto;
+  padding:6px 12px; border-radius:8px; background:rgba(3,9,18,.66);
+  box-shadow:0 4px 12px rgba(0,0,0,.35); text-shadow:0 1px 2px rgba(0,0,0,.9);}
 #titlehero{position:fixed; inset:0; pointer-events:none; z-index:-2;
   background-size:cover; background-position:center 30%; opacity:0; transition:opacity 1s;}
 #titlehero.on{opacity:.7; animation:kenburns 36s ease-in-out infinite alternate;}
@@ -4331,7 +4351,7 @@ function cancelOneLevel(){
 })();
 
 // boot
-for(const sid of ["stars1","stars2","zonebg","titlehero","vig"]){ const d=document.createElement("div"); d.id=sid; document.body.prepend(d); }
+for(const sid of ["vig","titlehero","zonebg","deskbg","stars2","stars1"]){ const d=document.createElement("div"); d.id=sid; document.body.prepend(d); }
 // 大判アートの存在確認(無ければ層は透明のまま)
 const ART={};
 function artBg(el, name){
@@ -4343,11 +4363,12 @@ function artBg(el, name){
   img.src=`art/${name}.webp`;
 }
 function updateArtLayers(){
-  const hero=document.getElementById("titlehero"), zone=document.getElementById("zonebg");
-  hero.classList.remove("on"); zone.classList.remove("on");
+  const hero=document.getElementById("titlehero"), zone=document.getElementById("zonebg"),
+        desk=document.getElementById("deskbg");
+  hero.classList.remove("on"); zone.classList.remove("on"); desk.classList.remove("on");
   if(!S) return;
   if(S.screen==="title"||S.screen==="shipselect"||S.screen==="hangar"||S.screen==="summary") artBg(hero,"title-hero");
-  else if(S.screen==="battle"||S.screen==="loadout") artBg(zone,"zone"+S.run.zone);
+  else if(S.screen==="battle"||S.screen==="loadout"){ artBg(zone,"zone"+S.run.zone); artBg(desk,"deskbg"); }
 }
 // ---- 共有カード(1200×675 = X推奨OGPサイズ。スクショ前提デザイン) ----
 const SHARE_URL="https://salmonellasarduri.github.io/Leap-or-Keep/";

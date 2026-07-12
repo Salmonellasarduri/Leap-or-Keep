@@ -62,6 +62,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## blender-mcp addon（`tools/blender/blender_mcp_addon.py`）
+
+- 出典: https://github.com/ahujasid/blender-mcp （Code created by Siddharth Ahuja © 2025）
+- ライセンス: MIT License（上掲のMIT本文と同一条件）
+- 用途: Blender側のMCPアドオン（MCPクライアントからBlenderを操作するソケットサーバ）。環境再現用にリポジトリへ同梱
+
 ## 参考（着想クレジット・ライセンス義務なし）
 
 - `qa-lenses` スキルは、ゲノムちゃん (RNA4219) 氏の記事 https://zenn.dev/rna4219/articles/0c51e22473e3c8 から着想を得て独自に書き起こしたもの（逐語的な借用なし。アイデアは著作権の保護対象外のため、これは礼儀としての記載）
