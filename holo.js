@@ -569,6 +569,13 @@ export function createHolo(ctx) {
     bg.curtain = document.createElement("div");
     bg.curtain.id = "holo-curtain";
     document.body.insertBefore(bg.curtain, app); // canvasの後=同z-indexでも上に描かれる
+    // P6: グリーブル装飾層(機材のフチ。英字のみ=情報と装飾の分離。curtainの後=最前の-1層)
+    const gre = document.createElement("div");
+    gre.id = "greeble";
+    gre.innerHTML = `<div class="gb-ruler"></div>
+      <div class="gb-build">LK_REL_0.9.15 // SALVAGE OPS CONSOLE</div>
+      <div class="gb-vert">DEEP-FIELD RECLAMATION UNIT 06 — AUTH: VAGRANT</div>`;
+    document.body.insertBefore(gre, app);
     bg.canvas.addEventListener("webglcontextlost", e => { e.preventDefault(); bgKill(); }, false);
 
     bg.renderer = new THREE.WebGLRenderer({ canvas: bg.canvas, alpha: true, antialias: false, powerPreference: "low-power" });
@@ -630,6 +637,44 @@ export function createHolo(ctx) {
     };
     bg.dustN = mkDust(26, 2.6, 0.5); bg.dustF = mkDust(36, 1.7, 0.3);
 
+    // P8: コックピット近景レイヤー(部屋の約2.2倍視差=「頭がガラスの内側にある」奥行き手がかり)
+    // 上2隅シルエット+下端コンソール縁のみ(下隅は手札域と衝突/画面辺中央は塞がない — Metroid Prime原則)
+    bg.near = new THREE.Group();
+    bg.scene.add(bg.near);
+    // Sol Phase4最終研磨: 前景は背景比+6-8%明るく・縁光2px・遮蔽影12-16px(暗背景に溶けて「同じ画面層」に見えるのを防ぐ)
+    const silMat = new THREE.MeshBasicMaterial({ color: 0x0a141a, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide });
+    const silShadow = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4, depthWrite: false, side: THREE.DoubleSide });
+    const rimMat = new THREE.LineBasicMaterial({ color: 0x73d8d5, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
+    const triShape = new THREE.Shape(); // 単位直角三角形(斜辺=画面内側)
+    triShape.moveTo(0, 0); triShape.lineTo(1, 0); triShape.lineTo(0, 1); triShape.closePath();
+    const triGeo = new THREE.ShapeGeometry(triShape);
+    const triEdge = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0)]);
+    bg.corners = [];
+    for (let i = 0; i < 2; i++) { // 0=左上, 1=右上
+      const grp = new THREE.Group();
+      const sh = new THREE.Mesh(triGeo, silShadow); // 遮蔽影(本体より7%大きい影絵=擬似ペナンブラ)
+      sh.scale.set(1.07, 1.07, 1); sh.position.z = -0.5;
+      grp.add(sh);
+      grp.add(new THREE.Mesh(triGeo, silMat));
+      grp.add(new THREE.Line(triEdge, rimMat));
+      bg.near.add(grp); bg.corners.push(grp);
+    }
+    const conShape = new THREE.Shape(); // 下端コンソール縁(上辺がわずかに狭い台形)
+    conShape.moveTo(0, 0); conShape.lineTo(1, 0); conShape.lineTo(0.985, 1); conShape.lineTo(0.015, 1); conShape.closePath();
+    bg.console = new THREE.Mesh(new THREE.ShapeGeometry(conShape),
+      new THREE.MeshBasicMaterial({ color: 0x0c171b, transparent: true, opacity: 0.94, depthWrite: false, side: THREE.DoubleSide }));
+    // 縁光は2px厚のクワッド(WebGLの線は1px制限のため)+上方向へ落ちる遮蔽影ストリップ
+    bg.consoleRim = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ color: 0x2e8e91, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const shadowTex = makeTex(8, 64, (g, w, h) => {
+      const lg = g.createLinearGradient(0, h, 0, 0);
+      lg.addColorStop(0, "rgba(0,0,0,0.55)"); lg.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = lg; g.fillRect(0, 0, w, h);
+    });
+    bg.consoleShadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
+    bg.near.add(bg.console); bg.near.add(bg.consoleRim); bg.near.add(bg.consoleShadow);
+
     window.addEventListener("mousemove", e => {
       bg.mx = (e.clientX / window.innerWidth - 0.5) * 2;
       bg.my = (e.clientY / window.innerHeight - 0.5) * 2;
@@ -669,6 +714,23 @@ export function createHolo(ctx) {
       bg.winGlow.scale.set(ww * bg.coverW * 1.4, wh * bg.coverH * 1.8, 1);
       const plmp = artPt(...ART_ANCHOR.lamp);
       bg.lampGlow.position.set(plmp.x, plmp.y, 1);
+      // P8: 近景レイヤーのレイアウト(z=40の拡大率 1000/(1000-40) を打ち消す係数)
+      if (bg.near) {
+        const k = (1000 - 40) / 1000;
+        const cw = w * 0.20 * k, ch = h * 0.15 * k; // 上限: 幅22%×高18%以内(視界不良クレーム回避)
+        const mob = w <= 620;
+        bg.corners[0].visible = bg.corners[1].visible = !mob;
+        bg.corners[0].position.set(-w / 2 * k, h / 2 * k, 40); bg.corners[0].scale.set(cw, -ch, 1);   // 左上(y下向きに伸ばす)
+        bg.corners[1].position.set(w / 2 * k, h / 2 * k, 40); bg.corners[1].scale.set(-cw, -ch, 1);  // 右上(x左向きに伸ばす)
+        const conH = h * 0.085 * k;
+        bg.console.position.set(-w / 2 * k * 1.02, -h / 2 * k - 1, 40);
+        bg.console.scale.set(w * k * 1.04, conH, 1);
+        const conTop = bg.console.position.y + conH;
+        bg.consoleRim.position.set(0, conTop, 40.6);           // 2px厚の縁光クワッド
+        bg.consoleRim.scale.set(w * k * 1.01, 2, 1);
+        bg.consoleShadow.position.set(0, conTop + 7.5, 40.3);  // 上方向へ15pxの遮蔽影
+        bg.consoleShadow.scale.set(w * k * 1.04, 15, 1);
+      }
     }
     return true;
   }
@@ -692,6 +754,12 @@ export function createHolo(ctx) {
     const ls = 1 - bg.lean * 0.015;
     bg.group.scale.set(ls, ls, 1);
     bg.matte.material.color.setScalar(1 - bg.lean * 0.04);
+    // P8: 近景は部屋の約2.2倍振幅で同方向に動き(多層係数の最上段)、リーン時は迫る(相対運動の増幅)
+    if (bg.near) {
+      bg.near.position.set(bg.px * 2.2, bg.py * 2.2, 0);
+      const ns = 1 + bg.lean * 0.008;
+      bg.near.scale.set(ns, ns, 1);
+    }
     // 相手の眼: ゆっくり明滅+まれな瞬き
     if (amb) {
       const breathe = 0.55 + 0.2 * Math.sin(now / (1700 - bg.eyeHeat * 900)) + bg.eyeHeat * 0.3;
@@ -746,7 +814,8 @@ export function createHolo(ctx) {
   function bgHide() { document.body.classList.remove("holo3"); }
   function bgKill() {
     bg.failed = true; bgHide();
-    try { if (bg.canvas) bg.canvas.remove(); if (bg.curtain) bg.curtain.remove(); } catch (_) {}
+    try { if (bg.canvas) bg.canvas.remove(); if (bg.curtain) bg.curtain.remove();
+      const g = document.getElementById("greeble"); if (g) g.remove(); } catch (_) {}
     bg.canvas = null; bg.ready = false;
   }
 

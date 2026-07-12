@@ -466,15 +466,15 @@ body.holo3 #side .panel{background:transparent; border:none; border-radius:0; pa
 body.holo3 #side .panel+.panel{border-top:1px solid rgba(73,213,255,.14);}
 body.holo3 #side h3{letter-spacing:.12em;}
 body.holo3 #side::before{content:""; position:absolute; inset:0; pointer-events:none; border-radius:10px; opacity:.6;
-  background: /* コーナーブラケット(4隅×2辺)+微走査線 */
-    linear-gradient(#49d5ff,#49d5ff) left 0 top 0/16px 2px no-repeat,
-    linear-gradient(#49d5ff,#49d5ff) left 0 top 0/2px 16px no-repeat,
-    linear-gradient(#49d5ff,#49d5ff) right 0 top 0/16px 2px no-repeat,
-    linear-gradient(#49d5ff,#49d5ff) right 0 top 0/2px 16px no-repeat,
-    linear-gradient(#49d5ff,#49d5ff) left 0 bottom 0/16px 2px no-repeat,
-    linear-gradient(#49d5ff,#49d5ff) left 0 bottom 0/2px 16px no-repeat,
-    linear-gradient(#49d5ff,#49d5ff) right 0 bottom 0/16px 2px no-repeat,
-    linear-gradient(#49d5ff,#49d5ff) right 0 bottom 0/2px 16px no-repeat,
+  background: /* コーナーブラケット(4隅×2辺、色は--bracket-cでモード切替 — P4)+微走査線 */
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) left 0 top 0/16px 2px no-repeat,
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) left 0 top 0/2px 16px no-repeat,
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) right 0 top 0/16px 2px no-repeat,
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) right 0 top 0/2px 16px no-repeat,
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) left 0 bottom 0/16px 2px no-repeat,
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) left 0 bottom 0/2px 16px no-repeat,
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) right 0 bottom 0/16px 2px no-repeat,
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) right 0 bottom 0/2px 16px no-repeat,
     repeating-linear-gradient(180deg, transparent 0 4px, rgba(111,231,255,.03) 4px 5px);}
 body.holo3 #side::after{content:""; position:absolute; left:17%; right:17%; bottom:-3px; height:2px; border-radius:2px;
   background:rgba(40,210,255,.85);
@@ -500,6 +500,80 @@ body.holo3 .card .half.faded{opacity:.5;}
   body.holo3 #hand{overflow-x:auto; justify-content:flex-start; scroll-snap-type:x proximity; padding-bottom:14px;}
   body.holo3 #hand .card{transform:none; margin:0 -4px; scroll-snap-align:center;}
   body.holo3 #hand .card:hover{transform:translateY(-6px);}
+}
+
+/* ===== Phase 4: 斜め3D UI言語(AK/EF/鳴潮研究 → docs/design-ui-slant.md)+コックピット感 ===== */
+:root{
+  --lk-skew:-8deg;   /* 2D浅斜め(チップ・ゲージセグメント) — AK±10°文法の可読安全側 */
+  --lk-cut:10px;     /* コーナーカット寸法(全要素共通・1要素1隅) */
+  --lk-tick:6px;     /* 計器プレート四隅ティック */
+  --lk-teal:#2E8E91; --lk-cyan:#73D8D5; --lk-amber:#E7A85B;
+}
+@media (max-width:620px){ :root{ --lk-cut:7px; } }
+/* P1: 上部HUD=計器プレート化(レイアウト不変ポリッシュ) */
+body.holo3 #hud{position:relative; padding:8px 14px; border:1px solid rgba(115,216,213,.26);
+  clip-path:polygon(0 0, calc(100% - var(--lk-cut)) 0, 100% var(--lk-cut), 100% 100%, 0 100%);
+  background:linear-gradient(180deg, rgba(5,17,35,.66), rgba(5,17,35,.44));}
+body.holo3 #hud::before{content:""; position:absolute; inset:0; pointer-events:none; opacity:.5;
+  background:
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) left 0 top 0/var(--lk-tick) 2px no-repeat,
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) left 0 top 0/2px var(--lk-tick) no-repeat,
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) left 0 bottom 0/var(--lk-tick) 2px no-repeat,
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) left 0 bottom 0/2px var(--lk-tick) no-repeat,
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) right 0 bottom 0/var(--lk-tick) 2px no-repeat,
+    linear-gradient(var(--bracket-c,#49d5ff),var(--bracket-c,#49d5ff)) right 0 bottom 0/2px var(--lk-tick) no-repeat;}
+body.holo3 #hud span{font-variant-numeric:tabular-nums;}
+body.holo3 .lifebar .seg{transform:skewX(var(--lk-skew)); border-radius:1px;} /* 寿命ゲージ=平行四辺形セグメント(斜め言語の起点) */
+/* P2: 行動チップ=平行四辺形(視覚箱だけ::beforeで傾け、テキストとヒット領域は水平のまま) */
+body.holo3 #chips button{position:relative; background:transparent; border:none; border-radius:0; z-index:0; margin:0 3px;}
+body.holo3 #chips button::before{content:""; position:absolute; inset:0; z-index:-1; transform:skewX(var(--lk-skew));
+  background:var(--panel2); border:1px solid rgba(115,216,213,.35);}
+body.holo3 #chips button.primary::before{background:#16335a; border-color:var(--lk-cyan);}
+body.holo3 #chips button.danger::before{border-color:var(--red);}
+body.holo3 #chips button:hover::before{filter:none; background:#1b3f6e;}
+/* 特権形状(45°系は1画面1個): ⚔敵ターンへ=六角プレート+パルス */
+body.holo3 #chips button.primary.cue{padding:8px 24px;}
+body.holo3 #chips button.primary.cue::before{transform:none;
+  clip-path:polygon(12px 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,12px 100%,0 50%);
+  background:#3a2c12; border:none; box-shadow:inset 0 0 0 1px var(--lk-amber);}
+body.holo3 #chips button.primary.cue::after{content:""; position:absolute; inset:-4px; pointer-events:none;
+  clip-path:polygon(12px 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,12px 100%,0 50%);
+  border:1px solid var(--lk-amber); animation:chippulse .9s ease-out infinite;}
+@keyframes chippulse{from{transform:scale(1); opacity:.9} to{transform:scale(1.22); opacity:0}}
+body.holo3 #chips button.primary.cue{animation:none;} /* 旧cuepulse(filter明滅)と二重発火させない */
+/* P3: #promptピル=ダッシュ導線付き計器ピル(EF署名CTA文法) */
+body.holo3 #deskbg.on ~ #app #prompt, body.holo3 #prompt{border:1px solid rgba(115,216,213,.30);}
+body.holo3 #prompt{position:relative; padding-left:44px!important;}
+body.holo3 #prompt::before{content:""; position:absolute; left:14px; top:50%; width:22px; height:1px; opacity:.6;
+  background:repeating-linear-gradient(90deg, var(--lk-cyan) 0 5px, transparent 5px 9px);}
+/* P4: 端末のモード文法 — 敵の手番はブラケット/枠が琥珀へ(Elite Dangerous文法) */
+body.holo3 #side{--bracket-c:#49d5ff;}
+body.holo3.enemy-turn #side{--bracket-c:var(--lk-amber); border-color:rgba(231,168,91,.4);}
+body.holo3.enemy-turn #hud{--bracket-c:var(--lk-amber);}
+body.holo3 #side h3::before{content:"// "; color:rgba(115,216,213,.45);}
+body.holo3 .intent{transition:box-shadow .15s ease-out;}
+body.holo3 .intent:hover{box-shadow:inset 3px 0 0 var(--lk-amber);}
+/* P5: モーダルのコーナーカット統一 */
+body.holo3 .modal{clip-path:polygon(0 0, calc(100% - var(--lk-cut)) 0, 100% var(--lk-cut), 100% 100%, 0 100%); border-radius:4px;}
+/* P6: グリーブル装飾層(機材のフチ。英字のみ=情報と装飾の分離) */
+#greeble{display:none; position:fixed; inset:0; z-index:-1; pointer-events:none; font-family:Consolas,monospace; color:rgba(115,216,213,.32);}
+body.holo3 #greeble{display:block;}
+#greeble .gb-build{position:absolute; left:10px; bottom:8px; font-size:10px; letter-spacing:.18em; opacity:.75;}
+#greeble .gb-vert{position:absolute; right:6px; top:14%; writing-mode:vertical-rl; font-size:10px; letter-spacing:.34em; opacity:.5;}
+#greeble .gb-ruler{position:absolute; top:0; left:30%; right:30%; height:4px; opacity:.55;
+  background:repeating-linear-gradient(90deg, rgba(115,216,213,.35) 0 1px, transparent 1px 7px);}
+/* P7-lite: 船体危機=フレーム自体が状態表示(四隅の赤ビネット) */
+body.holo3.hull-crit #greeble::before{content:""; position:absolute; inset:0;
+  background:
+    radial-gradient(ellipse at 0 0, rgba(255,85,102,.14), transparent 42%),
+    radial-gradient(ellipse at 100% 0, rgba(255,85,102,.14), transparent 42%),
+    radial-gradient(ellipse at 0 100%, rgba(255,85,102,.12), transparent 42%),
+    radial-gradient(ellipse at 100% 100%, rgba(255,85,102,.12), transparent 42%);
+  animation:hullwarn 2.4s ease-in-out infinite;}
+@keyframes hullwarn{0%,100%{opacity:.55}50%{opacity:1}}
+@media (max-width:620px){
+  body.holo3 #hud::before{display:none;}
+  #greeble .gb-vert, #greeble .gb-ruler{display:none;}
 }
 </style>
 </head>
@@ -3007,6 +3081,7 @@ function hudHtml(){
   const liveShip=S.enc&&unitById(S.enc,"ship");
   const hullNow=liveShip?liveShip.hp:(S.run.shipHp??sd.hp);
   const hullCls=hullNow<=2?"flash":"";
+  document.body.classList.toggle("hull-crit", hullNow<=sd.hp/3); // フレーム=状態表示(P7: 四隅の赤ビネット)
   return `<div id="hud">
     <span class="zone">ZONE ${S.run.zone}/${CONFIG.ZONES} 《${esc(ZONE_NAMES[S.run.zone-1])}》</span>
     <span class="${hullCls}" style="color:${hullNow<=sd.hp/3?"var(--red)":"var(--txt)"}" data-tt="${attrEsc("旗艦の船体。<b>ゾーンをまたいで持ち越される</b>。回復は応急パッチ/補給/残骸修理のみ。0=ラン終了")}">🚀 ${hullNow}/${sd.hp}</span>
@@ -3568,7 +3643,7 @@ function renderBattle(app){
   // action chips + controls
   let chips="";
   if(enc.step==="player"){
-    chips=`<div style="display:flex;gap:10px;justify-content:center;margin-top:6px;flex-wrap:wrap;">`;
+    chips=`<div id="chips" style="display:flex;gap:10px;justify-content:center;margin-top:6px;flex-wrap:wrap;">`;
     if(pend){
       pend.forEach((p,i)=>{
         const c=cardByUid(S,p.uid);
@@ -3803,6 +3878,7 @@ function maybeRunEnemyPhase(){
   (async()=>{
     try{
       if(holoOn() && !META.fxLite) document.body.classList.add("gaze-lean"); // 視線: 敵の手番に身を乗り出す
+      document.body.classList.add("enemy-turn"); // 端末/HUDのブラケットが琥珀へ(モード文法 — P4)
       let guard=0;
       const dl=META.fxLite?110:430, dl2=META.fxLite?90:400;
       while(S.enc && S.enc.step==="enemy" && !S.run.over && guard++<20){
@@ -3815,6 +3891,7 @@ function maybeRunEnemyPhase(){
       }
     } finally {
       document.body.classList.remove("gaze-lean");
+      document.body.classList.remove("enemy-turn");
       UI.acting=null; UI.stepping=false;
       render();
     }
