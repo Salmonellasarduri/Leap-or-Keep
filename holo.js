@@ -496,8 +496,12 @@ export function createHolo(ctx) {
   function fx(ev) {
     if (!active) return;
     const { META } = dbg();
-    if (ev.type === "boom") { burst(ev.x, ev.y, !!ev.big); if (ev.big) disturb(0.6); return; }
-    if (ev.type === "flash") { for (const c of ev.cells || []) { const st = tileState[c.y * GRID + c.x]; if (st) st.hot = 1; } return; }
+    if (ev.type === "boom") { burst(ev.x, ev.y, !!ev.big); if (ev.big) disturb(0.6); bg.eyeSpike = performance.now() + 170; return; }
+    if (ev.type === "flash") {
+      for (const c of ev.cells || []) { const st = tileState[c.y * GRID + c.x]; if (st) st.hot = 1; }
+      bg.eyeSpike = performance.now() + 170; // 発射の瞬間、椅子の眼が見開く
+      return;
+    }
     if (ev.type === "hitflash") {
       glitches.set(ev.unitId, performance.now() + 180);
       const { S } = dbg(); // 自機側の被弾は投影全体が乱れる(Phase 2.5)
@@ -519,6 +523,7 @@ export function createHolo(ctx) {
   let hoverKey = null;
   function hover(x, y) { hoverKey = x + "," + y; }
   function hoverOff() { hoverKey = null; }
+  function hlUnit(id, on) { const rec = units.get(id); if (rec) rec._hl = !!on; } // 意図リストホバー→機体増光(Sol D)
 
   // ==== Phase 3a: 背景シーン(2枚分割 — 敵対レビュー反映) ====================
   // 盤ホロcanvasとは独立した全画面fixed canvas。deskbg.webpの「完成した一人称卓の絵」を
@@ -671,18 +676,33 @@ export function createHolo(ctx) {
   function bgDraw(now, dt, amb) {
     if (!bg.ready || ctxLost) return;
     if (!bgLayout()) return;
-    const { META } = dbg();
+    const { S, META } = dbg();
+    // 相手の実在の呼応: 敵の手番は眼が強く・赤く灯る(「向こうが打っている」)
+    const enemyTurn = S && S.enc && (S.enc.step === "enemy" || S.enc.phase === "enemy");
+    bg.eyeHeat = bg.eyeHeat === undefined ? 0 : bg.eyeHeat;
+    bg.eyeHeat += ((enemyTurn ? 1 : 0) - bg.eyeHeat) * Math.min(1, dt / 400);
     // 視差: 部屋がわずかに逆方向へ(盤とテーブルのDOM整合は不変 — 遠景のみ動く)
     const par = (META.fxLite || !amb) ? 0 : 1;
     bg.px += ((-bg.mx * 10 * par) - bg.px) * 0.06;
     bg.py += ((bg.my * 6 * par) - bg.py) * 0.06;
     bg.group.position.set(bg.px, bg.py, 0);
+    // 視線リーン: 盤へ乗り出す間、部屋は1.5%後退+4%減光(Sol: 盤と背景の相対運動)
+    const leanT = document.body.classList.contains("gaze-lean") ? 1 : 0;
+    bg.lean = (bg.lean || 0) + (leanT - (bg.lean || 0)) * Math.min(1, dt / 350);
+    const ls = 1 - bg.lean * 0.015;
+    bg.group.scale.set(ls, ls, 1);
+    bg.matte.material.color.setScalar(1 - bg.lean * 0.04);
     // 相手の眼: ゆっくり明滅+まれな瞬き
     if (amb) {
-      const breathe = 0.55 + 0.2 * Math.sin(now / 1700);
+      const breathe = 0.55 + 0.2 * Math.sin(now / (1700 - bg.eyeHeat * 900)) + bg.eyeHeat * 0.3;
       if (bg.eyeBlink < now) { if (Math.random() < 0.004) bg.eyeBlink = now + 140; }
       const blink = bg.eyeBlink > now ? 0.12 : 1;
-      for (const e of bg.eyes) { e.material.opacity = breathe * blink; e.scale.y = blink < 1 ? 0.15 : 1; }
+      const spike = bg.eyeSpike > now ? 0.35 : 0; // 攻撃確定の瞬間だけ強く(Sol: 色より輝度)
+      for (const e of bg.eyes) {
+        e.material.opacity = Math.min(1, breathe + spike) * blink;
+        e.material.color.setRGB(1, 1 - bg.eyeHeat * 0.15, 1 - bg.eyeHeat * 0.2); // 暖色へ10-20%だけ(赤い警告灯にしない — Sol D)
+        e.scale.y = blink < 1 ? 0.15 : 1;
+      }
       // 窓外の船骸: 窓の可視域内をゆっくり横切る(48秒周期)+微回転
       const [wx, wy, ww] = ART_ANCHOR.window;
       const t = ((now / 48000) + 0.4) % 1;
@@ -884,6 +904,7 @@ export function createHolo(ctx) {
       rec.body.position.z = rec.spec.h / 2 * heightScale() + 2 + bob + rec.raise;
       if (rec.edges) rec.edges.position.z = rec.body.position.z;
       rec.glow.position.z = 0.8 + rec.raise;
+      rec.glow.material.opacity = rec._hl ? 0.3 : 0.16; // 意図ホバー中は足元光を増す
       if (rec._popT0) {
         const t = Math.min(1, (now - rec._popT0) / 220);
         const s = easeOutBack(t);
@@ -964,5 +985,5 @@ export function createHolo(ctx) {
 
   window.addEventListener("resize", () => { if (active) { try { sync(); } catch (e) { onFatal && onFatal(e); } } });
 
-  return { sync, fx, hitStop, hover, hoverOff, dispose, debug };
+  return { sync, fx, hitStop, hover, hoverOff, hlUnit, dispose, debug };
 }

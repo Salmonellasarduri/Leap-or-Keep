@@ -444,6 +444,63 @@ body.holo3 #deskbg, body.holo3 #zonebg{visibility:hidden;} /* .onクラスは残
 #holo-curtain{display:none; position:fixed; left:0; right:0; top:55%; bottom:0; z-index:-1; pointer-events:none;
   background:linear-gradient(to bottom, transparent 0%, rgba(2,7,15,.28) 24%, rgba(2,7,15,.68) 100%);} /* #deskbg.on::afterの代替(手札域の暗幕) */
 body.holo3 #holo-curtain{display:block;}
+/* ===== Phase 3.5: 視線アンカー(Sol処方: 全画面ズームでなく「盤列と背景の相対運動」。盤canvasは#boardwrap内=DOM/3D整合が自動維持) ===== */
+body.holo3 #boardwrap{transition:transform .55s cubic-bezier(.22,.75,.18,1);}
+body.holo3.gaze-lean #boardwrap{transform:scale(1.016) translateY(4px);} /* 敵の手番: 盤へ身を乗り出す(背景は3D側で後退・減光) */
+body.holo3.gaze-breath #boardwrap{animation:gazebreath .78s cubic-bezier(.22,.75,.18,1) 1 forwards;} /* 慣性解決: 短い呼吸1回 */
+@keyframes gazebreath{0%{transform:none}45%{transform:scale(1.012)}100%{transform:scale(1.006)}}
+@media (prefers-reduced-motion: reduce){
+  body.holo3 #boardwrap{transition:none;}
+  body.holo3.gaze-lean #boardwrap, body.holo3.gaze-breath #boardwrap{transform:none; animation:none;}
+}
+
+/* ===== Phase 3.5: 道具UI化(Sol処方 — body.holo3時のみ。2Dフォールバックは従来のWeb UIのまま) ===== */
+/* A. 右パネル群=「3枚のパネル」→「1台の投影端末」: 外周フレーム1つ+内部は細い区切り+部分透過 */
+body.holo3 #battle{perspective:1300px;}
+body.holo3 #side{gap:2px; position:relative; padding:10px 12px 16px;
+  border:1px solid rgba(73,213,255,.32); border-radius:10px;
+  background:linear-gradient(180deg, rgba(5,17,35,.78), rgba(5,17,35,.58));
+  backdrop-filter:blur(3px) saturate(.85); -webkit-backdrop-filter:blur(3px) saturate(.85);
+  transform:rotateY(-3deg) rotateX(.5deg); transform-origin:0% 40%;}
+body.holo3 #side .panel{background:transparent; border:none; border-radius:0; padding:9px 2px;}
+body.holo3 #side .panel+.panel{border-top:1px solid rgba(73,213,255,.14);}
+body.holo3 #side h3{letter-spacing:.12em;}
+body.holo3 #side::before{content:""; position:absolute; inset:0; pointer-events:none; border-radius:10px; opacity:.6;
+  background: /* コーナーブラケット(4隅×2辺)+微走査線 */
+    linear-gradient(#49d5ff,#49d5ff) left 0 top 0/16px 2px no-repeat,
+    linear-gradient(#49d5ff,#49d5ff) left 0 top 0/2px 16px no-repeat,
+    linear-gradient(#49d5ff,#49d5ff) right 0 top 0/16px 2px no-repeat,
+    linear-gradient(#49d5ff,#49d5ff) right 0 top 0/2px 16px no-repeat,
+    linear-gradient(#49d5ff,#49d5ff) left 0 bottom 0/16px 2px no-repeat,
+    linear-gradient(#49d5ff,#49d5ff) left 0 bottom 0/2px 16px no-repeat,
+    linear-gradient(#49d5ff,#49d5ff) right 0 bottom 0/16px 2px no-repeat,
+    linear-gradient(#49d5ff,#49d5ff) right 0 bottom 0/2px 16px no-repeat,
+    repeating-linear-gradient(180deg, transparent 0 4px, rgba(111,231,255,.03) 4px 5px);}
+body.holo3 #side::after{content:""; position:absolute; left:17%; right:17%; bottom:-3px; height:2px; border-radius:2px;
+  background:rgba(40,210,255,.85);
+  box-shadow:0 0 6px rgba(40,210,255,.8), 0 0 18px rgba(40,210,255,.28), 0 12px 18px rgba(30,190,220,.12);} /* 投影エミッタ線+卓への光 */
+body.holo3 .intent{border:none; border-left:2px solid rgba(73,213,255,.18); border-radius:0; background:rgba(73,213,255,.04);}
+body.holo3 #log{height:auto; min-height:40px; max-height:150px; -webkit-mask-image:linear-gradient(180deg,#000 76%,transparent); mask-image:linear-gradient(180deg,#000 76%,transparent);} /* 内容量に追従(空白率20%以下 — Sol R2)。「大きな空のtextarea」を残さない */
+
+/* B. 手札=「カードリスト」→「1つの物理トレイ」: 重なり+Y弧+共有接触影(--fan/--fyはrenderBattleが枚数から算出) */
+body.holo3 #hand{flex-wrap:nowrap; position:relative; padding:16px 0 10px;}
+body.holo3 #hand::after{content:""; position:absolute; left:5%; right:5%; bottom:0; height:18px; pointer-events:none; z-index:0;
+  background:radial-gradient(ellipse 60% 100% at 50% 50%, rgba(0,0,0,.34), transparent 72%);} /* トレイの共有接触影 */
+body.holo3 #hand .card{position:relative; z-index:1; margin:0 -9px;
+  transform:rotate(var(--fan,0deg)) translateY(var(--fy,0px)); transform-origin:50% 115%;
+  transition:transform .17s cubic-bezier(.2,.8,.2,1), box-shadow .17s, opacity .17s;
+  box-shadow:0 8px 10px rgba(0,0,0,.38), 0 18px 26px rgba(0,0,0,.22);}
+body.holo3 #hand .card:hover{transform:rotate(calc(var(--fan,0deg)*.5)) translateY(calc(var(--fy,0px) - 12px)) scale(1.025); z-index:5;}
+body.holo3 #hand .card.locked{opacity:.55; filter:saturate(.65);} /* Sol: 「無効状態」に見えない程度に(暗すぎ改善) */
+body.holo3 .card .half.faded{opacity:.5;}
+@media (max-width:980px){
+  body.holo3 #side{transform:none;} /* 横積みレイアウトでは傾けない */
+}
+@media (max-width:620px){
+  body.holo3 #hand{overflow-x:auto; justify-content:flex-start; scroll-snap-type:x proximity; padding-bottom:14px;}
+  body.holo3 #hand .card{transform:none; margin:0 -4px; scroll-snap-align:center;}
+  body.holo3 #hand .card:hover{transform:translateY(-6px);}
+}
 </style>
 </head>
 <body>
@@ -2921,11 +2978,13 @@ function maybeRunDriftPhase(){
     try{
       const app=document.getElementById("app");
       const had=aliveUnits(S.enc).some(u=>u.drift);
+      if(had && holoOn() && !META.fxLite) document.body.classList.add("gaze-breath"); // 視線: 慣性解決は短い呼吸1回(Sol: 持続ズームは強すぎ)
       if(had) await sleep(300);
       LK.driftPhase(S);
       renderBattle(app); flip(); drainFx();
       if(had) await sleep(640);
     } finally {
+      document.body.classList.remove("gaze-breath");
       UI.stepping=false;
       render();
     }
@@ -3471,7 +3530,12 @@ function renderBattle(app){
   const hand=cardsIn(S,"hand");
   const pend=enc.pending;
   let handHtml=`<div id="hand">`;
+  let hi=0;
   for(const c of hand){
+    // 手元トレイの弧(Sol処方: 左右±3°・両端8px沈み。holo3時のみCSSが参照)
+    const mid=(hand.length-1)/2, ft=mid>0?(hi-mid)/mid:0;
+    const fanStyle=`style="--fan:${(ft*3).toFixed(2)}deg;--fy:${(Math.pow(Math.abs(ft),1.6)*8).toFixed(1)}px"`;
+    hi++;
     const d=defOf(c);
     const inPend=pend&&pend.find(p=>p.uid===c.uid);
     const aSel=UI.selA&&UI.selA.uid===c.uid;
@@ -3493,7 +3557,7 @@ function renderBattle(app){
     const unpairable = inPend && !pend.some(q=>q.done);
     const clickAttr = h => clickable?`onclick="H.halfClick('${c.uid}','${h}')"`:(unpairable?`onclick="H.unpair()"`:"");
     const st=upSpec(d.top,c.up||c.hot,d,"top"), sb=upSpec(d.bottom,c.up||c.hot,d,"bottom");
-    handHtml+=`<div class="card ${lock?"locked":""} ${d.relic?"relic-card":""}">
+    handHtml+=`<div class="card ${lock?"locked":""} ${d.relic?"relic-card":""}" ${fanStyle}>
       <div class="ttl">${esc(d.name)}${c.up?'<span style="color:var(--gold)">+</span>':(c.hot?'<span style="color:var(--amber)" data-tt="残骸の熱: この戦域中は強化(+)相当">+🔥</span>':"")}${d.relic?" ◆":""}</div>
       <div class="${topCls}" data-tt="${specTT(d.name,st)}" ${clickAttr("top")}><span class="tag">▲航行${st.lost?"🔥":""}</span><br>${labelHtml(st)}</div>
       <div class="${botCls}" data-tt="${specTT(d.name,sb)}" ${clickAttr("bottom")}><span class="tag">▼戦闘${sb.lost?"🔥":""}</span><br>${labelHtml(sb)}</div>
@@ -3738,6 +3802,7 @@ function maybeRunEnemyPhase(){
   UI.stepping=true;
   (async()=>{
     try{
+      if(holoOn() && !META.fxLite) document.body.classList.add("gaze-lean"); // 視線: 敵の手番に身を乗り出す
       let guard=0;
       const dl=META.fxLite?110:430, dl2=META.fxLite?90:400;
       while(S.enc && S.enc.step==="enemy" && !S.run.over && guard++<20){
@@ -3749,6 +3814,7 @@ function maybeRunEnemyPhase(){
         await sleep(dl2);
       }
     } finally {
+      document.body.classList.remove("gaze-lean");
       UI.acting=null; UI.stepping=false;
       render();
     }
@@ -4347,6 +4413,7 @@ const H={
     if(u&&u.alive){
       const el=document.querySelector(`.unit[data-uid="${u.id}"]`);
       if(el) el.classList.toggle("hl",on);
+      if(HOLO){ try{ HOLO.hlUnit(u.id,on); }catch(e){ holoKill(e); } } // 3D機体も増光(DOM情報と空間内主体の同一性 — Sol D)
     }
   },
   pv(x,y,dir){
