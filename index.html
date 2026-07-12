@@ -436,6 +436,14 @@ body.holo #board::before{content:""; position:absolute; inset:0; z-index:2; poin
 body.holo #holo-canvas.shake{animation:bshake .35s;}
 body.holo #holo-canvas.shake2{animation:bshake2 .32s;}
 body.holo #holo-canvas.shake3{animation:bshake3 .42s;}
+/* ===== Phase 3a: 背景シーン(2枚分割の全画面canvas — 盤ホロとは独立、部屋が生きる層) ===== */
+#holo-bg{position:fixed; left:0; top:0; width:100vw; height:100vh; height:100lvh; z-index:-1;
+  pointer-events:none; opacity:0; transition:opacity 1.2s;}
+body.holo3 #holo-bg{opacity:1;}
+body.holo3 #deskbg, body.holo3 #zonebg{visibility:hidden;} /* .onクラスは残す(~連動CSSのため)。描画だけ3D側に委譲 */
+#holo-curtain{display:none; position:fixed; left:0; right:0; top:55%; bottom:0; z-index:-1; pointer-events:none;
+  background:linear-gradient(to bottom, transparent 0%, rgba(2,7,15,.28) 24%, rgba(2,7,15,.68) 100%);} /* #deskbg.on::afterの代替(手札域の暗幕) */
+body.holo3 #holo-curtain{display:block;}
 </style>
 </head>
 <body>

@@ -33,6 +33,11 @@ const SCENARIOS = {
     H.begin(); H.pickShip("vagrants"); H.confirmLoad(); H.dismissHints();
     const S=lkDebug().S; const hand=LK.cardsIn(S,"hand");
     H.halfClick(hand[0].uid,"top"); H.halfClick(hand[1].uid,"bottom");`,
+  // Phase 3a: 卓上フレーミング(全画面3Dシーン込み。背景フェード1.2s+眼/船骸の出現を待つ)
+  tabletop: { delay: 2200, script: `
+    H.begin(); H.pickShip("vagrants"); H.confirmLoad(); H.dismissHints();
+    const S=lkDebug().S; const hand=LK.cardsIn(S,"hand");
+    H.halfClick(hand[0].uid,"top"); H.halfClick(hand[1].uid,"bottom");` },
   "battle-flat": `
     lkDebug().META.tilt=false;
     H.begin(); H.pickShip("vagrants"); H.confirmLoad(); H.dismissHints();`,

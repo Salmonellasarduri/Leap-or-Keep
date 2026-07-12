@@ -520,6 +520,216 @@ export function createHolo(ctx) {
   function hover(x, y) { hoverKey = x + "," + y; }
   function hoverOff() { hoverKey = null; }
 
+  // ==== Phase 3a: 背景シーン(2枚分割 — 敵対レビュー反映) ====================
+  // 盤ホロcanvasとは独立した全画面fixed canvas。deskbg.webpの「完成した一人称卓の絵」を
+  // マット平面として置き、視差・相手の眼・窓外の船骸・塵・ゾーン光で「生きた空間」にする。
+  // DOM整合制約なし(遠景のみ)なので視差が自由。unlit素材のみ=盤ホロとのトーン混在なし。
+  const bg = {
+    canvas: null, curtain: null, renderer: null, scene: null, cam: null,
+    ready: false, failed: false, group: null, matte: null, imgW: 1600, imgH: 900,
+    eyes: [], eyeBlink: 0, wreck: null, winGlow: null, lampGlow: null, boardGlow: null,
+    dustN: null, dustF: null, px: 0, py: 0, mx: 0, my: 0,
+    lastW: 0, lastH: 0, lastZh: -1, coverW: 0, coverH: 0, topY: 0,
+  };
+  // 絵の中のアンカー(deskbg.webp 1600x900 の画像内割合)
+  const ART_ANCHOR = {
+    eyeL: [0.497, 0.145], eyeR: [0.532, 0.145],  // 空の椅子の背もたれ上部の闇(凡例テキスト行より下)
+    window: [0.865, 0.135, 0.26, 0.24],           // 右上の窓(cx,cy,w,h)
+    lamp: [0.235, 0.13],                          // 左上ランプヘッド
+    dust: [0.13, 0.08, 0.33, 0.62],               // ランプ光条の塵域(x,y,w,h)
+  };
+
+  function bgInit() {
+    if (bg.failed || bg.canvas || bg.loading || typeof document === "undefined") return;
+    bg.loading = true; // 画像ロード中の再入で二重ビルドしない(眼が4個になる事故の再発防止)
+    const img = new Image();
+    img.onload = () => { try { bg.imgW = img.naturalWidth; bg.imgH = img.naturalHeight; bgBuild(img); } catch (e) { bg.failed = true; } };
+    img.onerror = () => { bg.failed = true; }; // art/なしデプロイ=劣化哲学どおり2Dプレートのまま
+    img.src = "art/deskbg.webp";
+  }
+
+  function bgRadialTex(size, inner, outer) {
+    return makeTex(size, size, (g, w, h) => {
+      const r = g.createRadialGradient(w / 2, h / 2, 2, w / 2, h / 2, w / 2);
+      r.addColorStop(0, inner); r.addColorStop(1, outer);
+      g.fillStyle = r; g.fillRect(0, 0, w, h);
+    });
+  }
+
+  function bgBuild(img) {
+    const app = document.getElementById("app");
+    bg.canvas = document.createElement("canvas");
+    bg.canvas.id = "holo-bg";
+    document.body.insertBefore(bg.canvas, app);
+    bg.curtain = document.createElement("div");
+    bg.curtain.id = "holo-curtain";
+    document.body.insertBefore(bg.curtain, app); // canvasの後=同z-indexでも上に描かれる
+    bg.canvas.addEventListener("webglcontextlost", e => { e.preventDefault(); bgKill(); }, false);
+
+    bg.renderer = new THREE.WebGLRenderer({ canvas: bg.canvas, alpha: true, antialias: false, powerPreference: "low-power" });
+    bg.renderer.setClearColor(0x000000, 0);
+    bg.scene = new THREE.Scene();
+    bg.cam = new THREE.PerspectiveCamera(45, 1, 10, 4000);
+    bg.cam.position.set(0, 0, 1000);
+    bg.group = new THREE.Group(); // マット+絵アンカーの子(視差はこのグループを動かす)
+    bg.scene.add(bg.group);
+
+    const tex = new THREE.Texture(img);
+    tex.colorSpace = THREE.SRGBColorSpace; // CSS表示とトーン一致(レビューF4)
+    tex.needsUpdate = true;
+    bg.matte = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: tex, depthWrite: false }));
+    bg.group.add(bg.matte);
+
+    // 相手の眼(空の椅子の上、アンバーの2点。Inscryption処方「相手の実在」の最小形)
+    const eyeTex = bgRadialTex(64, "rgba(255,190,110,0.95)", "rgba(255,190,110,0)");
+    for (let i = 0; i < 2; i++) {
+      const eye = new THREE.Mesh(new THREE.PlaneGeometry(13, 13),
+        new THREE.MeshBasicMaterial({ map: eyeTex, transparent: true, opacity: 0.65, blending: THREE.AdditiveBlending, depthWrite: false }));
+      bg.group.add(eye); bg.eyes.push(eye);
+    }
+    // 窓のゾーン光(ゾーンアイデンティティの回収 — #zonebg非表示の補償)
+    bg.winGlow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: bgRadialTex(128, "rgba(255,255,255,0.55)", "rgba(255,255,255,0)"),
+        transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
+    bg.group.add(bg.winGlow);
+    // 窓外を漂う船骸シルエット
+    const ws = new THREE.Shape();
+    ws.moveTo(-30, 4); ws.lineTo(-12, 12); ws.lineTo(8, 9); ws.lineTo(26, 14); ws.lineTo(30, 2);
+    ws.lineTo(14, -6); ws.lineTo(18, -12); ws.lineTo(-4, -10); ws.lineTo(-22, -13); ws.lineTo(-28, -4); ws.closePath();
+    bg.wreck = new THREE.Mesh(new THREE.ShapeGeometry(ws),
+      new THREE.MeshBasicMaterial({ color: 0x020609, transparent: true, opacity: 0.9, depthWrite: false }));
+    // 縁光: 黒塗りでなく「星明かりを受けた船骸」に見せる(Sol Phase3a指摘)
+    const wreckRim = new THREE.LineSegments(new THREE.EdgesGeometry(bg.wreck.geometry),
+      new THREE.LineBasicMaterial({ color: 0x73d8d5, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
+    bg.wreck.add(wreckRim);
+    bg.group.add(bg.wreck);
+    // ランプの呼吸(まれな明滅)
+    bg.lampGlow = new THREE.Mesh(new THREE.PlaneGeometry(90, 90),
+      new THREE.MeshBasicMaterial({ map: bgRadialTex(128, "rgba(255,180,90,0.5)", "rgba(255,180,90,0)"),
+        transparent: true, opacity: 0.10, blending: THREE.AdditiveBlending, depthWrite: false }));
+    bg.group.add(bg.lampGlow);
+    // 盤下グロー(ホログラムが卓面に落とす光 — DOM盤の位置を毎フレーム追う。視差非連動なのでscene直下)
+    bg.boardGlow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: bgRadialTex(128, "rgba(80,200,200,0.5)", "rgba(80,200,200,0)"),
+        transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending, depthWrite: false }));
+    bg.scene.add(bg.boardGlow);
+    // 塵2層(ランプ光条の中を漂う)
+    const mkDust = (n, size, op) => {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+      const pts = new THREE.Points(geo, new THREE.PointsMaterial({
+        color: 0xffd9a8, size, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }));
+      pts.frustumCulled = false; pts.userData.n = n; pts.userData.seed = Math.random() * 1000;
+      bg.scene.add(pts); return pts;
+    };
+    bg.dustN = mkDust(26, 2.6, 0.5); bg.dustF = mkDust(36, 1.7, 0.3);
+
+    window.addEventListener("mousemove", e => {
+      bg.mx = (e.clientX / window.innerWidth - 0.5) * 2;
+      bg.my = (e.clientY / window.innerHeight - 0.5) * 2;
+    }, { passive: true });
+    bg.ready = true;
+    if (active) bgShow(); // 画像ロードがsyncより遅れた場合もその場で有効化(次renderを待たない)
+  }
+
+  // 画像内割合(fx,fy: y下向き) → bgワールド座標(カバー配置後)
+  function artPt(fx, fy) {
+    return { x: (fx - 0.5) * bg.coverW, y: bg.topY - fy * bg.coverH };
+  }
+
+  function bgLayout() {
+    const w = bg.canvas.clientWidth, h = bg.canvas.clientHeight;
+    if (!w || !h) return false;
+    if (Math.abs(w - bg.lastW) > 8 || Math.abs(h - bg.lastH) > 8) { // 再サイズ暴発防止(URLバー伸縮対策)
+      bg.lastW = w; bg.lastH = h;
+      bg.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
+      bg.renderer.setSize(w, h, false);
+      bg.cam.aspect = w / h;
+      bg.cam.fov = 2 * Math.atan(h / 2000) * 180 / Math.PI; // z=0平面でワールド=CSSpx
+      bg.cam.updateProjectionMatrix();
+      // cover + 下端揃え(CSSのbackground: cover / center bottom を再現)+ 視差ぶんオーバースキャン
+      const s = Math.max(w / bg.imgW, h / bg.imgH) * 1.05;
+      bg.coverW = bg.imgW * s; bg.coverH = bg.imgH * s;
+      bg.matte.scale.set(bg.coverW, bg.coverH, 1);
+      bg.matte.position.y = -h / 2 + bg.coverH / 2;
+      bg.topY = bg.matte.position.y + bg.coverH / 2;
+      // 絵アンカーの再配置
+      const [elx, ely] = ART_ANCHOR.eyeL, [erx, ery] = ART_ANCHOR.eyeR;
+      const pl = artPt(elx, ely), pr = artPt(erx, ery);
+      bg.eyes[0].position.set(pl.x, pl.y, 2); bg.eyes[1].position.set(pr.x, pr.y, 2);
+      const [wx, wy, ww, wh] = ART_ANCHOR.window;
+      const pw = artPt(wx, wy);
+      bg.winGlow.position.set(pw.x, pw.y, 1);
+      bg.winGlow.scale.set(ww * bg.coverW * 1.4, wh * bg.coverH * 1.8, 1);
+      const plmp = artPt(...ART_ANCHOR.lamp);
+      bg.lampGlow.position.set(plmp.x, plmp.y, 1);
+    }
+    return true;
+  }
+
+  function bgDraw(now, dt, amb) {
+    if (!bg.ready || ctxLost) return;
+    if (!bgLayout()) return;
+    const { META } = dbg();
+    // 視差: 部屋がわずかに逆方向へ(盤とテーブルのDOM整合は不変 — 遠景のみ動く)
+    const par = (META.fxLite || !amb) ? 0 : 1;
+    bg.px += ((-bg.mx * 10 * par) - bg.px) * 0.06;
+    bg.py += ((bg.my * 6 * par) - bg.py) * 0.06;
+    bg.group.position.set(bg.px, bg.py, 0);
+    // 相手の眼: ゆっくり明滅+まれな瞬き
+    if (amb) {
+      const breathe = 0.55 + 0.2 * Math.sin(now / 1700);
+      if (bg.eyeBlink < now) { if (Math.random() < 0.004) bg.eyeBlink = now + 140; }
+      const blink = bg.eyeBlink > now ? 0.12 : 1;
+      for (const e of bg.eyes) { e.material.opacity = breathe * blink; e.scale.y = blink < 1 ? 0.15 : 1; }
+      // 窓外の船骸: 窓の可視域内をゆっくり横切る(48秒周期)+微回転
+      const [wx, wy, ww] = ART_ANCHOR.window;
+      const t = ((now / 48000) + 0.4) % 1;
+      const p0 = artPt(wx + ww * 0.30, wy + 0.02), p1 = artPt(wx - ww * 0.30, wy - 0.03);
+      bg.wreck.position.set(p0.x + (p1.x - p0.x) * t, p0.y + (p1.y - p0.y) * t, 1.5);
+      bg.wreck.rotation.z = now / 90000;
+      // ランプの呼吸(まれにチラつく)
+      bg.lampGlow.material.opacity = 0.08 + 0.03 * Math.sin(now / 2300) + (Math.random() < 0.006 ? 0.08 : 0);
+      // 窓のゾーン光
+      if (bg.lastZh !== calib.zh) { bg.winGlow.material.color.setHSL((calib.zh % 360) / 360, 0.6, 0.6); bg.lastZh = calib.zh; }
+      bg.winGlow.material.opacity = 0.13 + 0.05 * Math.sin(now / 3600);
+      // 塵: ランプ光条内を漂う
+      for (const pts of [bg.dustN, bg.dustF]) {
+        const near = pts === bg.dustN, n = pts.userData.n, seed = pts.userData.seed;
+        const pos = pts.geometry.attributes.position.array;
+        const [dx0, dy0, dw, dh] = ART_ANCHOR.dust;
+        for (let i = 0; i < n; i++) {
+          const ph = seed + i * 37.7;
+          const fx = dx0 + dw * (0.5 + 0.5 * Math.sin(ph + now / (9000 + i * 331)));
+          const fy = dy0 + dh * (((ph * 7.13 + now / 26000) % 1 + 1) % 1); // ゆっくり沈降(0..1ループ)
+          const p = artPt(fx, fy);
+          const px2 = p.x + bg.px * (near ? 2.2 : 0.5), py2 = p.y + bg.py * (near ? 2.2 : 0.5);
+          pos[i * 3] = px2; pos[i * 3 + 1] = py2; pos[i * 3 + 2] = near ? 4 : 2;
+        }
+        pts.geometry.attributes.position.needsUpdate = true;
+      }
+    }
+    // 盤下グロー: DOM盤の実位置を追う(gBCR読みのみ — レビューF1の読み書き分離)
+    const boardEl = document.getElementById("board");
+    if (boardEl) {
+      const r = boardEl.getBoundingClientRect();
+      const w = bg.canvas.clientWidth, h = bg.canvas.clientHeight;
+      bg.boardGlow.position.set(r.left + r.width / 2 - w / 2, h / 2 - (r.top + r.height * 0.72), 3);
+      bg.boardGlow.scale.set(r.width * 1.5, r.height * 0.9, 1);
+      bg.boardGlow.visible = true;
+    } else bg.boardGlow.visible = false;
+    bg.renderer.render(bg.scene, bg.cam);
+  }
+
+  function bgShow() { if (bg.ready) document.body.classList.add("holo3"); }
+  function bgHide() { document.body.classList.remove("holo3"); }
+  function bgKill() {
+    bg.failed = true; bgHide();
+    try { if (bg.canvas) bg.canvas.remove(); if (bg.curtain) bg.curtain.remove(); } catch (_) {}
+    bg.canvas = null; bg.ready = false;
+  }
+
   // ---- 同期(冪等・全量) ----
   let active = false, lastEnc = null, lastStep = null, rafId = 0, lastT = 0;
 
@@ -527,6 +737,7 @@ export function createHolo(ctx) {
     if (!active && !document.body.classList.contains("holo")) return;
     active = false;
     document.body.classList.remove("holo");
+    bgHide();
     stopLoop();
     if (canvas.parentElement) canvas.remove();
   }
@@ -548,6 +759,7 @@ export function createHolo(ctx) {
     }
     document.body.classList.add("holo");
     active = true;
+    bgInit(); bgShow(); // Phase 3a: 背景シーン(準備できたフレームからフェードイン)
 
     const enc = S.enc;
     const encChanged = enc !== lastEnc;
@@ -688,6 +900,7 @@ export function createHolo(ctx) {
       } else rec.body.material.color.setHex(rec.spec.color); // チャージ明滅後の色戻し
     }
     if (wellRing.visible && amb) wellRing.rotation.z = now / 1200; // Sol #5: 0.7-1.0 rad/s
+    try { bgDraw(now, dt, amb); } catch (e) { bgKill(); } // 背景シーンは死んでも盤ホロを巻き込まない
 
     // ---- Phase 2.5: 井戸の宇宙(星ドリフト・星雲・投影乱れ) ----
     for (const st of env.stars) {
@@ -732,13 +945,21 @@ export function createHolo(ctx) {
     calibCheck,
     project: (x, y) => projectLocal(cellPos(x, y, 0)),
     calib,
+    bgInfo() {
+      if (!bg.ready) return { ready: false, failed: bg.failed };
+      const w = bg.canvas.clientWidth, h = bg.canvas.clientHeight;
+      return { ready: true, cover: [bg.coverW, bg.coverH], topY: bg.topY, group: [bg.px, bg.py],
+        eyes: bg.eyes.map(e => ({ wx: e.position.x, wy: e.position.y, sx: w / 2 + e.position.x + bg.px, sy: h / 2 - (e.position.y + bg.py), op: e.material.opacity, vis: e.visible })) };
+    },
   };
 
   function dispose() {
     deactivate();
+    bgKill();
     for (const [, rec] of units) disposeUnit(rec);
     units.clear();
     try { renderer.dispose(); } catch (_) {}
+    try { if (bg.renderer) bg.renderer.dispose(); } catch (_) {}
   }
 
   window.addEventListener("resize", () => { if (active) { try { sync(); } catch (e) { onFatal && onFatal(e); } } });
