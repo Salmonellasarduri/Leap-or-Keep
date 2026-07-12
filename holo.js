@@ -152,6 +152,17 @@ export function createHolo(ctx) {
   // ---- タイル(InstancedMesh 1draw) ----
   let tileMesh = null, gridLines = null, frameLine = null, wellRing = null;
   let needsBuild = true;
+  // Phase 2.5: 井戸(投影ボリューム)の環境オブジェクト
+  const env = { objs: [], stars: [], nebula: null, plate: null, lastZh: -1 };
+
+  // Canvas生成テクスチャ(外部アセットゼロ方針)
+  function makeTex(w, h, draw) {
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    draw(c.getContext("2d"), w, h);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
   const tileState = []; // per index {base:Color, pulse:0|1(sel/cue), hot:0..1(flash減衰), kind}
   const _c = new THREE.Color(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(1, 1, 1);
 
@@ -167,6 +178,8 @@ export function createHolo(ctx) {
 
   function buildBoard() {
     for (const o of [tileMesh, gridLines, frameLine, wellRing]) if (o) { boardGroup.remove(o); o.geometry.dispose(); o.material.dispose(); }
+    for (const o of env.objs) { boardGroup.remove(o); if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }
+    env.objs = []; env.stars = []; env.nebula = null; env.plate = null; env.lastZh = -1;
     const n = GRID * GRID;
     const geo = roundedRectGeo(calib.cell - 6, calib.cell - 6, 9);
     const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.62, depthWrite: false }); // Sol R2: 面は薄く
@@ -214,8 +227,95 @@ export function createHolo(ctx) {
       new THREE.MeshBasicMaterial({ color: 0x9a7ae8, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     wellRing.visible = false;
     boardGroup.add(wellRing);
+
+    buildSpaceWell(x0, y0, x1, y1);
     needsBuild = false;
   }
+
+  // ---- Phase 2.5: 投影井戸 — 「卓の上に宇宙が現出している」体積表現 ----
+  // 井戸プレート(2D背景のかぶりを遮断) + 星屑3層 + ゾーン星雲 + 四隅の投影光柱
+  function buildSpaceWell(x0, y0, x1, y1) {
+    const W = x1 - x0, H = y1 - y0, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const add = o => { env.objs.push(o); boardGroup.add(o); return o; };
+
+    // 1) 井戸プレート: 深部の不透明底(feather縁のCanvasテクスチャ) — 課題①「後ろの2Dかぶり」の根治
+    const plateTex = makeTex(256, 256, (g, w, h) => {
+      const r = 26, f = 20; // 角丸とfeather幅
+      g.clearRect(0, 0, w, h);
+      // feathered rounded rect: 外周をぼかしたグラデで塗る
+      g.filter = `blur(${f / 2}px)`; // 未対応環境では無視される(縁が硬くなるだけ)
+      g.fillStyle = "#040b10";
+      g.beginPath();
+      if (g.roundRect) g.roundRect(f, f, w - f * 2, h - f * 2, r);
+      else g.rect(f, f, w - f * 2, h - f * 2); // roundRect未対応(旧Safari)は角丸なしで劣化
+      g.fill();
+      g.filter = "none";
+      // 中心をわずかに青緑へ(完全な黒潰れ禁止 — Sol暗部3段階)
+      const rad = g.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, w / 2);
+      rad.addColorStop(0, "rgba(10,26,32,0.5)"); rad.addColorStop(1, "rgba(4,11,16,0)");
+      g.globalCompositeOperation = "source-atop"; g.fillStyle = rad; g.fillRect(0, 0, w, h);
+    });
+    env.plate = add(new THREE.Mesh(
+      new THREE.PlaneGeometry(W * 1.14, H * 1.14),
+      new THREE.MeshBasicMaterial({ map: plateTex, transparent: true, opacity: 0.94, depthWrite: false })));
+    env.plate.position.copy(bl(cx, cy, -58));
+    env.plate.renderOrder = -4;
+
+    // 2) 星屑3層(井戸の中に沈む多層パララックス。緩慢ドリフト)
+    const starSpecs = [
+      { n: 80, z: -14, size: 2.0, op: 0.8, speed: 2.4 },
+      { n: 55, z: -30, size: 1.6, op: 0.55, speed: 1.4 },
+      { n: 38, z: -46, size: 1.2, op: 0.35, speed: 0.8 },
+    ];
+    for (const sp of starSpecs) {
+      const geo = new THREE.BufferGeometry();
+      const pos = new Float32Array(sp.n * 3);
+      for (let i = 0; i < sp.n; i++) {
+        pos[i * 3] = x0 + Math.random() * W; pos[i * 3 + 1] = y0 + Math.random() * H; pos[i * 3 + 2] = sp.z;
+      }
+      // 盤ローカル(y下向き)で生成→scene系へはbl()と同じ変換を頂点側で行う
+      for (let i = 0; i < sp.n; i++) { pos[i * 3] -= calib.bw / 2; pos[i * 3 + 1] = -(pos[i * 3 + 1] - calib.bh / 2); }
+      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      const pts = new THREE.Points(geo, new THREE.PointsMaterial({
+        color: 0xbfe0e8, size: sp.size, transparent: true, opacity: sp.op,
+        blending: THREE.AdditiveBlending, depthWrite: false }));
+      pts.renderOrder = -2;
+      pts.frustumCulled = false;
+      env.stars.push({ pts, ...sp, x0: x0 - calib.bw / 2, w: W, yTop: -(y0 - calib.bh / 2) });
+      add(pts);
+    }
+
+    // 3) ゾーン星雲(色相はsyncでcalib.zhから着色)
+    const nebTex = makeTex(256, 256, (g, w, h) => {
+      g.clearRect(0, 0, w, h);
+      for (const [bx, by, br, a] of [[0.38, 0.42, 0.34, 0.5], [0.62, 0.58, 0.28, 0.4], [0.52, 0.36, 0.2, 0.3]]) {
+        const rad = g.createRadialGradient(w * bx, h * by, 4, w * bx, h * by, w * br);
+        rad.addColorStop(0, `rgba(255,255,255,${a})`); rad.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = rad; g.fillRect(0, 0, w, h);
+      }
+    });
+    env.nebula = add(new THREE.Mesh(
+      new THREE.PlaneGeometry(W * 0.96, H * 0.96),
+      new THREE.MeshBasicMaterial({ map: nebTex, transparent: true, opacity: 0.3,
+        blending: THREE.AdditiveBlending, depthWrite: false })));
+    env.nebula.position.copy(bl(cx, cy, -38));
+    env.nebula.renderOrder = -3;
+
+    // 4) 四隅の投影光柱(卓の中から盤へ — 「どこから投影されているか」)
+    const beamMat = new THREE.MeshBasicMaterial({ color: COL.frame, transparent: true, opacity: 0.08, // Sol最終研磨: 盤外周との接続感
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const beamGeo = new THREE.CylinderGeometry(1.1, 4.2, 58, 6, 1, true);
+    for (const [bx, by] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]) {
+      const beam = add(new THREE.Mesh(beamGeo, beamMat));
+      beam.rotation.x = Math.PI / 2; // Y軸筒→Z軸(盤法線)
+      beam.position.copy(bl(bx, by, -28));
+      beam.renderOrder = -1;
+    }
+  }
+
+  // 被弾時の投影乱れ(課題②の「投影されている実在感」— 位置ジッタは使わない=DOMラベル剥離回避)
+  let disturbUntil = 0, disturbAmp = 0;
+  function disturb(amp) { disturbAmp = Math.max(disturbAmp, amp); disturbUntil = performance.now() + 200; }
 
   // ---- コマ ----
   const units = new Map(); // id -> {group, body, glow, gx, gy, tween, ghost, type, side, charging, raise}
@@ -396,9 +496,15 @@ export function createHolo(ctx) {
   function fx(ev) {
     if (!active) return;
     const { META } = dbg();
-    if (ev.type === "boom") { burst(ev.x, ev.y, !!ev.big); return; }
+    if (ev.type === "boom") { burst(ev.x, ev.y, !!ev.big); if (ev.big) disturb(0.6); return; }
     if (ev.type === "flash") { for (const c of ev.cells || []) { const st = tileState[c.y * GRID + c.x]; if (st) st.hot = 1; } return; }
-    if (ev.type === "hitflash") { glitches.set(ev.unitId, performance.now() + 180); return; }
+    if (ev.type === "hitflash") {
+      glitches.set(ev.unitId, performance.now() + 180);
+      const { S } = dbg(); // 自機側の被弾は投影全体が乱れる(Phase 2.5)
+      const u = S && S.enc && S.enc.units.find(x => x.id === ev.unitId);
+      if (u && u.side === "player") disturb(1);
+      return;
+    }
     if (ev.type === "shake") {
       if (META.fxLite) return;
       const cls = ev.n >= 3 ? "shake3" : (ev.n === 2 ? "shake2" : "shake");
@@ -582,6 +688,40 @@ export function createHolo(ctx) {
       } else rec.body.material.color.setHex(rec.spec.color); // チャージ明滅後の色戻し
     }
     if (wellRing.visible && amb) wellRing.rotation.z = now / 1200; // Sol #5: 0.7-1.0 rad/s
+
+    // ---- Phase 2.5: 井戸の宇宙(星ドリフト・星雲・投影乱れ) ----
+    for (const st of env.stars) {
+      if (amb) {
+        const pos = st.pts.geometry.attributes.position.array;
+        const dx = st.speed * dt / 1000;
+        for (let i = 0; i < pos.length; i += 3) {
+          pos[i] += dx;
+          if (pos[i] > st.x0 + st.w) pos[i] -= st.w;
+        }
+        st.pts.geometry.attributes.position.needsUpdate = true;
+      }
+    }
+    if (env.nebula) {
+      if (amb) env.nebula.rotation.z = now / 60000;
+      if (env.lastZh !== calib.zh) { // ゾーン色相で星雲を着色
+        env.nebula.material.color.setHSL((calib.zh % 360) / 360, 0.55, 0.62);
+        env.lastZh = calib.zh;
+      }
+    }
+    // 被弾時の投影乱れ: ジオメトリは動かさず透明度だけを高周波でフラッター(DOMラベル剥離なし)
+    if (now < disturbUntil) {
+      const k = disturbAmp * (0.5 + 0.5 * Math.sin(now / 13) * Math.sin(now / 7));
+      tileMesh.material.opacity = 0.62 * (1 - 0.55 * k);
+      gridLines.material.opacity = 0.2 * (1 - 0.7 * k);
+      frameLine.material.opacity = 0.45 * (1 - 0.6 * k);
+      for (const st of env.stars) st.pts.material.opacity = st.op * (1 - 0.8 * k);
+      if (env.nebula) env.nebula.material.opacity = 0.3 * (1 - 0.7 * k);
+    } else if (disturbAmp > 0) {
+      disturbAmp = 0;
+      tileMesh.material.opacity = 0.62; gridLines.material.opacity = 0.2; frameLine.material.opacity = 0.45;
+      for (const st of env.stars) st.pts.material.opacity = st.op;
+      if (env.nebula) env.nebula.material.opacity = 0.3;
+    }
 
     renderer.render(scene, camera);
   }
