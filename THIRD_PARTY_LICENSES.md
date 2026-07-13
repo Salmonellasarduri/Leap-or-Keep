@@ -71,9 +71,9 @@ SOFTWARE.
 ## three.js（`vendor/three/`）
 
 - 原作者: Three.js Authors
-- 出典: https://github.com/mrdoob/three.js （r185 / npm three@0.185.1 の `build/three.module.min.js` + `build/three.core.min.js`）
-- 改変: なし（ビルド成果物をそのままコピー。原文LICENSEを `vendor/three/LICENSE` に同梱）
-- 用途: ホロ盤面のリアルタイム3D描画（Phase 2）。読み込み失敗時はDOM盤面に劣化フォールバック
+- 出典: https://github.com/mrdoob/three.js （r185 / npm three@0.185.1 の `build/three.module.min.js` + `build/three.core.min.js` + `examples/jsm/` の GLTFLoader.js / BufferGeometryUtils.js / SkeletonUtils.js）
+- 改変: examples/jsm 3ファイルは import 指定子のみ相対パスへ書換（bare specifier 'three' → './three.module.min.js'）。ビルド2ファイルは無改変。原文LICENSEを `vendor/three/LICENSE` に同梱
+- 用途: ホロ盤面のリアルタイム3D描画（Phase 2）+ GLB部屋の読込（Phase 5）。読み込み失敗時はDOM盤面/2D背景に劣化フォールバック
 
 ```
 MIT License

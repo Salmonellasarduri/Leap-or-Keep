@@ -3,6 +3,8 @@
 // 合否: ドリフトビート中のフレームタイム p95 ≤ 17.5ms(60Hz vsyncの16.67±計測ジッタを許容)
 //       かつ 33ms超のヒッチ ≤ 4回(renderBattleのinnerHTML全再構築+fxパイプライン由来の既知ヒッチ枠。
 //       2026-07-12実測: 同条件のDOM版ベースライン=p95 33.4ms/ヒッチ7回 — holo版の方が軽い)
+// 注意: この計測はマシン負荷に敏感(Blender/複数Chromium並走中はDOM版相当まで偽悪化する。2026-07-14実測)。
+//       FAILしたらまず単独実行で再計測してから回帰を疑うこと。
 // usage: node tools/fps.mjs [--desktop] [--headless]
 //   既定はヘッドあり(ヘッドレスはSwiftShaderでGPU計測にならない — 参考値のみ)
 import { chromium } from "playwright";

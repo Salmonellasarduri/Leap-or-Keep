@@ -798,6 +798,12 @@ export function createHolo(ctx) {
         pts.geometry.attributes.position.needsUpdate = true;
       }
     }
+    // Phase 5: GLB部屋モードはBlender一人称カメラを再現(px写像カメラを毎フレーム上書き)
+    if (room.active) {
+      roomCam(bg.canvas.clientWidth, bg.canvas.clientHeight);
+      bg.renderer.render(bg.scene, bg.cam);
+      return;
+    }
     // 盤下グロー: DOM盤の実位置を追う(gBCR読みのみ — レビューF1の読み書き分離)
     const boardEl = document.getElementById("board");
     if (boardEl) {
@@ -810,7 +816,71 @@ export function createHolo(ctx) {
     bg.renderer.render(bg.scene, bg.cam);
   }
 
-  function bgShow() { if (bg.ready) document.body.classList.add("holo3"); }
+  // ==== Phase 5(実験): BlenderフルGLB部屋 — Claude→Blender→GLB→three.js 一気通貫 ====
+  // 起動: URL ?room=1 または lkDebug().META.room3d。失敗時はマット絵モードへ自動フォールバック。
+  // Solゲート(tmp/sol-room-r2.md)を超えるまで既定OFF — 既定背景は8.5/10の2D画のまま。
+  const room = { want: false, loading: false, failed: false, obj: null, lights: [] };
+  try { room.want = new URLSearchParams(location.search).get("room") === "1"; } catch (_) {}
+
+  function roomInit() {
+    if (!room.want && !(dbg().META || {}).room3d) return;
+    if (room.loading || room.failed || room.obj) return;
+    room.loading = true;
+    Promise.all([
+      import("./vendor/three/GLTFLoader.js"),
+      fetch("art/salvage_room.glb").then(r => { if (!r.ok) throw new Error("glb " + r.status); return r.arrayBuffer(); }),
+    ]).then(([mod, buf]) => new Promise((res, rej) => new mod.GLTFLoader().parse(buf, "art/", res, rej)))
+      .then(gltf => { roomBuild(gltf.scene); })
+      .catch(e => { room.failed = true; try { console.info("room3d unavailable:", e && e.message || e); } catch (_) {} });
+  }
+
+  function roomBuild(obj) {
+    // glTFはY-up(Blender Z-up から変換済み)。シーン単位=メートルのままにし、カメラをBlenderの一人称位置へ置く
+    room.obj = obj;
+    bg.scene.add(obj);
+    // 絵アンカー系はGLB部屋では非表示(部屋が実体を持つ)
+    bg.matte.visible = false;
+    for (const e of bg.eyes) e.visible = false;
+    if (bg.winGlow) bg.winGlow.visible = false;
+    if (bg.lampGlow) bg.lampGlow.visible = false;
+    if (bg.wreck) bg.wreck.visible = false;
+    if (bg.dustN) bg.dustN.visible = false;
+    if (bg.dustF) bg.dustF.visible = false;
+    if (bg.boardGlow) bg.boardGlow.visible = false;
+    // ライト(GLBはライト非含有 — Blender側と同じ配置をthree座標(x, z, -y)で再現)
+    const mk = l => { bg.scene.add(l); room.lights.push(l); return l; };
+    const spot = mk(new THREE.SpotLight(0xffb86a, 260, 9, Math.PI * 58 / 360, 0.45, 1.1));
+    spot.position.set(-0.78, 1.24, -0.67);
+    spot.target.position.set(-0.38, 0.70, -0.28); mk(spot.target);
+    mk(new THREE.HemisphereLight(0x9edde0, 0x070d10, 0.5));            // 天井エリア光の近似
+    const rear = mk(new THREE.PointLight(0x42c6d1, 38, 7, 1.6)); rear.position.set(1.2, 1.55, -1.3);
+    const can = mk(new THREE.PointLight(0x40dad8, 14, 4, 1.7)); can.position.set(0.91, 1.0, -0.55);
+    const front = mk(new THREE.PointLight(0x8fb8c0, 16, 8, 1.8)); front.position.set(0, 1.9, 1.4); // 正面フィル(黒潰れ禁止・弱)
+    bg.renderer.toneMapping = THREE.ACESFilmicToneMapping;             // 部屋はPBR — bg canvasは独立レンダラなので盤ホロに影響なし
+    room.active = true;
+  }
+
+  function roomCam(w, h) {
+    // Blender cam_room(38mm/36mmセンサ・横FOV50.6°)をthree座標へ: eye(0,1.62,1.58)→aim(0,0.82,-0.43)
+    const hfov = 2 * Math.atan(18 / 38);
+    bg.cam.fov = 2 * Math.atan(Math.tan(hfov / 2) * h / w) * 180 / Math.PI;
+    bg.cam.aspect = w / h;
+    bg.cam.near = 0.05; bg.cam.far = 60; // 部屋はメートル空間 — px用のnear10だと全てニアクリップされる
+    // マウス視差: 頭が数cm動く(DOM整合の制約なし — 部屋は自由)
+    const px = bg.px * 0.004, py = bg.py * 0.004;
+    bg.cam.position.set(0 + px, 1.62 + py, 1.58);
+    bg.cam.lookAt(0 + px * 0.4, 0.82 + py * 0.4, -0.43);
+    bg.cam.updateProjectionMatrix();
+  }
+
+  function bgShow() {
+    if (!bg.ready) return;
+    if (!document.body.classList.contains("holo3")) {
+      document.body.classList.add("holo3");
+      // holo3のCSS(HUD枠・手札トレイ等)がレイアウトを動かす — 次renderを待たず盤canvasを再キャリブ(実測8.4px残留の修正)
+      requestAnimationFrame(() => { try { if (active) sync(); } catch (e) { onFatal && onFatal(e); } });
+    }
+  }
   function bgHide() { document.body.classList.remove("holo3"); }
   function bgKill() {
     bg.failed = true; bgHide();
@@ -849,6 +919,7 @@ export function createHolo(ctx) {
     document.body.classList.add("holo");
     active = true;
     bgInit(); bgShow(); // Phase 3a: 背景シーン(準備できたフレームからフェードイン)
+    if (bg.ready) roomInit(); // Phase 5(実験): ?room=1 でGLB部屋(失敗は絵へフォールバック)
 
     const enc = S.enc;
     const encChanged = enc !== lastEnc;
