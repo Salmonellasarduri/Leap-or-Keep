@@ -1,5 +1,7 @@
 # Leap or Keep — One more leap.
 
+[![CI](https://github.com/Salmonellasarduri/Leap-or-Keep/actions/workflows/ci.yml/badge.svg)](https://github.com/Salmonellasarduri/Leap-or-Keep/actions/workflows/ci.yml)
+
 **▶ いますぐ遊ぶ: https://salmonellasarduri.github.io/Leap-or-Keep/** (ブラウザだけ・無料・スマホ可)
 
 宇宙版カード型ローグライク。死んだ文明の遺物を回収する深宇宙サルベージャーとなり、「もう1ゾーン深く跳ぶか、戦利品を持って帰るか」を選び続ける。Gloomhavenリスペクトのカード消耗システム(カード=行動=寿命)+ Into the Breach式の敵行動予告 + 宇宙ならではの慣性(ドリフト)。
