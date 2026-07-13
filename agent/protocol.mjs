@@ -172,9 +172,15 @@ export function legalChoices(s) {
   }
   if (enc.phase === "crashsalvage") {
     const ship = LK.unitById(enc, "ship");
+    // 掃討済みの回収は「改修(恒久+)して持ち帰り」に変わる — 強化済みカードは対象外(LOGICと同条件で列挙)
+    const cleared = LK.enemies(enc).every(e => !e.alive);
     if (ship.hp < ship.maxHp) add("salvage_repair", `装甲板: 旗艦HP+1(${ship.hp}/${ship.maxHp})`);
-    for (const c of LK.cardsIn(s, "discard"))
-      add(`salvage_card:${c.uid}`, `カード回収: 『${LK.defOf(c).name}』を手札へ`);
+    for (const c of LK.cardsIn(s, "discard")) {
+      if (cleared && c.up) continue;
+      add(`salvage_card:${c.uid}`, cleared
+        ? `カード改修: 『${LK.defOf(c).name}』を強化(+)して持ち帰る`
+        : `カード回収: 『${LK.defOf(c).name}』を手札へ`);
+    }
     if (!out.length) add("salvage_repair", "装甲板(満タンでも消化)");
     return out;
   }

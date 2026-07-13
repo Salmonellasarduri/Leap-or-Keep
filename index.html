@@ -150,6 +150,15 @@ button[data-tt],.half[data-tt],.unit[data-tt],.cell[data-tt],.pick[data-tt]{curs
 
 /* header */
 #hud{display:flex; align-items:center; gap:18px; padding:8px 4px; flex-wrap:wrap;}
+.reltag{display:inline-block; font-size:.62rem; font-weight:700; padding:1px 7px; border:1px solid var(--cyan);
+  border-radius:4px; color:var(--cyan); vertical-align:middle; letter-spacing:.1em;}
+.quitlink{margin-left:auto; padding:2px 10px; font-size:.9rem; opacity:.55; border-color:var(--line);}
+.quitlink:hover{opacity:1; border-color:var(--red); color:var(--red);}
+#quitconfirm{position:fixed; inset:0; z-index:65; display:flex; align-items:center; justify-content:center;
+  background:#000a; backdrop-filter:blur(2px);}
+/* 姿勢制御(restshift): 盤面を見ながら選べるよう、暗幕なしで下部にドッキング(FB: ボードが見えず方向を選べない) */
+#overlay.ov-side{background:transparent; backdrop-filter:none; pointer-events:none; align-items:flex-end; justify-content:center;}
+#overlay.ov-side .modal{pointer-events:auto; margin-bottom:6vh; background:rgba(8,16,30,.94); box-shadow:0 8px 30px #000c;}
 #hud .zone{font-weight:800; color:var(--amber); font-size:1.05rem; white-space:nowrap;}
 .lifebar{display:flex; gap:3px; align-items:center;}
 .lifebar .seg{width:14px; height:20px; border-radius:3px; border:1px solid var(--line);}
@@ -651,6 +660,11 @@ const CARD_DEFS = {
   c_nano:     {name:"ナノリペア",         relic:true, top:{kind:"brake_move",n:1,label:"制動+移動1"}, bottom:{kind:"heal",n:3,shield:1,label:"修理3+シールド1"}},
   c_anchor:   {name:"グラビティ・アンカー", relic:true, top:{kind:"brake_move",n:2,label:"制動+移動2"}, bottom:{kind:"pull_all",n:1,range:2,label:"射程2の全敵を1マス引き寄せ"}},
   c_annihilate:{name:"殲滅プロトコル",    relic:true, top:{kind:"move",n:2,label:"移動2(直線)"}, bottom:{kind:"attack_multi",dmg:2,range:2,count:2,label:"攻撃2 射程2・最大2体"}},
+  c_echo:     {name:"残響ソナー",         relic:true, top:{kind:"move",n:2,label:"移動2(直線)"}, bottom:{kind:"attack_line",dmg:2,range:3,label:"攻撃2 射程3(直線)"}},
+  c_catapult: {name:"衝角カタパルト",     relic:true, top:{kind:"brake_move",n:1,label:"制動+移動1"}, bottom:{kind:"attack_push",dmg:2,n:2,range:1,label:"攻撃2+2マス突き飛ばし(隣接)"}},
+  c_bulkhead: {name:"自己鍛造隔壁",       relic:true, top:{kind:"brake_move",n:1,label:"制動+移動1"}, bottom:{kind:"heal",n:3,label:"修理3(HP回復)"}},
+  // 格納庫の目玉(スパイク商品): 拾得では絶対に届かない単体性能 — 金拾い・封印・深潜りの全経路を照らす磁石(charter §2-①)
+  c_salvo4:   {name:"クアッド・サルヴォ", top:{kind:"move",n:2,label:"移動2(直線)"}, bottom:{kind:"attack",dmg:4,range:2,label:"攻撃4 射程2"}},
 };
 const START_DECK = ["c_burn","c_bomb","c_reverse","c_salvo","c_swarm","c_patch","c_repulsor","c_railgun","c_evade","c_ram"];
 
@@ -700,15 +714,22 @@ const UNLOCK_POOL = [
   {defId:"c_execute", cost:6}, {defId:"c_leap2", cost:8}, {defId:"c_ramblast", cost:9},
   {defId:"c_decoy", cost:10}, {defId:"c_flak", cost:12}, {defId:"c_minelayer", cost:14},
   {defId:"c_scrap", cost:16}, {defId:"c_overburn", cost:18}, {defId:"c_lastline", cost:20}, {defId:"c_debris", cost:22},
+  {defId:"c_salvo4", cost:26}, // 上段の憧れ枠 — 「あと₢Nで届く」が帰還判断に接続する(charter §2-②)
 ];
 
+// 遺物3系統タグ(観測/兵装/機関): 封印の集中型ボーナスとセット収集の軸
+const RELIC_TAGS={obs:"観測", arm:"兵装", eng:"機関"};
 const RELIC_DEFS = [
-  {id:"nano",   name:"古代のナノ修復槽",     value:2, rare:false, card:"c_nano",   desc:"銀色の槽の中で、何かがまだ脈打っている。"},
-  {id:"coil",   name:"不安定な位相コイル",   value:3, rare:false, card:"c_phase",  desc:"持っているだけで輪郭がにじむ。たぶん気のせいじゃない。"},
-  {id:"anchor", name:"重力子アンカー",       value:3, rare:false, card:"c_anchor", desc:"落ちない錨。むしろ周りが落ちてくる。"},
-  {id:"fusion", name:"ひび割れた融合炉",     value:3, rare:true,  card:"c_fusion", desc:"ひびの奥で恒星の欠片が燃えている。修理? 無理無理。"},
-  {id:"starmap",name:"死文明の星図",         value:4, rare:true,  card:"c_warp",   desc:"もう存在しない星々の地図。だが座標は今も生きている。"},
-  {id:"annihil",name:"殲滅プロトコル断片",   value:5, rare:true,  card:"c_annihilate", desc:"彼らが最後に作ったもの。彼らが滅びた理由かもしれない。"},
+  {id:"nano",   name:"古代のナノ修復槽",     value:2, rare:false, tag:"eng", card:"c_nano",   desc:"銀色の槽の中で、何かがまだ脈打っている。"},
+  {id:"coil",   name:"不安定な位相コイル",   value:3, rare:false, tag:"obs", card:"c_phase",  desc:"持っているだけで輪郭がにじむ。たぶん気のせいじゃない。"},
+  {id:"anchor", name:"重力子アンカー",       value:3, rare:false, tag:"arm", card:"c_anchor", desc:"落ちない錨。むしろ周りが落ちてくる。"},
+  {id:"fusion", name:"ひび割れた融合炉",     value:3, rare:true,  tag:"eng", card:"c_fusion", desc:"ひびの奥で恒星の欠片が燃えている。修理? 無理無理。"},
+  {id:"starmap",name:"死文明の星図",         value:4, rare:true,  tag:"obs", card:"c_warp",   desc:"もう存在しない星々の地図。だが座標は今も生きている。"},
+  {id:"annihil",name:"殲滅プロトコル断片",   value:5, rare:true,  tag:"arm", card:"c_annihilate", desc:"彼らが最後に作ったもの。彼らが滅びた理由かもしれない。"},
+  // 「今困っているこいつに効く」が一目で読める遺物(FB③: 封印/展開を本物の悩みにする)
+  {id:"echo",    name:"残響ソナー",         value:3, rare:false, tag:"obs", card:"c_echo",    desc:"死んだ船の悲鳴が、まだ廊下に反響している。"},
+  {id:"catapult",name:"衝角カタパルト",     value:4, rare:true,  tag:"arm", card:"c_catapult", desc:"「押す」ことに関して、この文明は天才だった。"},
+  {id:"bulkhead",name:"自己鍛造隔壁",       value:2, rare:false, tag:"eng", card:"c_bulkhead", desc:"傷口を自分で塞ぐ壁。船がまだ生きたがっている。"},
 ];
 
 const ENEMY_DEFS = {
@@ -1634,6 +1655,15 @@ function crashSalvagePick(state, uid){
   if(!enc||enc.phase!=="crashsalvage") return {ok:false,msg:"not salvage phase"};
   const c=cardByUid(state,uid);
   if(!c||c.loc!=="discard") return {ok:false,msg:"消耗パイルから選んでください"};
+  // 掃討完了後の回収→手札は戦域終了で蒸発する(FB: 「カード復活してない気がする」の正体)。
+  // その場合は改修(恒久強化+)して持ち帰る — 耐久価値に振り替える
+  if(enemies(enc).every(e=>!e.alive)){
+    if(c.up) return {ok:false,msg:"改修余地なし(強化済み) — 別のカードか装甲板を"};
+    c.loc="pool"; c.up=true; enc.crashSalvage--;
+    log(state,`残骸改修 — 『${defOf(c).name}』を強化(+)して持ち帰った`,"good");
+    pump(state);
+    return {ok:true};
+  }
   c.loc="hand"; enc.crashSalvage--;
   log(state,`残骸サルベージ — 『${defOf(c).name}』を手札に回収した`,"good");
   // 残骸の熱: 回収カードはこの戦域中、強化(+)相当で動く(装甲板+1との天秤を本物の二択にする)
@@ -2493,8 +2523,20 @@ function doLeap(state, fuelUids){
 
 function doKeep(state){ runOver(state,true,"returned"); }
 
-function cargoValue(state){ return state.run.bonusValue + state.run.cargo.reduce((s,id)=>s+RELIC_DEFS.find(r=>r.id===id).value,0); }
-function cargoPayoutValue(state){ return cargoValue(state)*rewardMultiplier(state.run); }
+// 集中型(勝利4類型): 同系統の封印は2個目×1.5・3個目×2.0 — 封印を「消去法」から「セット収集」に変える(design-economy-charter §2-②③)
+function cargoValue(state){
+  const cnt={};
+  return state.run.bonusValue + state.run.cargo.reduce((s,id)=>{
+    const r=RELIC_DEFS.find(x=>x.id===id);
+    const k=(cnt[r.tag]=(cnt[r.tag]||0)+1);
+    return s+Math.round(r.value*(1+0.5*(k-1)));
+  },0);
+}
+// 安全帰還ボーナス: 残り寿命6枚以上で+20%(Keep側の金銭的裏打ち。固定値でなく寿命参照=ラン長調整に強い)
+function safeReturnBonus(state){ return aliveCards(state).length>=6?1.2:1; }
+function cargoPayoutValue(state){
+  return Math.round(cargoValue(state)*rewardMultiplier(state.run)*safeReturnBonus(state)); // 通貨は常に整数
+}
 function relicPayoutValue(state, value){ return value*rewardMultiplier(state.run); }
 
 // 回収コンテナ: プレイヤーユニットが乗ったら回収(移動・ドリフトどちらでも)
@@ -2524,11 +2566,11 @@ function deployedStatus(state){
   });
 }
 
-const LK = { CONFIG, CARD_DEFS, RELIC_DEFS, ENEMY_DEFS, ENEMY_AI, ZONE_TABLE, ZONE_NAMES, START_DECK, UNLOCK_POOL, DIRS, DIR_KEYS,
+const LK = { CONFIG, CARD_DEFS, RELIC_DEFS, RELIC_TAGS, ENEMY_DEFS, ENEMY_AI, ZONE_TABLE, ZONE_NAMES, START_DECK, UNLOCK_POOL, DIRS, DIR_KEYS,
   CONTRACT_DEFS, hasContract, contractMult,
   newRun, startEncounter, pump, doRest, restShift, restShiftSkip, restShiftOptions, selectPair, actionSpec, execAction, fizzleAction,
   pendingDamage, resolveDamage, finishEncounter, chooseRoute, resolveRelic, canDeploy, doLeap, doKeep,
-  moveOptions, attackTargets, cardsIn, aliveCards, cardByUid, defOf, cargoValue, cargoPayoutValue, relicPayoutValue,
+  moveOptions, attackTargets, cardsIn, aliveCards, cardByUid, defOf, cargoValue, cargoPayoutValue, relicPayoutValue, safeReturnBonus,
   rewardMultiplier, nextRewardMultiplier, isBossZone, bossChapterForZone, unlocks,
   unitAt, players, enemies, unitById, tdist, tdelta, wrap, encounterEnemyList, bossOf, log,
   enemyStep, enemyPhaseAll, nextActingEnemy, commitTurn, undoTurn, canUndo, effDamage, driftPhase,
@@ -2763,7 +2805,45 @@ Object.assign(EN_EXACT,{
   // 2枚選択ガイド
   "2枚目は▼戦闘面":"Card 2 uses the ▼COMBAT face","2枚目は▲航行面":"Card 2 uses the ▲NAV face",
   "(2枚は必ず反対の半面を使う — 光っている側)":"(The two cards always use opposite faces — the lit one)",
+  // FB対応(2026-07-14): タイトル帰還/休息UX/サルベージ改修/遺物タグ/新カード
+  "タイトルへ戻る?":"Return to title?",
+  "このランの進行は破棄される(カーゴ・スコアは残らない)":"This run will be abandoned (cargo and score are lost)",
+  "破棄して戻る":"Abandon & return","続ける":"Keep playing",
+  "ランを中断してタイトルへ戻る(進行は破棄・確認あり)":"Abort the run and return to title (progress discarded — asks first)",
+  "⏳ 補給には、このターンを丸ごと使う — 直後に許されるのは":"⏳ Resupply consumes this whole turn — right after it you may only make ",
+  "1マスの姿勢制御だけ":"a 1-tile attitude shift","だ。":".",
+  "補給にこのターンを使った。できるのは":"This turn went to resupply. All you can do is shift ",
+  "1体を1マス":"one unit by one tile","ずらすことだけ(慣性はそのまま)。":" (drift unchanged).",
+  "盤の光るマスをクリック":"Click a glowing tile on the board",
+  "して敵の赤マス予告から逃げろ — ボタンでも選べる。":" to slip out of the red telegraphs — or use the buttons.",
+  "または消耗カードを1枚":"Or take one spent card and ",
+  "改修(恒久強化+)":"refit it (permanent upgrade +)","して持ち帰る: ":" for the trip home: ",
+  "掃討は完了 — 手札に戻しても消えるだけだ":"the field is cleared — returning it to hand would just evaporate",
+  "手札に回収":"recover it to hand","(この戦域で使える+熱で+扱い):":" (usable this battle, wreck-heat makes it +):",
+  "改修できるカードが無い":"no card left to refit","消耗パイルは空":"spent pile is empty",
+  "実行する行動をチップから選べ":"Pick the action to run from the chips",
+  "(既定は▲航行が先 — 戦闘を先にしたければそのチップをクリック)":"(▲NAV goes first by default — click the ▼COMBAT chip to lead with it)",
+  "観測":"OBS","兵装":"ARMS","機関":"DRIVE",
+  "改修余地なし(強化済み) — 別のカードか装甲板を":"Nothing to refit (already upgraded) — pick another card or the hull plate",
+  "クアッド・サルヴォ":"Quad Salvo","残響ソナー":"Echo Sonar","衝角カタパルト":"Ram Catapult","自己鍛造隔壁":"Self-Forging Bulkhead",
+  "死んだ船の悲鳴が、まだ廊下に反響している。":"The screams of dead ships still echo down the corridors.",
+  "「押す」ことに関して、この文明は天才だった。":"When it came to pushing, this civilization was a genius.",
+  "傷口を自分で塞ぐ壁。船がまだ生きたがっている。":"A wall that seals its own wounds. The ship still wants to live.",
+  "攻撃2 射程3(直線)":"ATK 2, RNG 3 (line)",
+  "🔥 今効く: この宙域は機雷が濃い — 敵を押し込む/引き込む系が輝く":"🔥 Shines now: this sector is thick with mines — push/pull effects excel",
+  "🛞 姿勢制御: 🚀旗艦をここへ1マス退避(慣性そのまま・敵の予告から身をずらせ)":"🛞 Attitude shift: move the 🚀flagship here by 1 tile (drift unchanged — slip out of the telegraphs)",
+  "🛞 姿勢制御: 🛰️随伴機をここへ1マス退避(慣性そのまま・敵の予告から身をずらせ)":"🛞 Attitude shift: move the 🛰️drone here by 1 tile (drift unchanged — slip out of the telegraphs)",
+  "🔥 今効く: 深部は敵が増える — 長射程/複数対象が腐らない":"🔥 Shines now: deeper zones swarm — long range / multi-target never rots",
+  "💡 位置ずらし系 — 主砲充填(橙)や轢断レーンの回避が読みやすくなる":"💡 Repositioning — makes dodging charge-ups (orange) and rush lanes far easier",
 });
+// unshiftで先頭に置く: 生成済みの汎用分割ルール(「$1 — $2」型)より先に、専用パターンを試させる
+EN_RULES.unshift(
+  ["^🛞 姿勢制御: (🚀旗艦|🛰️随伴機)をここへ1マス退避\\(慣性そのまま・敵の予告から身をずらせ\\)$","🛞 Attitude shift: move $1 here by 1 tile (drift unchanged — slip out of the telegraphs)"],
+  ["^📦 セット進行: (.+)系を(\\d)つ封印済み — これを封印すれば売却×([\\d.]+)の(\\d+)相当$","📦 Set progress: $2 sealed in the $1 line — sealing this sells at ×$3 (worth $4)"],
+  ["^🔥 今効く: 船体(\\d+)/(\\d+) — 展開すれば修理カードが手に入る$","🔥 Shines now: hull $1/$2 — deploying grants a repair card"],
+  ["^残骸改修 — 『(.+)』を強化\\(\\+\\)して持ち帰った$","Wreck refit — upgraded “$1” (+) and stowed it for home"],
+  ["^それでも帰る — 価値(\\d+) × x([\\d.]+) × 安全1\\.2 = (\\d+)を確定$","Return anyway — lock in value $1 × x$2 × safe 1.2 = $3"],
+);
 let EN_RULES_C=[];
 function trText(s){
   if(LANG!=="en"||!s) return s;
@@ -3089,6 +3169,7 @@ function hudHtml(){
     ${(S.run.contracts||[]).length?`<span style="color:var(--amber)" data-tt="${attrEsc("航行契約: "+S.run.contracts.map(id=>{const c=CONTRACT_DEFS.find(x=>x.id===id);return c.icon+c.name+"("+c.desc+")";}).join("<br>")+"<br>スコア×"+contractMult(S.run).toFixed(1)+" / 帰還時 危険手当₢"+(S.run.contracts.length*2))}">☠${S.run.contracts.length} ×${contractMult(S.run).toFixed(1)}</span>`:""}
     ${lifebarHtml()}
     <div id="cargo">${cargo}</div>
+    <button class="quitlink" onclick="H.quitAsk()" data-tt="${attrEsc("ランを中断してタイトルへ戻る(進行は破棄・確認あり)")}">⏏</button>
   </div>`;
 }
 
@@ -3494,7 +3575,7 @@ function promptText(){
     if(UI.selA) return `1枚目: 『${esc(defOf(cardByUid(S,UI.selA.uid)).name)}』の${UI.selA.half==="top"?"▲航行":"▼戦闘"} — <b style="color:var(--cyan)">${UI.selA.half==="top"?"2枚目は▼戦闘面":"2枚目は▲航行面"}</b> <span class="sub">(2枚は必ず反対の半面を使う — 光っている側)</span>`;
     return `手札から2枚選べ — <span class="sub">1枚目はクリックした側(▲航行/▼戦闘)。先にユニットをクリックして操縦予約もできる</span>`;
   }
-  if(UI.actIdx===null) return `下のボタンから、先に実行する行動を選べ <span class="sub">(順番は自由 / 同じユニットに両方使ってもいい)</span>`;
+  if(UI.actIdx===null) return `実行する行動をチップから選べ <span class="sub">(既定は▲航行が先 — 戦闘を先にしたければそのチップをクリック)</span>`;
   const spec=actionSpec(S,UI.actIdx);
   if(UI.mode==="unit") return `『${esc(spec.label)}』— <span class="sub">どっちにやらせる? 🚀旗艦 か 🛰️随伴機 をクリック</span>`;
   if(UI.mode==="target"){
@@ -3515,6 +3596,7 @@ function renderBattle(app){
   const ov=intentOverlays();
   const ghosts=driftGhosts();
   const sel=selectableCells();
+  const rso=enc.phase==="restshift"?restShiftOptions(S):null; // 姿勢制御: 行き先を盤上でも光らせる(FB)
   const enemyOrder=enc.intents.map((it,i)=>({i:i+1,id:it.unitId}));
   const badgeOf={}; enemyOrder.forEach(o=>badgeOf[o.id]=o.i);
 
@@ -3548,6 +3630,13 @@ function renderBattle(app){
       hover=`onmouseenter="H.pv(${x},${y},'${d0}')" onmouseleave="H.pvOff()"`;
     } else if(sc){
       cls+=" sel-ok cue"; // 2方向から到達可(トーラス) — 矢印で選ぶ(L-001)
+    }
+    // 姿勢制御の行き先: 盤上クリックで直接選べる(赤マス予告と見比べながら判断できる — FB)
+    const ro=rso&&rso.find(o=>o.x===x&&o.y===y);
+    if(ro){
+      cls+=" sel-ok cue";
+      click=`onclick="H.rshift('${ro.unitId}','${ro.dir}')"`;
+      cellTT.push(`🛞 姿勢制御: ${ro.unitId==="ship"?"🚀旗艦":"🛰️随伴機"}をここへ1マス退避(慣性そのまま・敵の予告から身をずらせ)`);
     }
     let inner="";
     if(sc && sc.opts.length>1){
@@ -3809,6 +3898,7 @@ function battleModal(){
       return `<div id="overlay"><div class="modal">
         <h2>強制休息 — 手札が尽きた</h2>
         <p class="muted">消耗カードはすべて手札に戻る。だが1枚だけ、宇宙に手放さなければならない。<br>このターン、敵は待ってくれない。</p>
+        <p class="muted" style="color:var(--amber);">⏳ 補給には、このターンを丸ごと使う — 直後に許されるのは<b>1マスの姿勢制御だけ</b>だ。</p>
         <div class="pickgrid">${all.map(c=>cardFaceHtml(c,{mini:true})).join("")}</div>
         <div class="opts">
           <button class="primary" onclick="H.restRandom()" data-tt="${attrEsc("どれを失うかは宇宙が決める。タダで済むが、◆遺物カードが流れるかもしれない")}">成り行きに任せる (ランダム・無償)</button>
@@ -3825,9 +3915,11 @@ function battleModal(){
   }
   if(enc.phase==="restshift"){
     const opts=restShiftOptions(S);
-    return `<div id="overlay"><div class="modal">
+    // ov-side: 暗幕なしで下部ドッキング=盤面(赤マス予告)を見ながら選べる(FB)。盤の光るマスをクリックでも選択可
+    return `<div id="overlay" class="ov-side"><div class="modal">
       <h2>🛞 姿勢制御 — 1マスだけ身をよじれる</h2>
-      <p class="muted">エンジンは休んでいても、姿勢制御スラスタは生きている。<b>1体だけ1マス</b>動かせる(慣性はそのまま)。<br>敵の予告から身をずらす、最後の機会だ。</p>
+      <p class="muted">補給にこのターンを使った。できるのは<b>1体を1マス</b>ずらすことだけ(慣性はそのまま)。<br>
+      <b style="color:var(--cyan)">盤の光るマスをクリック</b>して敵の赤マス予告から逃げろ — ボタンでも選べる。</p>
       <div class="opts" style="flex-wrap:wrap;">${opts.map(o=>`<button onclick="H.rshift('${o.unitId}','${o.dir}')" data-tt="${attrEsc((o.unitId==="ship"?"旗艦":"随伴機")+"を("+o.x+","+o.y+")へ。ドリフトは変わらない")}">${o.unitId==="ship"?"🚀":"🛰️"} ${DIRS[o.dir].ch}</button>`).join("")}</div>
       <div class="opts"><button class="primary" onclick="H.rskip()">そのまま耐える</button></div>
     </div></div>`;
@@ -3838,13 +3930,17 @@ function battleModal(){
       if(!UI.salvageTimer) UI.salvageTimer=setTimeout(()=>{UI.salvageReady=true; UI.salvageTimer=null; render();},META.fxLite?150:800);
       return "";
     }
-    const opts=cardsIn(S,"discard");
+    const cleared=enemies(enc).every(e=>!e.alive); // 掃討済み=手札回収は戦域終了で蒸発する→改修(恒久+)に切替(FB)
+    const opts=cardsIn(S,"discard").filter(c=>!cleared||!c.up);
     const ship=unitById(enc,"ship");
     return `<div id="overlay"><div class="modal">
       <h2>💥 物理キル! — 残骸サルベージ${enc.crashSalvage>1?` (残り${enc.crashSalvage}回)`:""}</h2>
       <p class="muted">漂う残骸から何を剥ぎ取る? <span style="color:var(--green)">敵をぶつけて壊す — それがこの宇宙の正しい錬金術。</span></p>
       <div class="opts"><button class="primary" ${ship.hp<ship.maxHp?"":"disabled"} onclick="H.crashRepair()" data-tt="${attrEsc("装甲板を引き剥がして船体に当てがう。船体は次のゾーンへ持ち越されるぞ")}">🔧 装甲板 — 旗艦HP+1 (${ship.hp}/${ship.maxHp})</button></div>
-      ${opts.length?`<p style="margin-top:8px;">または消耗カードを1枚修復:</p>${cardPickFaces(opts,"H.crashPick")}`:`<p class="muted">(消耗パイルは空 — 装甲板を貰っておけ)</p>`}
+      ${opts.length?`<p style="margin-top:8px;">${cleared
+        ?`または消耗カードを1枚<b style="color:var(--gold)">改修(恒久強化+)</b>して持ち帰る: <span class="muted">掃討は完了 — 手札に戻しても消えるだけだ</span>`
+        :`または消耗カードを1枚<b>手札に回収</b>(この戦域で使える+熱で+扱い):`}</p>${cardPickFaces(opts,"H.crashPick")}`
+        :`<p class="muted">(${cleared?"改修できるカードが無い":"消耗パイルは空"} — 装甲板を貰っておけ)</p>`}
     </div></div>`;
   }
   if(enc.phase==="cleared"){
@@ -3927,11 +4023,21 @@ function renderRelic(app){
   if(!r){ S.screen="leapkeep"; return render(); }
   const card=CARD_DEFS[r.card];
   const deployOk=canDeploy(S);
+  // 文脈ヒント(FB: 「今困っているこいつに効きそう!」を読める報酬に。評価軸=単体性能→今の自分への効き)
+  const hints=[];
+  const sd=shipDef(S.run.shipId), hull=S.run.shipHp??sd.hp;
+  const sameSealed=S.run.cargo.filter(id=>(RELIC_DEFS.find(x=>x.id===id)||{}).tag===r.tag).length;
+  if(sameSealed>=1) hints.push(`📦 セット進行: ${RELIC_TAGS[r.tag]}系を${sameSealed}つ封印済み — これを封印すれば売却×${(1+0.5*sameSealed).toFixed(1)}の${Math.round(r.value*(1+0.5*sameSealed))}相当`);
+  if((r.id==="nano"||r.id==="bulkhead") && hull<=sd.hp/2) hints.push(`🔥 今効く: 船体${hull}/${sd.hp} — 展開すれば修理カードが手に入る`);
+  if((r.id==="catapult"||r.id==="anchor") && (ZONE_TABLE[S.run.zone-1]||{}).hz && (ZONE_TABLE[S.run.zone-1].hz[1]||0)>=2) hints.push(`🔥 今効く: この宙域は機雷が濃い — 敵を押し込む/引き込む系が輝く`);
+  if((r.id==="echo"||r.id==="annihil") && S.run.zone>=3) hints.push(`🔥 今効く: 深部は敵が増える — 長射程/複数対象が腐らない`);
+  if(r.id==="starmap"||r.id==="coil") hints.push(`💡 位置ずらし系 — 主砲充填(橙)や轢断レーンの回避が読みやすくなる`);
   app.innerHTML=hudHtml()+`
   <div class="modal" style="margin:30px auto;">
     <img class="relicart" src="art/relic-${r.id}.webp" onerror="this.style.display='none'" alt="">
-    <h2>遺物発見 — ${esc(r.name)} ${r.rare?'<span style="color:var(--gold)">★レア</span>':""}</h2>
+    <h2>遺物発見 — ${esc(r.name)} ${r.rare?'<span style="color:var(--gold)">★レア</span>':""} <span class="reltag">${RELIC_TAGS[r.tag]||""}</span></h2>
     <p class="muted" style="font-style:italic;">${esc(r.desc)}</p>
+    ${hints.length?`<div class="relicbox" style="border-color:var(--gold);">${hints.map(h=>`<div>${h}</div>`).join("")}</div>`:""}
     <div class="relicbox">
       <b>封印(Seal)</b>: カーゴへ。売却価値 <b>${r.value}</b> — 帰還すれば確定し、アンロックに数えられる<b>唯一</b>の方法。<br>
       <span class="muted">現在のカーゴ価値 ${cargoValue(S)} → 封印すれば <b style="color:var(--gold)">${cargoValue(S)+r.value}</b>${(()=>{const n=unlocks(S).find(u=>!u.got);return n?`(次の解放『${esc(n.name)}』は価値${n.cost})`:"";})()}<br>…ただし、今のあんたを助けはしない。</span>
@@ -4395,7 +4501,7 @@ const H={
       : "本当に帰る? 深淵はまだ、何かを隠しているよ。";
     el.innerHTML=`<div style="text-align:center;margin-top:12px;">
       <p style="color:var(--amber)">${S.run.zone>=CONFIG.ZONES?"最深部からの生還だ。胸を張れ。":tease}</p>
-      <button class="primary" onclick="H.keepGo()">それでも帰る — 価値${cv} × x${rewardMultiplier(S.run)} = ${payout}を確定</button></div>`;
+      <button class="primary" onclick="H.keepGo()">それでも帰る — 価値${cv} × x${rewardMultiplier(S.run)}${LK.safeReturnBonus(S)>1?" × 安全1.2":""} = ${payout}を確定</button></div>`;
   },
   keepGo(){ doKeep(S); render(); },
   leapAsk(){
@@ -4428,6 +4534,22 @@ const H={
   },
   restart(){ startGame(); H.begin(); },
   toTitle(){ startGame(); },
+  // FB: ゲームは基本タイトルに戻れるべき(基礎ルール)。ラン中は確認を挟む
+  quitAsk(){
+    if(!S||!S.run||S.screen==="title"||S.screen==="summary"||S.run.over){ startGame(); return; }
+    if(document.getElementById("quitconfirm")) return;
+    const ov=document.createElement("div"); ov.id="quitconfirm";
+    ov.innerHTML=`<div class="modal" style="max-width:360px;text-align:center;">
+      <h2>${trText("タイトルへ戻る?")}</h2>
+      <p class="muted">${trText("このランの進行は破棄される(カーゴ・スコアは残らない)")}</p>
+      <div class="opts" style="justify-content:center;">
+        <button class="danger" onclick="H.quitYes()">${trText("破棄して戻る")}</button>
+        <button class="primary" onclick="H.quitNo()">${trText("続ける")}</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+  },
+  quitNo(){ const el=document.getElementById("quitconfirm"); if(el) el.remove(); },
+  quitYes(){ H.quitNo(); startGame(); },
   // ---- 共有(なばて公開ループ: 診断→X→流入→診断) ----
   shareUrl(){ // 診断+挑戦状(シード)入り共有URL — 読んだ人がそのまま同じ宇宙に挑める
     const run=S.run, ct=run.captain;
@@ -4542,7 +4664,9 @@ function afterAct(){
 function autoAdvance(){
   const enc=S.enc;
   if(!enc||!enc.pending){ UI.actIdx=null; UI.unitId=null; UI.mode="idle"; return; }
-  const idx=enc.pending.findIndex(p=>!p.done);
+  // FB: 既定は▲航行→▼戦闘の順(まだるっこしさ解消)。チップクリックで戦闘先行も選べる=戦略性は温存
+  let idx=enc.pending.findIndex(p=>!p.done && p.half==="top");
+  if(idx<0) idx=enc.pending.findIndex(p=>!p.done);
   if(idx<0){ UI.actIdx=null; UI.mode="idle"; return; }
   enterAction(idx);
 }

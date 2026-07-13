@@ -178,6 +178,53 @@ console.log("== rule checks ==");
   ok(LK.deployedStatus(s)[0].alive === false, "relic destroyed when card lost");
 }
 {
+  // 封印の集中型ボーナス(FB 2026-07-14): 同系統2個目×1.5・3個目×2.0、異系統は等倍
+  const s = LK.newRun(22);
+  ok(LK.RELIC_DEFS.every(r=>LK.RELIC_TAGS[r.tag]), "every relic has a valid tag");
+  for (const tag of Object.keys(LK.RELIC_TAGS))
+    ok(LK.RELIC_DEFS.filter(r=>r.tag===tag).length >= 3, `tag ${tag} is 3+ deep (x2.0 attainable)`);
+  s.run.cargo = ["nano","fusion"]; // 同系統(機関): 2 + round(3*1.5)=5 → 7
+  ok(LK.cargoValue(s) === 7, "same-tag 2nd relic sells at x1.5", "got "+LK.cargoValue(s));
+  s.run.cargo = ["nano","fusion","bulkhead"]; // 3個目(value2)×2.0 → 7+4=11
+  ok(LK.cargoValue(s) === 11, "same-tag 3rd relic sells at x2.0", "got "+LK.cargoValue(s));
+  s.run.cargo = ["nano","coil"]; // 異系統: 2+3=5(ボーナスなし)
+  ok(LK.cargoValue(s) === 5, "mixed tags get no set bonus", "got "+LK.cargoValue(s));
+}
+{
+  // 安全帰還ボーナス(FB): 残り寿命6枚以上で精算+20%(通貨は常に整数)
+  const s = LK.newRun(23);
+  s.run.cargo = ["nano","fusion"]; // 集中型込みで価値7
+  const full = LK.cargoPayoutValue(s); // 全カード生存(>=6) → round(7*1.2)=8
+  for (let i=0;i<6;i++) s.run.cards[i].loc="lost"; // 10→4枚
+  const hurt = LK.cargoPayoutValue(s); // ボーナスなし → 7
+  ok(full===8 && hurt===7, "safe return (6+ cards alive) pays +20%, integer credits", `full=${full} hurt=${hurt}`);
+  ok(Number.isInteger(LK.cargoPayoutValue(s)), "payout is always an integer");
+}
+{
+  // 掃討後のサルベージは改修(恒久+)に切替(FB: 「回収したのに消える」の根治)
+  const s = LK.newRun(13);
+  LK.startEncounter(s, null);
+  s.enc.units=s.enc.units.filter(u=>u.side!=="hazard");
+  s.enc.container=null;
+  const es = LK.enemies(s.enc);
+  if (es.length >= 2) {
+    const [a,b] = es;
+    b.alive=false;              // 残り1体に
+    a.x=1; a.y=4; a.hp=1; a.drift="right";
+    const wall=LK.players(s.enc)[0]; wall.x=2; wall.y=4; wall.drift=null; // 衝突相手はプレイヤー
+    for (const p of LK.players(s.enc)) p.drift=null;
+    const disc = LK.cardsIn(s,"hand").find(c=>!c.up); disc.loc="discard";
+    s.enc.step="drift"; s.enc.phase=null;
+    LK.driftPhase(s);
+    if (s.enc && s.enc.phase==="crashsalvage") {
+      ok(LK.enemies(s.enc).every(e=>!e.alive), "field is cleared at salvage time");
+      const r = LK.crashSalvagePick(s, disc.uid);
+      ok(r.ok && disc.loc==="pool" && disc.up===true, "cleared-field salvage refits card (pool + permanent upgrade)",
+         `loc=${disc.loc} up=${disc.up}`);
+    }
+  }
+}
+{
   // カード強化(+): 主要数値が1伸びる
   const s=LK.newRun(31);
   const c=s.run.cards.find(c=>c.defId==="c_salvo");
@@ -750,7 +797,11 @@ function simulateRun(seed, kind) {
         const d=LK.cardsIn(s,"discard");
         const ship=LK.unitById(s.enc,"ship");
         if (ship.hp<ship.maxHp && (!d.length || ship.hp<=ship.maxHp-2)) LK.crashSalvageRepair(s);
-        else if (d.length) LK.crashSalvagePick(s, d[0].uid);
+        else if (d.length) {
+          // 掃討済みは改修(未強化のみ有効)になったため、失敗したら装甲板へフォールバック
+          const pick = d.find(c=>!c.up) || d[0];
+          if (!LK.crashSalvagePick(s, pick.uid).ok) LK.crashSalvageRepair(s);
+        }
         else LK.crashSalvageRepair(s);
         continue;
       }

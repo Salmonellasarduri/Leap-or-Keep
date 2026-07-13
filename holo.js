@@ -860,10 +860,14 @@ export function createHolo(ctx) {
     // -- タイル状態 --
     const ov = ui.intentOverlays();
     const sel = ui.selectableCells();
+    // 姿勢制御(restshift)の行き先もsel-ok扱いで光らせる — holoではセルの光は3Dタイル層が担う(FB)
+    const extraSel = new Set();
+    if (enc.phase === "restshift" && LK.restShiftOptions)
+      for (const o of LK.restShiftOptions(S)) extraSel.add(o.x + "," + o.y);
     const zBase = new THREE.Color().setHSL((calib.zh % 360) / 360, 0.45, 0.085);
     for (let y = 0; y < GRID; y++) for (let x = 0; x < GRID; x++) {
       const i = y * GRID + x, key = x + "," + y, st = tileState[i];
-      const o = ov[key], sc = sel.cells && sel.cells[key];
+      const o = ov[key], sc = (sel.cells && sel.cells[key]) || extraSel.has(key);
       st.pulse = 0; st.raise = 0;
       if (o && o.threat.length) st.base.setHex(COL.threat);
       else if ((o && o.charge.length) || enc.flareRow === y) st.base.setHex(enc.flareRow === y ? COL.flare : COL.charge);
