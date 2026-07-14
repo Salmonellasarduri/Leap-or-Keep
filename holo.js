@@ -964,6 +964,27 @@ export function createHolo(ctx) {
     }
     return true;
   }
+  // Phase4 Stage1(?restage=1&board3d=1): 部屋の同一3D空間に GRID×GRID のホロタイルを実在させる(入力なし・静的)。
+  // 卓(room.obj)の子=positionTableで卓が動けば自動追従+scale継承。ウェル床(local y=0.70)の上に浮遊。
+  function buildBoard3D(obj) {
+    if (room.board3d || typeof THREE === "undefined") return;
+    const root = new THREE.Group();
+    root.position.set(0, 0.735, 0); // ウェル床+3.5cm(卓ローカル)
+    const N = GRID, span = 0.86, pitch = span / N, tile = pitch * 0.9;
+    const tileGeo = new THREE.PlaneGeometry(tile, tile);
+    const edgeGeo = new THREE.EdgesGeometry(tileGeo);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const px = (x - (N - 1) / 2) * pitch, pz = (y - (N - 1) / 2) * pitch;
+      const face = new THREE.Mesh(tileGeo, new THREE.MeshBasicMaterial({
+        color: 0x2fb8cc, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      face.rotation.x = -Math.PI / 2; face.position.set(px, 0, pz); root.add(face);
+      const edge = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({
+        color: 0x5fe6f0, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+      edge.rotation.x = -Math.PI / 2; edge.position.set(px, 0.001, pz); root.add(edge);
+    }
+    obj.add(root);
+    room.board3d = root;
+  }
   function roomWanted() {
     let q = null; try { q = new URLSearchParams(location.search).get("room"); } catch (_) {}
     if (q === "1") return true;
@@ -1014,6 +1035,7 @@ export function createHolo(ctx) {
     // 大気: 冷色の指数フォグ=奥へ落ちる暗がり(密度0.10・#080D11。手前の暖色プールが際立つ)
     room.fog = new THREE.FogExp2(0x080d11, RESTAGE ? 0.035 : 0.10); // 卓上化はフォグ薄め(卓が沈まない)
     if (!RESTAGE) buildRoomRig(); // 卓上化ではウェルが物理アンカー=旧投影機ソケットは不要
+    if (BOARD3D) buildBoard3D(obj); // Phase4 Stage1: ウェルに3Dホロタイル(入力なし・卓の子=positionTableで追従)
     roomShow();
     // ウォームアップ: 実レンダ1発でシェーダ+ジオメトリをGPUへ(初回ビート中の166msヒッチ回避。fps既定経路の要)
     try { roomCam(bg.canvas.clientWidth || 1280, bg.canvas.clientHeight || 800); bg.renderer.render(bg.scene, bg.cam); } catch (_) {}
@@ -1110,7 +1132,7 @@ export function createHolo(ctx) {
     setAnchorsVisible(false);
     bg.scene.fog = room.fog;
     bg.renderer.toneMapping = THREE.ACESFilmicToneMapping;             // 部屋はPBR(bg canvasは独立レンダラ=盤ホロに影響なし)
-    bg.renderer.toneMappingExposure = 0.90;                            // 監査#2: 1.05→0.90(発光平板を沈める)
+    bg.renderer.toneMappingExposure = RESTAGE ? 1.02 : 0.90;           // 監査#2: 1.05→0.90(発光平板を沈める)。卓上化はほんの少し明るく(オーナーFB)
     try { document.body.classList.add("room-live"); } catch (_) {}     // CSSヴィネット(#holo-curtainを全画面暗角へ)
     room.active = true;
   }
@@ -1134,6 +1156,7 @@ export function createHolo(ctx) {
 
   const RESTAGE = (() => { try { return new URLSearchParams(location.search).get("restage") === "1"; } catch (_) { return false; } })(); // 卓上化再ステージの作業フラグ(?restage=1)
   const TABLE_SCALE = 0.9; // 卓のスケール(ウェルが盤ホロ幅に合うよう目視調整する値)
+  const BOARD3D = RESTAGE && (() => { try { return new URLSearchParams(location.search).get("board3d") === "1"; } catch (_) { return false; } })(); // Phase4試作: 盤を部屋の3Dオブジェへ(?restage=1&board3d=1)
   function roomCam(w, h) {
     const px = bg.px * 0.004, py = bg.py * 0.004;
     if (RESTAGE) {
