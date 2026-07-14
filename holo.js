@@ -896,7 +896,7 @@ export function createHolo(ctx) {
     if (room.active) {
       const w = bg.canvas.clientWidth, h = bg.canvas.clientHeight;
       roomCam(w, h);
-      const moved = positionRig(w, h); // 盤の矩形が変わった時のみ再配置(=再描画要求。ビート中は不変)
+      const moved = RESTAGE ? positionTable(w, h) : positionRig(w, h); // 盤の矩形が変わった時のみ再配置(=再描画要求。ビート中は不変)
       // 背景は視差移動/リサイズ/リグ再配置時のみ再描画(ビート中は静止=描画スキップで負荷ゼロ。preserveで前フレーム保持)
       if (!room.drawn || moved || w !== room.lw || h !== room.lh
           || Math.abs(bg.px - room.lpx) > 4e-4 || Math.abs(bg.py - room.lpy) > 4e-4) {
@@ -942,6 +942,26 @@ export function createHolo(ctx) {
     _ray.setFromCamera(_ndc, bg.cam);
     const hit = _ray.ray.intersectPlane(_deskPlane, _hit);
     if (hit) room.rig.position.set(hit.x, DESK_Y, hit.z + 0.03); // +z=手前へ寄せ、土台が盤下端から少し覗く
+    return true;
+  }
+  // 卓上化(RESTAGE): 卓全体を動かし、ウェル(器)を盤ホロの真下へ整列。盤中心を部屋カメラでウェル面(y=0.70)へ逆投影。
+  let _wellPlane = null;
+  function positionTable(cw, ch) {
+    if (!room.obj || typeof document === "undefined") return false;
+    const b = document.getElementById("board"); if (!b) return false;
+    const r = b.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    if (Math.abs(cx - room.brx) < 1 && Math.abs(cy - room.bry) < 1 && Math.abs(r.width - room.brw) < 1) return false;
+    room.brx = cx; room.bry = cy; room.brw = r.width;
+    if (!_ray) { _ray = new THREE.Raycaster(); _deskPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -DESK_Y); _ndc = new THREE.Vector2(); _hit = new THREE.Vector3(); }
+    if (!_wellPlane) _wellPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.70);
+    _ndc.set((cx / cw) * 2 - 1, -(cy / ch) * 2 + 1);
+    _ray.setFromCamera(_ndc, bg.cam);
+    const hit = _ray.ray.intersectPlane(_wellPlane, _hit);
+    if (hit) { // ウェル中心 local(0,0.70,0) を hit へ。scale時もウェルy=0.70を保つようpos.yを補正。
+      room.obj.scale.setScalar(TABLE_SCALE);
+      room.obj.position.set(hit.x, 0.70 * (1 - TABLE_SCALE), hit.z);
+    }
     return true;
   }
   function roomWanted() {
@@ -992,7 +1012,7 @@ export function createHolo(ctx) {
     // ④ 正面フィル(確認監査: 8→11=×1.35・左下の道具バンク寄りへ。#7899A3・影なし・暗部金属を6-8%luma上限で回収)
     const front = mk(new THREE.PointLight(0x7899a3, 11, 6, 2.0)); front.position.set(-0.35, 1.55, 1.35);
     // 大気: 冷色の指数フォグ=奥へ落ちる暗がり(密度0.10・#080D11。手前の暖色プールが際立つ)
-    room.fog = new THREE.FogExp2(0x080d11, 0.10);
+    room.fog = new THREE.FogExp2(0x080d11, RESTAGE ? 0.035 : 0.10); // 卓上化はフォグ薄め(卓が沈まない)
     if (!RESTAGE) buildRoomRig(); // 卓上化ではウェルが物理アンカー=旧投影機ソケットは不要
     roomShow();
     // ウォームアップ: 実レンダ1発でシェーダ+ジオメトリをGPUへ(初回ビート中の166msヒッチ回避。fps既定経路の要)
@@ -1113,6 +1133,7 @@ export function createHolo(ctx) {
   }
 
   const RESTAGE = (() => { try { return new URLSearchParams(location.search).get("restage") === "1"; } catch (_) { return false; } })(); // 卓上化再ステージの作業フラグ(?restage=1)
+  const TABLE_SCALE = 0.9; // 卓のスケール(ウェルが盤ホロ幅に合うよう目視調整する値)
   function roomCam(w, h) {
     const px = bg.px * 0.004, py = bg.py * 0.004;
     if (RESTAGE) {
