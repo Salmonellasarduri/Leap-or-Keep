@@ -453,6 +453,11 @@ body.holo3 #deskbg, body.holo3 #zonebg{visibility:hidden;} /* .onクラスは残
 #holo-curtain{display:none; position:fixed; left:0; right:0; top:55%; bottom:0; z-index:-1; pointer-events:none;
   background:linear-gradient(to bottom, transparent 0%, rgba(2,7,15,.28) 24%, rgba(2,7,15,.68) 100%);} /* #deskbg.on::afterの代替(手札域の暗幕) */
 body.holo3 #holo-curtain{display:block;}
+/* GLB部屋モード: カーテンを全画面ヴィネットへ昇格(暗角で手元を額装。中心=盤+暖色プール寄りに開ける) */
+body.holo3.room-live #holo-curtain{top:0;
+  background:
+    radial-gradient(ellipse 82% 88% at 44% 47%, transparent 40%, rgba(2,6,11,.20) 74%, rgba(1,4,8,.44) 100%),
+    linear-gradient(to bottom, rgba(2,7,15,.34) 0%, transparent 20%, transparent 60%, rgba(2,7,15,.70) 100%);}
 /* ===== Phase 3.5: 視線アンカー(Sol処方: 全画面ズームでなく「盤列と背景の相対運動」。盤canvasは#boardwrap内=DOM/3D整合が自動維持) ===== */
 body.holo3 #boardwrap{transition:transform .55s cubic-bezier(.22,.75,.18,1);}
 body.holo3.gaze-lean #boardwrap{transform:scale(1.016) translateY(4px);} /* 敵の手番: 盤へ身を乗り出す(背景は3D側で後退・減光) */
@@ -2922,6 +2927,8 @@ const EN_RULES=[["^(旗艦|随伴機)を\\((\\d+),(\\d+)\\)へ。ドリフトは
 // ホロ盤面(Phase 2)+カードUI(Sol処方)のUI文字列 — 生成ブロック外から補完(geni18n再生成で消えない)
 Object.assign(EN_EXACT,{
   "🔮 ホロ盤面":"🔮 Holo board","▦ 2D盤面":"▦ 2D board",
+  "🛰 立体卓":"🛰 3D desk","🖼 平面卓":"🖼 2D desk",
+  "背景を立体サルベージ卓(3D部屋)にする。OFFで完成2D画にフォールバック。対応環境のみ":"Render the backdrop as the 3D salvage desk (full room). OFF falls back to the finished 2D art. Supported environments only",
   "盤面を3Dホログラム投影で描く(対応環境のみ)":"Render the board as a realtime 3D hologram (supported environments only)",
   "この環境では3D描画を使えない(file://起動やWebGL無効)。Web公開版では有効":"3D rendering is unavailable here (file:// launch or WebGL disabled). It works on the web version",
   // カード半面ラベル(labelHtml)
@@ -3390,6 +3397,7 @@ function renderTitle(app){
       <button onclick="H.toggleMute()">${META.muted?"🔇 SE OFF":"🔊 SE ON"}</button>
       <button onclick="H.toggleTilt()" data-tt="${attrEsc("盤面を俯瞰3D風に傾ける")}">${META.tilt?"📐 俯瞰":"▦ フラット"}</button>
       <button onclick="H.toggleHolo()" ${HOLO?"":"disabled"} data-tt="${attrEsc(HOLO?"盤面を3Dホログラム投影で描く(対応環境のみ)":"この環境では3D描画を使えない(file://起動やWebGL無効)。Web公開版では有効")}">${META.holo?"🔮 ホロ盤面":"▦ 2D盤面"}</button>
+      <button onclick="H.toggleRoom()" ${HOLO?"":"disabled"} data-tt="${attrEsc("背景を立体サルベージ卓(3D部屋)にする。OFFで完成2D画にフォールバック。対応環境のみ")}">${META.room3d!==false?"🛰 立体卓":"🖼 平面卓"}</button>
       <button onclick="H.toggleFxLite()" data-tt="${attrEsc("演出を軽量化(敵ターン高速・シェイク/紙吹雪OFF)。周回プレイ向け")}">${META.fxLite?"⚡ 演出ライト":"✨ 演出フル"}</button>
       <button onclick="H.toggleLang()" data-tt="${attrEsc("Switch UI language (JP / EN)")}">${LANG==="en"?"🌐 English":"🌐 日本語"}</button>
     </p>
@@ -4560,6 +4568,7 @@ const H={
   toggleMute(){ META.muted=!META.muted; saveMeta(); render(); },
   toggleTilt(){ META.tilt=!META.tilt; saveMeta(); render(); },
   toggleHolo(){ META.holo=!META.holo; saveMeta(); render(); },
+  toggleRoom(){ META.room3d=(META.room3d===false); saveMeta(); render(); }, // 既定ON。holo.jsが毎フレーム調停(リロード不要)
   toggleFxLite(){ META.fxLite=!META.fxLite; saveMeta(); render(); },
   buyUnlock(defId,cost){
     if(META.credits<cost||META.unlocked.includes(defId)) return;

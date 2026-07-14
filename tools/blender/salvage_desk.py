@@ -273,8 +273,10 @@ if "--room" in argv:
         bpy.data.objects.remove(o, do_unlink=True)
 
     WALL = srgb(0x081217); MACHINE = srgb(0x10191B); DESKC = srgb(0x172123)
+    WARM_DARK = srgb(0x1B1815); WARM_METAL = srgb(0x2A2622); WARM_PLATE = srgb(0x393128)
     mat_wall = make_mat("wall", WALL, rough=0.85, metal=0.05)
     mat_machine = make_mat("machine", MACHINE, rough=0.7, metal=0.3)
+    mat_tool_warm = make_mat("tool_warm", WARM_DARK, rough=0.64, metal=0.46)
     mat_desk_sol = make_mat("desk_sol", DESKC, rough=0.79, metal=0.18)       # Sol卓面
     mat_frame_sol = make_mat("frame_sol", MACHINE, rough=0.48, metal=0.65)   # 外周フレームのみ金属
     mat_edge_teal = make_mat("edge_teal", (0.01, 0.05, 0.05, 1), rough=0.4,
@@ -292,8 +294,11 @@ if "--room" in argv:
     for oname in ("desk_top", "desk_back", "desk_lip", "desk_leg_l", "desk_leg_r", "projector", "mug"):
         o = bpy.data.objects.get(oname)
         if o: bpy.data.objects.remove(o, do_unlink=True)
-    mat_bench = make_mat("bench_top", srgb(0x303A39), rough=0.63, metal=0.32)
-    mat_bench_frame = make_mat("bench_frame", srgb(0x151C1D), rough=0.38, metal=0.72)
+    # R6: the entire workbench is warm-neutral charcoal. The right/rear equipment stays cool.
+    # This color split survives GLB export even when the review lights are discarded.
+    mat_bench = make_mat("bench_top_warm", WARM_METAL, rough=0.67, metal=0.34)
+    mat_bench_frame = make_mat("bench_frame_warm", WARM_DARK, rough=0.42, metal=0.70)
+    mat_bench_plate = make_mat("bench_plate_worn", WARM_PLATE, rough=0.78, metal=0.38)
     bevel(add_box("desk_top", (2.30, 1.18, 0.075), (0, 0.38, 0.70), mat_bench), 0.025, 4)  # Sol R3#5
     bevel(add_box("desk_frame", (2.42, 1.30, 0.055), (0, 0.38, 0.665), mat_bench_frame), 0.012)
     add_box("desk_leg_l2", (0.12, 1.0, 0.63), (-1.05, 0.38, 0.32), mat_bench_frame)
@@ -375,10 +380,13 @@ if "--room" in argv:
 
     # サルベージ小道具(Sol R1: 「印刷する・挿す・引く・封印する」の動詞)
     # 左奥: 伝票プリンター兼カード排出口(幅0.9 高0.35 投入口=カード幅1.2倍)
-    bevel(add_box("printer", (0.9, 0.5, 0.35), (-1.35, 1.3, 0.95), mat_machine), 0.02)
-    add_box("printer_slot", (CARD_W * 1.2, 0.05, 0.02), (-1.35, 1.02, 0.98), mat_edge_teal)
-    add_box("printer_lamp", (0.03, 0.03, 0.03), (-1.05, 1.03, 1.08), mat_lamp_ind)
-    add_box("printer_leg", (0.7, 0.4, 0.72), (-1.35, 1.32, 0.36), mat_machine)  # 接地(Sol #5)
+    bevel(add_box("printer", (0.9, 0.5, 0.35), (-1.35, 1.3, 0.95), mat_tool_warm), 0.02)
+    add_box("printer_slot", (CARD_W * 1.2, 0.05, 0.02), (-1.35, 1.02, 0.98), mat_bench_frame)
+    # Three modest amber status lamps make the left tool family read warm in the exported GLB.
+    for i in range(3):
+        add_box(f"printer_amber_led_{i}", (0.025, 0.018, 0.025),
+                (-1.10 + i * 0.055, 1.018, 1.08), mat_lamp_ind)
+    add_box("printer_leg", (0.7, 0.4, 0.72), (-1.35, 1.32, 0.36), mat_tool_warm)  # 接地(Sol #5)
     # 右横: クランプレバー(赤い握り=コーラル1点)
     add_box("lever_base", (0.1, 0.1, 0.03), (0.86, 0.05, 0.752), mat_bench_frame)
     add_cyl("lever_rod", 0.016, 0.35, (0.86, 0.05, 0.92), mat_bench_frame,
@@ -386,17 +394,36 @@ if "--room" in argv:
     add_cyl("lever_grip", 0.028, 0.08, (0.86, -0.03, 1.06), mat_coral,
             rot=(math.radians(-30), 0, 0), verts=12)
 
-    # #2 デスクランプ(Sol数値): ベース+支柱+シェード+発光面+スポット55W
-    mat_lampshell = make_mat("lampshell", srgb(0x151C1D), rough=0.31, metal=0.78)  # Sol R3#2
+    # #2 デスクランプ(Sol数値): 重い2関節アーム+シェード+発光面
+    # R7 model audit: the shell, links and pivots must survive GLB export as a work-lamp silhouette.
+    mat_lampshell = make_mat("lampshell_warm", srgb(0x151719), rough=0.38, metal=0.80)
     bevel(add_box("lamp_base", (0.32, 0.24, 0.055), (-0.92, 0.55, 0.765), mat_lampshell), 0.008)
-    add_cyl("lamp_pole", 0.016, 0.48, (-0.87, 0.62, 1.02), mat_lampshell,
-            rot=(math.radians(12), math.radians(-8), 0), verts=12)
-    bpy.ops.mesh.primitive_cone_add(vertices=24, radius1=0.13, radius2=0.05, depth=0.20,
+    import mathutils
+
+    def add_lamp_arm(name, start, end):
+        a = mathutils.Vector(start); b = mathutils.Vector(end)
+        link = add_cyl(name, 0.0125, (b - a).length, (a + b) * 0.5,
+                       mat_lampshell, verts=12)
+        link.rotation_euler = (b - a).to_track_quat('Z', 'Y').to_euler()
+        return link
+
+    lamp_base_joint = (-0.92, 0.55, 0.835)
+    lamp_elbow_joint = (-0.99, 0.61, 1.105)
+    lamp_head_joint = (-0.82, 0.69, 1.225)
+    add_lamp_arm("lamp_arm_lower", lamp_base_joint, lamp_elbow_joint)
+    add_lamp_arm("lamp_arm_upper", lamp_elbow_joint, lamp_head_joint)
+    for jname, jloc in (("lamp_base_pivot", lamp_base_joint),
+                        ("lamp_elbow_pivot", lamp_elbow_joint),
+                        ("lamp_head_pivot", lamp_head_joint)):
+        add_cyl(jname, 0.038, 0.055, jloc, mat_lampshell,
+                rot=(math.radians(90), 0, 0), verts=16)
+    bpy.ops.mesh.primitive_cone_add(vertices=24, radius1=0.18, radius2=0.05, depth=0.28,
                                     location=(-0.80, 0.72, 1.28),
                                     rotation=(math.radians(158), math.radians(-14), 0))
     shade = bpy.context.object; shade.name = "lamp_shade"; shade.data.materials.append(mat_lampshell)
-    add_cyl("lamp_face", 0.065, 0.015, (-0.77, 0.665, 1.20),
-            make_mat("lamp_face", (0.05, 0.02, 0, 1), emit=(1.0, 0.38, 0.09, 1), strength=2.8),  # Sol R3#2: 暖色を絞る
+    add_cyl("lamp_face", 0.052, 0.015, (-0.758, 0.644, 1.169),
+            make_mat("lamp_face", srgb(0xFF8D3A), rough=0.42,
+                     emit=srgb(0xFF8D3A), strength=1.2),
             rot=(math.radians(158), math.radians(-14), 0), verts=16)
     bpy.ops.object.light_add(type='SPOT', location=(-0.78, 0.67, 1.24))
     dlamp = bpy.context.object
@@ -405,7 +432,6 @@ if "--room" in argv:
     dlamp.data.spot_size = math.radians(40)
     dlamp.data.spot_blend = 0.68
     # 照射点 (-0.58, 0.30, 0.742) へ向ける(中央セーフゾーンまでは届かせない)
-    import mathutils
     dv = mathutils.Vector((-0.58, 0.30, 0.742)) - dlamp.location
     dlamp.rotation_euler = dv.to_track_quat('-Z', 'Y').to_euler()
 
@@ -498,36 +524,105 @@ if "--room" in argv:
     bustl.data.color = (0.30, 0.72, 0.78)
     bustl.rotation_euler = (math.radians(90), 0, 0)
 
-    # (b) 主役卓の情報密度: 前面フェイシア(継ぎ目+計器)/隅マウント座/セクション板/前左ヒーロー小物
-    mat_seam = make_mat("desk_seam", srgb(0x0A0E0F), rough=0.6, metal=0.4)
-    mat_section = make_mat("desk_section", srgb(0x232C2B), rough=0.55, metal=0.42)  # 天板より一段濃い作業区画
+    # (b) 主役卓の情報密度: warm armor plating, seams, readable hazard bands and fasteners.
+    # R7 model audit: these exportable meshes/materials carry the wear story in the in-game crop.
+    mat_apron_story = make_mat("apron_story_metal", srgb(0x27211B), rough=0.65, metal=0.62)
+    mat_scuff = make_mat("apron_scuff_metal", srgb(0x5B5045), rough=0.70, metal=0.58)
+    mat_seam = make_mat("desk_seam", srgb(0x0C0A08), rough=0.72, metal=0.42)
+    mat_section = make_mat("desk_section_warm", srgb(0x302A24), rough=0.72, metal=0.40)
+    mat_hazard_orange = make_mat("hazard_orange", srgb(0xB65A16), rough=0.58, metal=0.24,
+                                 emit=srgb(0xB65A16), strength=0.04)
+    mat_hazard_black = make_mat("hazard_black", srgb(0x100D0A), rough=0.82, metal=0.18)
     # 前面フェイシア(垂れ壁): 重い家具の量感+継ぎ目で情報密度。中央盤の手前・下に落ちるので盤面を侵さない
-    bevel(add_box("desk_apron", (2.12, 0.035, 0.15), (0, -0.205, 0.598), mat_bench_frame), 0.006)
+    # Raised into the fixed camera's visible band; its top remains flush with the desk edge.
+    bevel(add_box("desk_apron", (2.12, 0.045, 0.18), (0, -0.215, 0.695), mat_apron_story), 0.006)
+    # Narrow top rail at the exposed left edge; x<-1.06 keeps it outside the central board clearance.
+    bevel(add_box("desk_left_edge_story", (0.085, 1.12, 0.018),
+                  (-1.105, 0.38, 0.748), mat_apron_story), 0.004, 2)
     for i, sx in enumerate((-0.74, -0.26, 0.26, 0.74)):  # 縦の継ぎ目溝×4
-        add_box(f"apron_seam_{i}", (0.014, 0.02, 0.14), (sx, -0.224, 0.598), mat_seam)
-    add_box("apron_label", (0.36, 0.012, 0.055), (-1.02, -0.225, 0.63),
-            make_mat("apron_label", srgb(0x0E1A1C), rough=0.5, emit=srgb(0x1C5A5F), strength=0.6))  # 銘板(淡い発光)
-    add_box("apron_ind0", (0.022, 0.012, 0.022), (0.80, -0.225, 0.62), mat_coral)                    # 警告灯(コーラル1点)
-    add_box("apron_ind1", (0.022, 0.012, 0.022), (0.88, -0.225, 0.62), mat_lamp_ind)                 # 通常灯
+        add_box(f"apron_seam_{i}", (0.014, 0.018, 0.16), (sx, -0.244, 0.695), mat_seam)
+    # Raised/recessed face plates break the otherwise blank vertical slab using real geometry.
+    bevel(add_box("apron_plate_left", (0.46, 0.014, 0.095), (-0.48, -0.249, 0.690),
+                  mat_bench_plate), 0.004, 2)
+    bevel(add_box("apron_plate_right", (0.46, 0.014, 0.095), (0.43, -0.249, 0.690),
+                  mat_section), 0.004, 2)
+    add_box("apron_plate_recess", (0.28, 0.012, 0.042), (0.43, -0.258, 0.690), mat_seam)
+    add_box("apron_label", (0.24, 0.012, 0.045), (-0.48, -0.258, 0.690),
+            make_mat("apron_label_amber", srgb(0x241307), rough=0.56,
+                     emit=srgb(0xA94C12), strength=0.35))
+    add_box("apron_ind0", (0.022, 0.012, 0.022), (0.80, -0.258, 0.705), mat_coral)                    # 警告灯(コーラル1点)
+    add_box("apron_ind1", (0.022, 0.012, 0.022), (0.88, -0.258, 0.705), mat_lamp_ind)                 # 通常灯
+    # Two Ø38 mm / 12 mm proud fastener rows at 180 mm pitch: apron face and front top edge.
+    rivet_xs = tuple(-0.90 + i * 0.18 for i in range(11))
+    for i, bx in enumerate(rivet_xs):
+        add_cyl(f"apron_rivet_{i}", 0.019, 0.012, (bx, -0.260, 0.772), mat_bench_plate,
+                rot=(math.radians(90), 0, 0), verts=10)
+    # Signature salvage chevrons on the front-left apron. Alternating bars are separate meshes/materials.
+    add_box("hazard_apron_mount", (0.58, 0.012, 0.16), (-0.765, -0.260, 0.690), mat_hazard_black)
+    for i in range(9):
+        add_box(f"hazard_chevron_apron_{i}", (0.055, 0.014, 0.148),
+                (-1.005 + i * 0.060, -0.269, 0.690),
+                mat_hazard_orange if i % 2 == 0 else mat_hazard_black,
+                rot=(0, math.radians(35), 0))
     # 四隅マウント座(既存ボルトの下に一段濃い金属座=接地・巨大感/Sol #5)
     for i, (px, py) in enumerate([(-1.0, -0.13), (1.0, -0.13), (-1.0, 0.89), (1.0, 0.89)]):
         add_box(f"desk_pad_{i}", (0.17, 0.17, 0.008), (px, py, 0.737), mat_bench_frame)
+    # Right-front top-corner hazard patch: diagonal alternating bars on a dark mounting plate.
+    add_box("hazard_corner_mount", (0.42, 0.25, 0.009), (0.79, -0.03, 0.748), mat_hazard_black)
+    for i in range(7):
+        add_box(f"hazard_chevron_corner_{i}", (0.045, 0.22, 0.010),
+                (0.64 + i * 0.050, -0.03, 0.755),
+                mat_hazard_orange if i % 2 == 0 else mat_hazard_black,
+                rot=(0, 0, math.radians(35)))
+    # Additional edge fasteners sit on the horizontal front rail, distinct from the apron row.
+    for i, bx in enumerate(rivet_xs):
+        add_cyl(f"desk_edge_rivet_front_{i}", 0.019, 0.012,
+                (bx, -0.180, 0.751), mat_bench_plate, verts=10)
+    # Shallow, deterministic geometry scuffs: 14 on the vertical apron and 10 on the left top rail.
+    apron_scuffs = (
+        (-0.39, 0.624, 0.105, 0.008, -13), (-0.24, 0.647, 0.072, 0.006, 18),
+        (-0.08, 0.618, 0.142, 0.010, 7), (0.10, 0.651, 0.083, 0.007, -21),
+        (0.28, 0.624, 0.162, 0.009, 12), (0.48, 0.658, 0.094, 0.006, -8),
+        (0.67, 0.620, 0.121, 0.011, 23), (0.86, 0.648, 0.075, 0.007, -17),
+        (-0.43, 0.706, 0.088, 0.006, 14), (-0.19, 0.730, 0.154, 0.009, -6),
+        (0.05, 0.702, 0.064, 0.008, 26), (0.31, 0.731, 0.118, 0.007, -16),
+        (0.56, 0.704, 0.174, 0.010, 9), (0.82, 0.730, 0.096, 0.006, -24),
+    )
+    for i, (sx, sz, length, width, angle) in enumerate(apron_scuffs):
+        add_box(f"apron_scuff_{i}", (length, 0.005, width), (sx, -0.273, sz),
+                mat_scuff, rot=(0, math.radians(angle), 0))
+    left_edge_scuffs = (
+        (-0.08, 0.082, 0.008, -12), (0.03, 0.145, 0.010, 18),
+        (0.15, 0.067, 0.006, -25), (0.27, 0.116, 0.009, 9),
+        (0.40, 0.178, 0.011, -8), (0.54, 0.093, 0.007, 24),
+        (0.66, 0.136, 0.008, -17), (0.76, 0.058, 0.006, 13),
+        (0.84, 0.104, 0.010, -22), (0.92, 0.071, 0.007, 7),
+    )
+    for i, (sy, length, width, angle) in enumerate(left_edge_scuffs):
+        add_box(f"left_edge_scuff_{i}", (width, length, 0.004), (-1.106, sy, 0.759),
+                mat_scuff, rot=(0, 0, math.radians(angle)))
     # 天板セクション板(左右奥の作業区画=面の単調さを割る。中央43%は空ける)
     add_box("desk_sec_l", (0.5, 0.34, 0.005), (-0.80, 0.74, 0.7405), mat_section)
     add_box("desk_sec_r", (0.5, 0.34, 0.005), (0.80, 0.74, 0.7405), mat_section)
     # 前左ヒーロー小物: サルベージ・タグリーダー(Sol R3#3: 判読可能サイズへ拡大・左外周へ移動)
-    mat_reader_amber = make_mat("reader_amber", (0.05, 0.02, 0, 1), emit=(1.0, 0.55, 0.18, 1), strength=3.0)
+    mat_reader_amber = make_mat("reader_amber", (0.05, 0.02, 0, 1), emit=(1.0, 0.55, 0.18, 1), strength=1.8)
+    mat_reader_screen = make_mat("reader_screen_amber", srgb(0x2B1608), rough=0.44,
+                                 emit=srgb(0xE27A26), strength=1.35)
     RTILT = math.radians(-10)  # 上面をカメラ側へ
     RX = -0.82  # Sol R4#3: フレーム切れをなくすため少し内側へ
-    bevel(add_box("reader_body", (0.34, 0.25, 0.15), (RX, 0.40, 0.815), mat_machine, rot=(RTILT, 0, 0)), 0.012)
-    add_box("reader_scr", (0.20, 0.012, 0.078), (RX, 0.272, 0.865),
-            make_mat("reader_scr", srgb(0x07191C), rough=0.4, emit=srgb(0x1E787E), strength=2.0))  # 画面(発光1.2→2.0)
-    add_box("reader_slot", (0.23, 0.012, 0.02), (RX, 0.272, 0.795), mat_edge_teal)   # カード投入スリット(シアン)
+    bevel(add_box("reader_body", (0.36, 0.27, 0.16), (RX, 0.40, 0.820), mat_tool_warm, rot=(RTILT, 0, 0)), 0.014)
+    bevel(add_box("reader_screen_bezel", (0.245, 0.018, 0.105), (RX, 0.264, 0.875),
+                  mat_bench_frame, rot=(RTILT, 0, 0)), 0.006, 2)
+    add_box("reader_screen_amber", (0.205, 0.012, 0.070), (RX, 0.252, 0.878),
+            mat_reader_screen, rot=(RTILT, 0, 0))
+    add_box("reader_card_slot", (0.24, 0.014, 0.024), (RX, 0.259, 0.790), mat_seam)
+    add_box("reader_card_guide", (0.17, 0.045, 0.010), (RX, 0.305, 0.782), mat_bench_plate,
+            rot=(RTILT, 0, 0))
     add_box("reader_ind", (0.03, 0.012, 0.03), (RX + 0.13, 0.272, 0.86), mat_reader_amber)  # アンバー灯
     for i, (bx, bz) in enumerate([(RX - 0.14, 0.885), (RX + 0.14, 0.885), (RX - 0.14, 0.75), (RX + 0.14, 0.75)]):
         add_cyl(f"reader_bolt_{i}", 0.006, 0.01, (bx, 0.28, bz), mat_bench_frame,
                 rot=(math.radians(90), 0, 0), verts=8)
-    add_box("reader_foot", (0.32, 0.23, 0.012), (RX, 0.40, 0.7405), mat_bench_frame)  # 接地座
+    bevel(add_box("reader_grounded_foot", (0.34, 0.25, 0.018), (RX, 0.40, 0.744), mat_bench_frame), 0.004, 2)
     # 左前フィル(Sol R4#3: 左機材とリーダー暗部を純黒から救う。弱く5500K)
     bpy.ops.object.light_add(type='AREA', location=(-1.35, -0.55, 1.05))
     lfill = bpy.context.object

@@ -578,7 +578,7 @@ export function createHolo(ctx) {
     document.body.insertBefore(gre, app);
     bg.canvas.addEventListener("webglcontextlost", e => { e.preventDefault(); bgKill(); }, false);
 
-    bg.renderer = new THREE.WebGLRenderer({ canvas: bg.canvas, alpha: true, antialias: false, powerPreference: "low-power" });
+    bg.renderer = new THREE.WebGLRenderer({ canvas: bg.canvas, alpha: true, antialias: false, powerPreference: "low-power", preserveDrawingBuffer: true }); // preserve=部屋モードで静止フレームを保持し再描画をスキップ(fps)
     bg.renderer.setClearColor(0x000000, 0);
     bg.scene = new THREE.Scene();
     bg.cam = new THREE.PerspectiveCamera(45, 1, 10, 4000);
@@ -739,6 +739,7 @@ export function createHolo(ctx) {
     if (!bg.ready || ctxLost) return;
     if (!bgLayout()) return;
     const { S, META } = dbg();
+    roomReconcile(); // META.room3dトグルと実状態を毎フレーム調停(既定ONの初回ロードもここ)
     // 相手の実在の呼応: 敵の手番は眼が強く・赤く灯る(「向こうが打っている」)
     const enemyTurn = S && S.enc && (S.enc.step === "enemy" || S.enc.phase === "enemy");
     bg.eyeHeat = bg.eyeHeat === undefined ? 0 : bg.eyeHeat;
@@ -800,8 +801,14 @@ export function createHolo(ctx) {
     }
     // Phase 5: GLB部屋モードはBlender一人称カメラを再現(px写像カメラを毎フレーム上書き)
     if (room.active) {
-      roomCam(bg.canvas.clientWidth, bg.canvas.clientHeight);
-      bg.renderer.render(bg.scene, bg.cam);
+      const w = bg.canvas.clientWidth, h = bg.canvas.clientHeight;
+      roomCam(w, h);
+      // 背景は視差移動/リサイズ時のみ再描画(ビート中は静止=描画スキップで負荷ゼロ。前フレームはpreserveで保持)
+      if (!room.drawn || w !== room.lw || h !== room.lh
+          || Math.abs(bg.px - room.lpx) > 4e-4 || Math.abs(bg.py - room.lpy) > 4e-4) {
+        bg.renderer.render(bg.scene, bg.cam);
+        room.lpx = bg.px; room.lpy = bg.py; room.lw = w; room.lh = h; room.drawn = true;
+      }
       return;
     }
     // 盤下グロー: DOM盤の実位置を追う(gBCR読みのみ — レビューF1の読み書き分離)
@@ -816,15 +823,20 @@ export function createHolo(ctx) {
     bg.renderer.render(bg.scene, bg.cam);
   }
 
-  // ==== Phase 5(実験): BlenderフルGLB部屋 — Claude→Blender→GLB→three.js 一気通貫 ====
-  // 起動: URL ?room=1 または lkDebug().META.room3d。失敗時はマット絵モードへ自動フォールバック。
-  // Sol磨きR3-R5で 6.8→7.7/10(2026-07-14)。昇格ゲート7.8まであと0.1のため既定OFF据え置き。
-  // 既定背景は8.5/10の2D画のまま。残処方は docs/HANDOFF-phase5.5-room-polish.md §次タスク①。
-  const room = { want: false, loading: false, failed: false, obj: null, lights: [] };
-  try { room.want = new URLSearchParams(location.search).get("room") === "1"; } catch (_) {}
+  // ==== Phase 5: BlenderフルGLB部屋 — Claude→Blender→GLB→three.js 一気通貫 ====
+  // 既定ON(META.room3d===false で明示OFF / ?room=0 強制OFF / ?room=1 強制ON)。
+  // 見た目=この three.js リグ(GLBはCyclesライトを持ち込まない)。GLB失敗/WebGL不可はマット絵へ自動退避。
+  // 照明数値は Sol 独立監査(tmp/sol-room-audit.md)処方。テーマ憲章: docs/design-room-theme.md。
+  const room = { loading: false, failed: false, obj: null, lights: [], fog: null, active: false, lpx: 0, lpy: 0, lw: 0, lh: 0, drawn: false };
+  function roomWanted() {
+    let q = null; try { q = new URLSearchParams(location.search).get("room"); } catch (_) {}
+    if (q === "1") return true;
+    if (q === "0") return false;
+    return (dbg().META || {}).room3d !== false; // 既定ON
+  }
 
   function roomInit() {
-    if (!room.want && !(dbg().META || {}).room3d) return;
+    if (!roomWanted()) return;
     if (room.loading || room.failed || room.obj) return;
     room.loading = true;
     Promise.all([
@@ -835,30 +847,67 @@ export function createHolo(ctx) {
       .catch(e => { room.failed = true; try { console.info("room3d unavailable:", e && e.message || e); } catch (_) {} });
   }
 
+  // トグル調停: 毎フレーム META.room3d と実状態を突き合わせる(ラン中トグルでリロード不要)
+  function roomReconcile() {
+    const want = roomWanted();
+    if (want && !room.obj && !room.loading && !room.failed) { roomInit(); return; }
+    if (!room.obj) return;
+    if (want && !room.active) roomShow();
+    else if (!want && room.active) roomHide();
+  }
+
   function roomBuild(obj) {
-    // glTFはY-up(Blender Z-up から変換済み)。シーン単位=メートルのままにし、カメラをBlenderの一人称位置へ置く
+    // glTFはY-up(Blender Z-up から変換済み)。シーン単位=メートルのまま、カメラをBlenderの一人称位置へ。
     room.obj = obj;
     bg.scene.add(obj);
-    // 絵アンカー系はGLB部屋では非表示(部屋が実体を持つ)
-    bg.matte.visible = false;
-    for (const e of bg.eyes) e.visible = false;
-    if (bg.winGlow) bg.winGlow.visible = false;
-    if (bg.lampGlow) bg.lampGlow.visible = false;
-    if (bg.wreck) bg.wreck.visible = false;
-    if (bg.dustN) bg.dustN.visible = false;
-    if (bg.dustF) bg.dustF.visible = false;
-    if (bg.boardGlow) bg.boardGlow.visible = false;
-    // ライト(GLBはライト非含有 — Blender側と同じ配置をthree座標(x, z, -y)で再現)
+    // ==== 暖⇔冷の照明リグ(決定的レバー — Sol独立監査の処方値。左=暖色タングステン / 右奥=冷色) ====
+    // 座標=Blender(x, z, -y)。decay=2.0(物理falloff)で「本物の光源」に。過度な寒色フィルで前景を平板化しない。
     const mk = l => { bg.scene.add(l); room.lights.push(l); return l; };
-    const spot = mk(new THREE.SpotLight(0xffb86a, 260, 9, Math.PI * 58 / 360, 0.45, 1.1));
-    spot.position.set(-0.78, 1.24, -0.67);
-    spot.target.position.set(-0.38, 0.70, -0.28); mk(spot.target);
-    mk(new THREE.HemisphereLight(0x9edde0, 0x070d10, 0.5));            // 天井エリア光の近似
-    const rear = mk(new THREE.PointLight(0x42c6d1, 38, 7, 1.6)); rear.position.set(1.2, 1.55, -1.3);
-    const can = mk(new THREE.PointLight(0x40dad8, 14, 4, 1.7)); can.position.set(0.91, 1.0, -0.55);
-    const front = mk(new THREE.PointLight(0x8fb8c0, 16, 8, 1.8)); front.position.set(0, 1.9, 1.4); // 正面フィル(黒潰れ禁止・弱)
-    bg.renderer.toneMapping = THREE.ACESFilmicToneMapping;             // 部屋はPBR — bg canvasは独立レンダラなので盤ホロに影響なし
+    // 既定ON=モバイルfpsゲート必須のため4灯に絞る(6→4。暖1/冷3で二元性は保つ)。
+    // ① 暖色タングステンの手元プール(最終: 1050→1150・cone54→60=コンセプトの広いタングステン・ウォッシュへ寄せる。左ベンチ全体を舐める)
+    const key = mk(new THREE.SpotLight(0xff9a4d, 1150, 3.2, Math.PI * 60 / 360, 0.65, 2.0));
+    key.position.set(-0.95, 1.38, -0.45);
+    key.target.position.set(-1.15, 0.68, 0.28); mk(key.target);       // 露出した左ベンチ(x=40-280,y=300-570px)
+    // ② 冷色アンビエント(最終監査#4: 0.16→0.32=黒潰れした周辺ジオメトリの道具シルエット/金属反応を出す。1050キー+露出0.90で二元性は維持)
+    mk(new THREE.HemisphereLight(0x6fb0c2, 0x05090c, 0.32));
+    // ③ 冷色リアリム: 右奥のみ(#3FB8D0/decay2 で右壁・容器側=奥行きの冷色)
+    const rear = mk(new THREE.PointLight(0x3fb8d0, 27, 3.5, 2.0)); rear.position.set(1.35, 1.55, -1.45);
+    // ④ 正面フィル(確認監査: 8→11=×1.35・左下の道具バンク寄りへ。#7899A3・影なし・暗部金属を6-8%luma上限で回収)
+    const front = mk(new THREE.PointLight(0x7899a3, 11, 6, 2.0)); front.position.set(-0.35, 1.55, 1.35);
+    // 大気: 冷色の指数フォグ=奥へ落ちる暗がり(密度0.10・#080D11。手前の暖色プールが際立つ)
+    room.fog = new THREE.FogExp2(0x080d11, 0.10);
+    roomShow();
+    // ウォームアップ: 実レンダ1発でシェーダ+ジオメトリをGPUへ(初回ビート中の166msヒッチ回避。fps既定経路の要)
+    try { roomCam(bg.canvas.clientWidth || 1280, bg.canvas.clientHeight || 800); bg.renderer.render(bg.scene, bg.cam); } catch (_) {}
+  }
+
+  // 部屋を前面に(絵アンカーを隠し・フォグ/トーン/ヴィネットを部屋用に)
+  function roomShow() {
+    if (!room.obj) return;
+    room.obj.visible = true;
+    for (const l of room.lights) l.visible = true;
+    setAnchorsVisible(false);
+    bg.scene.fog = room.fog;
+    bg.renderer.toneMapping = THREE.ACESFilmicToneMapping;             // 部屋はPBR(bg canvasは独立レンダラ=盤ホロに影響なし)
+    bg.renderer.toneMappingExposure = 0.90;                            // 監査#2: 1.05→0.90(発光平板を沈める)
+    try { document.body.classList.add("room-live"); } catch (_) {}     // CSSヴィネット(#holo-curtainを全画面暗角へ)
     room.active = true;
+  }
+  // 部屋を退避(2Dマット絵へ。トグルOFF時)
+  function roomHide() {
+    if (room.obj) room.obj.visible = false;
+    for (const l of room.lights) l.visible = false;
+    setAnchorsVisible(true);
+    bg.scene.fog = null;
+    bg.renderer.toneMapping = THREE.NoToneMapping;                     // 2Dマットは非トーンマップ(SRGBそのまま=CSS一致)
+    bg.renderer.toneMappingExposure = 1;
+    try { document.body.classList.remove("room-live"); } catch (_) {}
+    room.active = false; room.drawn = false; // 再表示時は必ず1枚描く
+  }
+  function setAnchorsVisible(v) { // boardGlowはbgDrawが毎フレーム管理するので触らない
+    if (bg.matte) bg.matte.visible = v;
+    for (const e of bg.eyes) e.visible = v;
+    for (const k of ["winGlow", "lampGlow", "wreck", "dustN", "dustF"]) if (bg[k]) bg[k].visible = v;
   }
 
   function roomCam(w, h) {
