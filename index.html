@@ -2631,6 +2631,15 @@ function settlementValue(state, relicIds){
   return Math.round(base*rewardMultiplier(r)*safe);
 }
 function relicPayoutValue(state, value){ return value*rewardMultiplier(state.run); }
+// B2 オランダ式市場(charter §2-①-3 / Sol設計v2): 上段スパイク(基礎価格≥SPIKE_MIN)を1枚ずつ展示し、
+// 「買えたのに見送った(affordable-but-passed)」帰還ごとに misses++。値下げは圧縮(B/B-3/B-5床)、その後CBが太る。純関数。
+const SPIKE_MIN_COST=18;
+function marketQuote(base, misses){
+  const m=Math.min(5, misses||0);
+  const price=base-(m>=2?5:m>=1?3:0);          // 0→B / 1→B-3 / 2以上→B-5(床)
+  const cashback=m>=3?Math.min(6,(m-2)*2):0;    // 3→+2 / 4→+4 / 5以上→+6
+  return { base, misses:m, price, cashback, net:price-cashback };
+}
 
 // 回収コンテナ: プレイヤーユニットが乗ったら回収(移動・ドリフトどちらでも)
 function checkContainer(state){
@@ -2663,7 +2672,7 @@ const LK = { CONFIG, CARD_DEFS, RELIC_DEFS, RELIC_TAGS, ENEMY_DEFS, ENEMY_AI, ZO
   CONTRACT_DEFS, hasContract, contractMult,
   newRun, startEncounter, pump, doRest, restShift, restShiftSkip, restShiftOptions, selectPair, actionSpec, execAction, fizzleAction,
   pendingDamage, resolveDamage, finishEncounter, chooseRoute, resolveRelic, canDeploy, doLeap, doKeep,
-  moveOptions, attackTargets, cardsIn, aliveCards, cardByUid, defOf, cargoValue, cargoPayoutValue, relicPayoutValue, safeReturnBonus, settlementValue, concentratedValue,
+  moveOptions, attackTargets, cardsIn, aliveCards, cardByUid, defOf, cargoValue, cargoPayoutValue, relicPayoutValue, safeReturnBonus, settlementValue, concentratedValue, marketQuote, SPIKE_MIN_COST,
   rewardMultiplier, nextRewardMultiplier, isBossZone, bossChapterForZone, unlocks,
   unitAt, players, enemies, unitById, tdist, tdelta, wrap, encounterEnemyList, bossOf, log,
   enemyStep, enemyPhaseAll, nextActingEnemy, commitTurn, undoTurn, canUndo, effDamage, driftPhase,
@@ -2685,7 +2694,8 @@ const UI={ mode:"idle", selA:null, actIdx:null, unitId:null, multi:[], loadout:[
 const META_KEY="lok_meta_v1";
 const META_DEFAULT={ credits:0, unlocked:[], installed:[], wins:0, runs:0, bestZone:0, bestValue:0,
   bestScore:0, dailyBest:null, ships:["vagrants"], lastShip:"vagrants", ascension:0, maxAsc:0,
-  muted:false, tilt:true, fxLite:false, holo:true, lastDeck:null, lastContracts:[], hard:false, moments:{} };
+  muted:false, tilt:true, fxLite:false, holo:true, lastDeck:null, lastContracts:[], hard:false, moments:{},
+  marketFeatured:null, marketMisses:{} }; // B2 ローテ市場: 今季展示中のスパイクと商品別「買えたのに見送った」回数
 let META={...META_DEFAULT};
 function loadMeta(){
   try{ const raw=localStorage.getItem(META_KEY); if(raw) META={...META_DEFAULT, ...JSON.parse(raw)}; }catch(e){}
@@ -2954,6 +2964,8 @@ Object.assign(EN_EXACT,{
   "🔗 緊急解体(非常弁)":"🔗 Emergency scrap (relief valve)",
   "— 封印遺物を素価値で今すぐ現金化。上乗せ精算は捨てる=常に損切り。":"— cash out a sealed relic now at base value; every settlement bonus is forfeited = always a haircut.",
   "カーゴは空(解体するものがない)":"Cargo is empty (nothing to scrap)","出航する →":"Launch →",
+  // B2 ローテ市場
+  "🌟今季の漂着品":"🌟 This season's flotsam",
 });
 // unshiftで先頭に置く: 生成済みの汎用分割ルール(「$1 — $2」型)より先に、専用パターンを試させる
 EN_RULES.unshift(
@@ -2978,6 +2990,11 @@ EN_RULES.unshift(
   ["^集中×深度倍率x(\\d+)×安全1\\.2を反映した確定額。今売れば ₢(\\d+)\\(残りカーゴの集中ボーナスも動く\\)$","Locked-in value with concentration × depth ×$1 × safe 1.2. Sell now for ₢$2 (the remaining cargo's concentration bonus shifts too)"],
   ["^集中×深度倍率x(\\d+)を反映した確定額。今売れば ₢(\\d+)\\(残りカーゴの集中ボーナスも動く\\)$","Locked-in value with concentration × depth ×$1. Sell now for ₢$2 (the remaining cargo's concentration bonus shifts too)"],
   ["^ ?\\(回収ボーナス₢(\\d+)×([\\d.]+)=\\+₢(\\d+)込み\\)$"," (salvage bonus ₢$1×$2 = +₢$3 incl.)"],
+  // B2 ローテ市場(動的)
+  ["^🌟今季の漂着品 ・売れ残り(\\d+)$","🌟 This season's flotsam · unsold ×$1"],
+  ["^今季 ₢(\\d+)$","This season ₢$1"],
+  ["^今季 ₢(\\d+) \\+CB₢(\\d+)$","This season ₢$1 +CB₢$2"],
+  ["^🌟今季の漂着品\\(ローテ展示中\\)。基準₢(\\d+)→今季₢(\\d+)。今買うか値下がりを待つか — 次の帰還では別の品が展示され、これは棚から消えることもある\\(一期一会\\)$","🌟 This season's flotsam (on rotation). Base ₢$1 → this season ₢$2. Buy now or wait for a further cut — but next return features a different item and this one may leave the shelf (once and only once)."],
 );
 let EN_RULES_C=[];
 function trText(s){
@@ -3460,7 +3477,22 @@ function renderUpgrade(app){
 }
 
 // ---------- hangar (M6 メタ進行) ----------
+// ---------- B2 ローテ市場(オランダ式・charter §2-①-3) ----------
+function spikeCandidates(){ return UNLOCK_POOL.filter(u=>u.cost>=SPIKE_MIN_COST && !META.unlocked.includes(u.defId)); }
+function featuredSpike(){ if(!META.marketFeatured) return null; const u=UNLOCK_POOL.find(x=>x.defId===META.marketFeatured); return (u && !META.unlocked.includes(u.defId))?u:null; }
+function pickFeatured(excludeCurrent){ const cands=spikeCandidates(); if(!cands.length){ META.marketFeatured=null; return; }
+  const pool=(excludeCurrent && cands.length>1)?cands.filter(u=>u.defId!==META.marketFeatured):cands; // 連続展示禁止(他候補があれば)
+  META.marketFeatured=pool[Math.floor(Math.random()*pool.length)].defId; }
+function ensureFeatured(){ if(!featuredSpike()){ pickFeatured(false); saveMeta(); } } // 棚を開いた時に空なら1枚展示
+function rotateMarket(){ // 出撃時: 展示中スパイクが「買えたのに見送り(affordable-but-passed)」なら misses++ → 別商品へローテ(一期一会)
+  const cur=featuredSpike();
+  if(cur){ const q=marketQuote(cur.cost, META.marketMisses[cur.defId]||0);
+    if(META.credits>=q.price) META.marketMisses[cur.defId]=Math.min(5,(META.marketMisses[cur.defId]||0)+1); }
+  pickFeatured(true); saveMeta();
+}
 function renderHangar(app){
+  ensureFeatured();
+  const feat=featuredSpike();
   const ownedRelics=META.installed;
   app.innerHTML=`
   <div class="panel" style="max-width:900px;margin:30px auto;">
@@ -3470,9 +3502,16 @@ function renderHangar(app){
     <div class="pickgrid">
       ${UNLOCK_POOL.map(u=>{
         const owned=META.unlocked.includes(u.defId);
+        const isFeat=feat && u.defId===feat.defId;
+        const q=isFeat?marketQuote(u.cost, META.marketMisses[u.defId]||0):null;
+        const price=isFeat?q.price:u.cost;
         const c={uid:"x",defId:u.defId,loc:"pool"};
-        return `<div style="text-align:center;">${cardFaceHtml(c,{mini:true,selected:owned})}
-          <button style="margin-top:4px;" ${owned?"disabled":(META.credits>=u.cost?"":"disabled")} onclick="H.buyUnlock('${u.defId}',${u.cost})">${owned?"解放済み":`₢${u.cost}で解放`}</button></div>`;
+        const label=owned?"解放済み":isFeat?`今季 ₢${q.price}${q.cashback>0?` +CB₢${q.cashback}`:""}`:`₢${u.cost}で解放`;
+        const onclick=isFeat?`H.buySpike('${u.defId}')`:`H.buyUnlock('${u.defId}',${u.cost})`;
+        const tt=isFeat?attrEsc("🌟今季の漂着品(ローテ展示中)。基準₢"+u.cost+"→今季₢"+q.price+"。今買うか値下がりを待つか — 次の帰還では別の品が展示され、これは棚から消えることもある(一期一会)"):"";
+        return `<div style="text-align:center;${isFeat?"outline:2px solid var(--gold);border-radius:8px;padding:2px;":""}" ${isFeat?`data-tt="${tt}"`:""}>${cardFaceHtml(c,{mini:true,selected:owned})}
+          ${isFeat?`<div style="font-size:.7rem;color:var(--gold);">🌟今季の漂着品${(META.marketMisses[u.defId]||0)>0?` ・売れ残り${META.marketMisses[u.defId]}`:""}</div>`:""}
+          <button style="margin-top:4px;" ${owned?"disabled":(META.credits>=price?"":"disabled")} onclick="${onclick}">${label}</button></div>`;
       }).join("")}
     </div>
     <h3 style="color:var(--cyan);margin-top:16px;">インストール済み遺物</h3>
@@ -4445,6 +4484,7 @@ function renderSummary(app){
 const H={
   begin(){
     sfx("click");
+    rotateMarket(); // B2: 出撃=次ラン開始。展示中スパイクの「買えたのに見送り」判定+ローテ
     S.screen="shipselect"; render();
   },
   tutorial(){
@@ -4496,6 +4536,15 @@ const H={
   buyUnlock(defId,cost){
     if(META.credits<cost||META.unlocked.includes(defId)) return;
     META.credits-=cost; META.unlocked.push(defId); saveMeta(); sfx("salvage"); render();
+  },
+  buySpike(defId){ // B2: 展示中スパイクを市場価格で購入。表示価格全額が要り、購入後にCB返還
+    const u=UNLOCK_POOL.find(x=>x.defId===defId);
+    if(!u||META.unlocked.includes(defId)||META.marketFeatured!==defId) return;
+    const q=marketQuote(u.cost, META.marketMisses[defId]||0);
+    if(META.credits<q.price) return;
+    META.credits-=q.price; META.credits+=q.cashback;
+    META.unlocked.push(defId); delete META.marketMisses[defId]; // 購入済み=正本はunlocked
+    saveMeta(); sfx("salvage"); render();
   },
   toggleDeck(i){
     if(UI.deckSel.includes(i)) UI.deckSel=UI.deckSel.filter(x=>x!==i);

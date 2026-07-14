@@ -318,6 +318,16 @@ console.log("== rule checks ==");
   ok(LK.settlementValue(sl, sl.run.cargo) === Math.round(LK.concentratedValue([a.id, b.id]) * ml), "loss: no bonus/no safe, concentration×depth only", LK.settlementValue(sl, sl.run.cargo) + "");
 }
 {
+  // B2: marketQuote — 圧縮値下げ(B / B-3 / B-5床)+ CB(3→+2 / 4→+4 / 5→+6)。charter §2-①-3 / Sol v2
+  const B = 26;
+  const tbl = [[0, 26, 0], [1, 23, 0], [2, 21, 0], [3, 21, 2], [4, 21, 4], [5, 21, 6], [6, 21, 6]];
+  for (const [m, p, cb] of tbl) { const q = LK.marketQuote(B, m); ok(q.price === p && q.cashback === cb, `marketQuote(26,${m}) = price ${p} cb ${cb}`, `got price ${q.price} cb ${q.cashback}`); }
+  ok(LK.marketQuote(26, 2).price >= B - 5, "price never below B-5 floor");
+  ok(LK.marketQuote(26, 99).cashback === 6, "cashback capped at 6");
+  const q2 = LK.marketQuote(20, 2); ok(q2.price === 15 && q2.net === 15, "base 20, misses 2 → price/net 15", `${q2.price}/${q2.net}`);
+  ok(LK.SPIKE_MIN_COST === 18 && LK.UNLOCK_POOL.filter(u => u.cost >= LK.SPIKE_MIN_COST).length === 4, "4 spike candidates ≥ ₢18");
+}
+{
   // 掃討後のサルベージは改修(恒久+)に切替(FB: 「回収したのに消える」の根治)
   const s = LK.newRun(13);
   LK.startEncounter(s, null);
