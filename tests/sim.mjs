@@ -237,6 +237,62 @@ console.log("== rule checks ==");
   ok(LK.cardSpec(s3, cl, "bottom").dmg === 2, "lonewolf base dmg 2 when hand>2");
 }
 {
+  // B1: ラン内クレジット + 二段整備ドック(charter §2-②-2a / Sol設計v2)
+  const sd = LK.shipDef(LK.newRun(40).run.shipId);
+  // 保存則: credits === creditsEarned - creditsSpent(全増減が earn/spend 経由)
+  const s = LK.newRun(41);
+  LK.earnRunCredits(s, 5); LK.earnRunCredits(s, 3);
+  ok(s.run.credits === 8 && s.run.creditsEarned === 8 && s.run.creditsSpent === 0, "earn: credits=earned=8");
+  ok(LK.spendRunCredits(s, 3) === true && s.run.credits === 5 && s.run.creditsSpent === 3, "spend 3 → credits=5 spent=3");
+  ok(s.run.credits === s.run.creditsEarned - s.run.creditsSpent, "conservation: credits===earned-spent");
+  ok(LK.spendRunCredits(s, 99) === false && s.run.credits === 5, "overspend rejected, state unchanged");
+  LK.earnRunCredits(s, -4); ok(s.run.credits === 5, "negative earn is a no-op");
+
+  // 二段ドック: 主作業で dockMainDone、screen は upgrade のまま。leaveDock で route。主作業前の leaveDock は拒否
+  const d = LK.newRun(42); d.screen = "upgrade"; d.run.dockMainDone = false;
+  LK.applyScrapLoot(d);
+  ok(d.run.dockMainDone === true && d.screen === "upgrade", "dock stage1: mainDone set, screen stays upgrade");
+  ok(LK.leaveDock(d).ok === true && d.screen === "route", "leaveDock → screen route");
+  const d0 = LK.newRun(43); d0.screen = "upgrade"; d0.run.dockMainDone = false;
+  ok(LK.leaveDock(d0).ok === false && d0.screen === "upgrade", "leaveDock blocked before main action");
+
+  // 応急溶接 ₢3 = HP+1(満タン不可・1ドック1回・norepair封鎖・残高不足拒否)
+  const p = LK.newRun(44); p.run.dockMainDone = true; p.run.shipHp = sd.hp - 2; LK.earnRunCredits(p, 6);
+  ok(LK.applyDockPatch(p).ok && p.run.shipHp === sd.hp - 1 && p.run.credits === 3, "patch: HP+1, ₢3 spent");
+  ok(LK.applyDockPatch(p).ok === false, "patch: once per dock");
+  const pf = LK.newRun(45); pf.run.dockMainDone = true; pf.run.shipHp = sd.hp; LK.earnRunCredits(pf, 6);
+  ok(LK.applyDockPatch(pf).ok === false && pf.run.credits === 6, "patch: full HP rejected, no charge");
+  const pn = LK.newRun(46, null, { contracts: ["norepair"] }); pn.run.dockMainDone = true; pn.run.shipHp = sd.hp - 2; LK.earnRunCredits(pn, 6);
+  ok(LK.applyDockPatch(pn).ok === false && pn.run.credits === 6, "patch: norepair blocks, no charge");
+  const pc = LK.newRun(47); pc.run.dockMainDone = true; pc.run.shipHp = sd.hp - 2; LK.earnRunCredits(pc, 2);
+  ok(LK.applyDockPatch(pc).ok === false && pc.run.credits === 2, "patch: insufficient credits rejected");
+
+  // ブラックボックス回収 ₢7 = ロスト1枚復帰(+1 aliveCards)。燃料ロストは対象外
+  const rc = LK.newRun(48); rc.run.dockMainDone = true; LK.earnRunCredits(rc, 10);
+  rc.run.cards[0].loc = "lost"; const before = LK.aliveCards(rc).length;
+  ok(LK.applyDockRecover(rc).ok && LK.aliveCards(rc).length === before + 1 && rc.run.credits === 3, "recover: +1 alive, ₢7 spent");
+  const rf = LK.newRun(49); rf.run.dockMainDone = true; LK.earnRunCredits(rf, 10);
+  rf.run.cards[0].loc = "lost"; rf.run.cards[0].fuelLost = true;
+  ok(LK.applyDockRecover(rf).ok === false && rf.run.credits === 10, "recover: fuel-lost not recoverable, no charge");
+
+  // 緊急解体(非常弁): カーゴから消え credits += 素価値、上乗せは付かない
+  const lq = LK.newRun(50); const relic = LK.RELIC_DEFS[0]; lq.run.cargo = [relic.id];
+  ok(LK.liquidateCargo(lq, relic.id).ok && lq.run.cargo.length === 0 && lq.run.credits === relic.value, "liquidate: cargo removed, credits+=value");
+  ok(lq.run.credits === lq.run.creditsEarned - lq.run.creditsSpent, "liquidate keeps conservation");
+
+  // 持越: runOver(doKeep経由)で creditCarry=credits を固定
+  const cw = LK.newRun(51); LK.earnRunCredits(cw, 4); LK.doKeep(cw);
+  ok(cw.run.creditCarry === 4 && cw.run.over === true, "carry fixed on return (doKeep→runOver)");
+
+  // 危険ルート第2戦域クリア報酬: ZONE1-3=₢2 / ZONE4-9=₢1 / safe=₢0。ドックは全強化済みでも必ず開く
+  const mk = (zone, route) => { const g = LK.newRun(60 + zone); g.run.zone = zone; g.run.route = route; LK.startEncounter(g, null); g.run.encIdx = 1; LK.finishEncounter(g); return g; };
+  ok(mk(2, "danger").run.credits === 2 && mk(2, "danger").screen === "relic", "danger 2nd-area zone<=3 → +₢2, relic screen");
+  ok(mk(5, "danger").run.credits === 1, "danger 2nd-area zone>=4 → +₢1 (deep throttle)");
+  ok(mk(2, "safe").run.credits === 0, "safe 2nd-area → no credit");
+  const dk = LK.newRun(70); dk.run.cards.forEach(c => c.up = true); LK.startEncounter(dk, null); dk.run.encIdx = 0; LK.finishEncounter(dk);
+  ok(dk.screen === "upgrade" && dk.run.dockMainDone === false, "dock always opens even when all cards upgraded");
+}
+{
   // 掃討後のサルベージは改修(恒久+)に切替(FB: 「回収したのに消える」の根治)
   const s = LK.newRun(13);
   LK.startEncounter(s, null);
@@ -803,7 +859,7 @@ function simulateRun(seed, kind) {
       if (s.enc.phase === "cleared") {
         LK.finishEncounter(s);
         if (s.screen === "upgrade") {
-          // 整備ドック三択: 船体が痛んでいれば補給、元気なら強化(保険vs投資)
+          // 整備ドック①無料主作業(保険vs投資): 痛んでいれば補給、元気なら強化
           const sd=LK.shipDef(s.run.shipId);
           const hull=s.run.shipHp??sd.hp;
           if (kind!=="random" && hull<=sd.hp-3) LK.applyResupply(s);
@@ -813,6 +869,14 @@ function simulateRun(seed, kind) {
             const pick=cands.length?[...cands].sort((a,b)=>((LK.defOf(b).bottom.dmg||0)-(LK.defOf(a).bottom.dmg||0)))[0].uid:null;
             LK.applyUpgrade(s,pick);
           }
+          // 整備ドック②ラン内クレジットで生存投資: HP薄→応急溶接 / 寿命薄→ブラックボックス回収。random方策はたまに緊急解体で非常弁経路を踏む
+          if (kind!=="random") {
+            if ((s.run.shipHp??sd.hp)<=2 && s.run.credits>=LK.DOCK_PATCH_COST) LK.applyDockPatch(s);
+            if (LK.aliveCards(s).length<=5 && LK.dockRecoverable(s).length && s.run.credits>=LK.DOCK_RECOVER_COST) LK.applyDockRecover(s);
+          } else if (rnd()<0.25 && s.run.cargo.length) {
+            LK.liquidateCargo(s, s.run.cargo[0]);
+          }
+          LK.leaveDock(s); // 出航 → screen="route"
         }
         if (s.screen === "route") { LK.chooseRoute(s, P.route(s)); LK.startEncounter(s, P.loadout(s)); s.screen="battle"; }
         else if (s.screen === "relic") {

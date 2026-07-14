@@ -113,10 +113,25 @@ export function legalChoices(s) {
 
   // 戦闘外スクリーン
   if (s.screen === "upgrade") {
-    for (const c of LK.aliveCards(s).filter(c => !c.up))
-      add(`camp_upgrade:${c.uid}`, `強化(+): ${LK.defOf(c).name}`);
-    add("camp_resupply", `補給: 旗艦HP+3+随伴機全快${LK.hasContract(run, "norepair") ? "(契約で封鎖中=失敗する)" : ""}`);
-    add("camp_scrap", "物資回収: 売却価値+1");
+    if (!run.dockMainDone) {
+      // ① 無料主作業をひとつ選ぶ
+      for (const c of LK.aliveCards(s).filter(c => !c.up))
+        add(`camp_upgrade:${c.uid}`, `強化(+): ${LK.defOf(c).name}`);
+      add("camp_resupply", `補給: 旗艦HP+3+随伴機全快${LK.hasContract(run, "norepair") ? "(契約で封鎖中=失敗する)" : ""}`);
+      add("camp_scrap", "物資回収: 売却価値+1");
+      return out;
+    }
+    // ② ラン内クレジット(₢${run.credits})で有料追加整備 + 緊急解体 + 出航
+    const sd = LK.shipDef(run.shipId), hp = run.shipHp ?? sd.hp;
+    if (!run.dockPatch && !LK.hasContract(run, "norepair") && hp < sd.hp && run.credits >= LK.DOCK_PATCH_COST)
+      add("dock_patch", `応急溶接 ₢${LK.DOCK_PATCH_COST}: 旗艦HP+1(${hp}→${hp + 1})`);
+    if (!run.dockRecover && LK.dockRecoverable(s).length && run.credits >= LK.DOCK_RECOVER_COST)
+      add("dock_recover", `ブラックボックス回収 ₢${LK.DOCK_RECOVER_COST}: ロストカード1枚をデッキへ`);
+    for (const id of run.cargo) {
+      const r = LK.RELIC_DEFS.find(x => x.id === id);
+      add(`liquidate:${id}`, `緊急解体: 『${r ? r.name : id}』を素価値₢${r ? r.value : "?"}で現金化(集中/深度/安全帰還の上乗せは捨てる=損切り)`);
+    }
+    add("dock_leave", "出航する(ルート選択へ)");
     return out;
   }
   if (s.screen === "route") {
@@ -746,6 +761,10 @@ export function applyChoice(s, id) {
       case "camp_upgrade": return LK.applyUpgrade(s, rest[0]);
       case "camp_resupply": return LK.applyResupply(s);
       case "camp_scrap": return LK.applyScrapLoot(s);
+      case "dock_patch": return LK.applyDockPatch(s);
+      case "dock_recover": return LK.applyDockRecover(s, rest[0]);
+      case "liquidate": return LK.liquidateCargo(s, rest[0]);
+      case "dock_leave": return LK.leaveDock(s);
       case "route_safe": LK.chooseRoute(s, "safe"); return { ok: true };
       case "route_danger": LK.chooseRoute(s, "danger"); return { ok: true };
       case "relic_seal": LK.resolveRelic(s, "seal"); return { ok: true };

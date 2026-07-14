@@ -837,6 +837,8 @@ function newRun(seed, deckDefIds, opts){
       cards: deck.map((defId,i)=>({uid:"u"+i, defId, loc:"pool", up:false})),
       nextUid: deck.length,
       cargo:[], relicsSeen:[], deployed:[], bonusValue:0,
+      credits:0, creditsEarned:0, creditsSpent:0, creditCarry:0, // ラン内クレジット(金の出口=整備ドック。残額は精算で1:1メタへ持越)
+      dockSeq:0, dockMainDone:false, dockPatch:false, dockRecover:false, // 二段ドック: 無料主作業→有料追加整備
       bossTypes:{}, bossKills:0, leapStakes:0,
       events:[], // 航海記録(クロニクル)用の構造化イベント — LLMなしでドラマを再構成する材料
       fuelBurnt:0, restCount:0, burnCount:0, totalRounds:0,
@@ -1205,6 +1207,7 @@ function runOver(state,win,reason){
   const run=state.run;
   chron(state,"end",{win,reason,hull:state.enc?(unitById(state.enc,"ship")||{}).hp:run.shipHp});
   run.over=true; run.win=win; run.reason=reason;
+  run.creditCarry=run.credits; // 残額を固定(勝敗を問わず精算で1:1メタへ持越。没収なし)
   state.screen="summary";
   if(win) log(state,"帰還ジャンプ完了。母港の灯りが見える。","good");
   else log(state, reason==="ship" ? "船体崩壊。最後の通信はノイズに溶けた。" : "全カード喪失。船はもう、漂うだけの棺だ。", "bad");
@@ -1834,6 +1837,10 @@ function applyCond(state, spec){
   return s;
 }
 function cardSpec(state, c, half){ const d=defOf(c); return applyCond(state, upSpec(d[half], c.up||c.hot, d, half)); } // hot=残骸の熱(戦域限定+)
+// ラン内クレジット(金の出口): 全ての増減はこの2関数を通し、credits===creditsEarned-creditsSpent を保つ(保存則)
+function earnRunCredits(state, n){ if(!(n>0)) return; state.run.credits+=n; state.run.creditsEarned+=n; }
+function spendRunCredits(state, n){ if(!(n>0)||state.run.credits<n) return false; state.run.credits-=n; state.run.creditsSpent+=n; return true; }
+// 整備ドックは二段階(Sol設計v2): ①無料主作業(強化/補給/物資回収)で dockMainDone=true → ②有料追加整備 or 出航
 function applyUpgrade(state, uid){
   if(uid){
     const c=cardByUid(state,uid);
@@ -1841,7 +1848,7 @@ function applyUpgrade(state, uid){
     c.up=true;
     log(state,`『${defOf(c).name}』を強化(+) — 母船の整備班が唸りを上げた`,"good");
   } else log(state,"強化を見送った。温存も戦略だ。");
-  state.screen="route";
+  state.run.dockMainDone=true;
   return {ok:true};
 }
 // 整備ドックの択2: 補給(船体修理+随伴機全快)。強化との天秤(StSの焚き火)
@@ -1851,13 +1858,57 @@ function applyResupply(state){
   state.run.shipHp=Math.min(sd.hp,(state.run.shipHp??sd.hp)+3);
   state.run.droneHp=sd.droneHp;
   log(state,`補給を受けた — 旗艦${state.run.shipHp}/${sd.hp}、随伴機は完全復帰。`,"good");
-  state.screen="route";
+  state.run.dockMainDone=true;
   return {ok:true};
 }
 // 整備ドックの択3: 物資回収(売却価値+1)
 function applyScrapLoot(state){
   state.run.bonusValue+=1;
   log(state,"残骸から物資を回収 — 売却価値+1。","good");
+  state.run.dockMainDone=true;
+  return {ok:true};
+}
+// 有料追加整備①: 応急溶接 ₢3 = 旗艦HP+1(1ドック1回・満タン不可・norepairで封鎖)。閾値HP1→2を跨ぐ生存投資
+const DOCK_PATCH_COST=3, DOCK_RECOVER_COST=7;
+function applyDockPatch(state){
+  const run=state.run;
+  if(!run.dockMainDone) return {ok:false,msg:"先に主作業を選べ"};
+  if(hasContract(run,"norepair")) return {ok:false,msg:"契約『補給封鎖』— 応急溶接は使えない"};
+  if(run.dockPatch) return {ok:false,msg:"このドックでは既に応急溶接済み"};
+  const sd=shipDef(run.shipId), hp=run.shipHp??sd.hp;
+  if(hp>=sd.hp) return {ok:false,msg:"旗艦はすでに満タンだ"};
+  if(!spendRunCredits(state,DOCK_PATCH_COST)) return {ok:false,msg:"クレジットが足りない"};
+  run.dockPatch=true; run.shipHp=Math.min(sd.hp,hp+1);
+  log(state,`応急溶接 — 旗艦HP+1(${run.shipHp}/${sd.hp})。₢${DOCK_PATCH_COST}を支払った。`,"good");
+  return {ok:true};
+}
+// 有料追加整備②: ブラックボックス回収 ₢7 = 通常ロストカード1枚をpoolへ(燃料/展開遺物は不可)。閾値寿命5→6を跨ぐ
+function dockRecoverable(state){ return state.run.cards.filter(c=>c.loc==="lost" && !c.relicId && !c.fuelLost); }
+function applyDockRecover(state, uid){
+  const run=state.run;
+  if(!run.dockMainDone) return {ok:false,msg:"先に主作業を選べ"};
+  if(run.dockRecover) return {ok:false,msg:"このドックでは既に回収済み"};
+  const cands=dockRecoverable(state);
+  const c=uid?cands.find(c=>c.uid===uid):cands[0];
+  if(!c) return {ok:false,msg:"回収できるロストカードがない"};
+  if(!spendRunCredits(state,DOCK_RECOVER_COST)) return {ok:false,msg:"クレジットが足りない"};
+  run.dockRecover=true; c.loc="pool";
+  log(state,`ブラックボックス回収 — 『${defOf(c).name}』が戻った。₢${DOCK_RECOVER_COST}を支払った。`,"good");
+  return {ok:true};
+}
+// 緊急解体(非常弁): 封印遺物を素価値でラン内通貨に流動化。集中/深度/安全帰還の上乗せは捨てる=常に損切り
+function liquidateCargo(state, relicId){
+  const run=state.run, i=run.cargo.indexOf(relicId);
+  if(i<0) return {ok:false,msg:"そのカーゴは無い"};
+  const r=RELIC_DEFS.find(x=>x.id===relicId);
+  run.cargo.splice(i,1);
+  earnRunCredits(state, r.value);
+  log(state,`『${r.name}』を緊急解体 — ₢${r.value}を得た(集中・深度・安全帰還の上乗せは捨てた)。`,"warn");
+  return {ok:true};
+}
+// 出航: ドックを閉じてルート選択へ
+function leaveDock(state){
+  if(!state.run.dockMainDone) return {ok:false,msg:"先に主作業を選べ"};
   state.screen="route";
   return {ok:true};
 }
@@ -2457,10 +2508,15 @@ function finishEncounter(state){
   if(run.tutorial){ state.screen="tutorialdone"; return; }
   if(run.encIdx===0){
     run.encIdx=1;
-    // 第1戦域クリア報酬: カード強化(全強化済みならスキップ)
-    state.screen = aliveCards(state).some(c=>!c.up) ? "upgrade" : "route";
+    // 第1戦域クリア → 整備ドックへ。有料整備/解体があるので全強化済みでも必ず開く
+    run.dockMainDone=false; run.dockPatch=false; run.dockRecover=false; run.dockSeq=(run.dockSeq||0)+1;
+    state.screen="upgrade";
   }
-  else { state.screen="relic"; state.pendingRelic=rollRelic(state); }
+  else {
+    // 危険ルート第2戦域クリア報酬(Sol v2: ZONE1-3=₢2 / ZONE4-9=₢1。深度倍率との二重加速を抑える)
+    if(run.route==="danger") earnRunCredits(state, run.zone<=3?2:1);
+    state.screen="relic"; state.pendingRelic=rollRelic(state);
+  }
 }
 
 function chooseRoute(state, route){
@@ -2603,7 +2659,9 @@ const LK = { CONFIG, CARD_DEFS, RELIC_DEFS, RELIC_TAGS, ENEMY_DEFS, ENEMY_AI, ZO
   crashSalvagePick, deployedStatus,
   SHIP_DEFS, ASC_DEFS, shipDef, fuelCost, runScore, scorePreview, deathCoach, momentDefs, computeMoments, lossCredits, CAPTAIN_TYPES, captainType, voyageChronicle,
   voyageMemory, voyageMemoryProse, carryoverRecord, carryoverDigest, cardSpec, upSpec, applyUpgrade, ramOptions, targetables, moveBlocked,
-  applyResupply, applyScrapLoot, crashSalvageRepair };
+  applyResupply, applyScrapLoot, crashSalvageRepair,
+  earnRunCredits, spendRunCredits, applyDockPatch, applyDockRecover, dockRecoverable, liquidateCargo, leaveDock,
+  DOCK_PATCH_COST, DOCK_RECOVER_COST };
 if(typeof module!=="undefined") module.exports=LK;
 /* ===== LOGIC-END ===== */
 
@@ -2866,6 +2924,25 @@ Object.assign(EN_EXACT,{
   "🛞 姿勢制御: 🛰️随伴機をここへ1マス退避(慣性そのまま・敵の予告から身をずらせ)":"🛞 Attitude shift: move the 🛰️drone here by 1 tile (drift unchanged — slip out of the telegraphs)",
   "🔥 今効く: 深部は敵が増える — 長射程/複数対象が腐らない":"🔥 Shines now: deeper zones swarm — long range / multi-target never rots",
   "💡 位置ずらし系 — 主砲充填(橙)や轢断レーンの回避が読みやすくなる":"💡 Repositioning — makes dodging charge-ups (orange) and rush lanes far easier",
+  // B1: ラン内クレジット + 二段整備ドック(charter §2-②-2a / Sol設計v2)
+  "ラン内クレジット — 整備ドックで使う(応急溶接₢3=旗艦HP+1 / ブラックボックス回収₢7=ロスト1枚復帰)。残額は帰還でも撃沈でも精算で1:1メタへ持ち越す(没収なし)。獲得: 危険ルート第2戦域クリア/封印遺物の緊急解体":
+    "In-run credits — spent at the repair dock (Field Weld ₢3 = flagship HP+1 / Blackbox Recovery ₢7 = restore 1 lost card). Any balance carries 1:1 to meta at settlement, whether you return or go down (never forfeited). Earned by clearing a danger-route 2nd area or scrapping a sealed relic.",
+  "🛠 整備ドック ① — まず主作業をひとつ":"🛠 Repair Dock ① — pick one main job first",
+  "強化は投資、補給は保険。選んだあとに、ラン内クレジット(HUDの💠)で追加整備を買える。":"Upgrade is investment, resupply is insurance. After choosing, spend in-run credits (💠 in the HUD) on extra repairs.",
+  "🛠 整備ドック ② — 追加整備":"🛠 Repair Dock ② — extra repairs",
+  "主作業は済んだ。ラン内クレジットで追加整備を買うか、封印遺物を解体して現金化するか、そのまま出航するか。残額は帰還でも撃沈でも精算で1:1メタへ持ち越す。":
+    "Main job done. Spend in-run credits on extra repairs, scrap a sealed relic for cash, or just launch. Any balance carries 1:1 to meta at settlement, win or lose.",
+  "🔧 応急溶接 — ₢3":"🔧 Field Weld — ₢3","📼 ブラックボックス回収 — ₢7":"📼 Blackbox Recovery — ₢7",
+  "「次の1発で即死」から出る。":"Steps you out of one-shot-kill range.",
+  "寿命5→6で安全帰還+20%を跨ぐ。":"Crosses lifespan 5→6 for the safe-return +20%.",
+  "このドックでは溶接済み":"already welded at this dock","⛔ このドックでは溶接済み":"⛔ already welded at this dock",
+  "契約『補給封鎖』で封鎖":"blocked by contract ‘Supply Blockade’","⛔ 契約『補給封鎖』で封鎖":"⛔ blocked by contract ‘Supply Blockade’",
+  "旗艦は満タン":"flagship at full HP","⛔ 旗艦は満タン":"⛔ flagship at full HP",
+  "このドックでは回収済み":"already recovered at this dock","⛔ このドックでは回収済み":"⛔ already recovered at this dock",
+  "回収できるロストカードがない":"no lost card to recover","⛔ 回収できるロストカードがない":"⛔ no lost card to recover",
+  "🔗 緊急解体(非常弁)":"🔗 Emergency scrap (relief valve)",
+  "— 封印遺物を素価値で今すぐ現金化。上乗せ精算は捨てる=常に損切り。":"— cash out a sealed relic now at base value; every settlement bonus is forfeited = always a haircut.",
+  "カーゴは空(解体するものがない)":"Cargo is empty (nothing to scrap)","出航する →":"Launch →",
 });
 // unshiftで先頭に置く: 生成済みの汎用分割ルール(「$1 — $2」型)より先に、専用パターンを試させる
 EN_RULES.unshift(
@@ -2878,6 +2955,13 @@ EN_RULES.unshift(
   ["^攻撃(\\d+) 射程(\\d+) ⚡寿命≤5で威力2倍$","Attack $1, Range $2 ⚡×2 dmg if lifespan≤5"],
   ["^攻撃(\\d+) 射程(\\d+) ⚡封印遺物1つ毎に威力\\+1$","Attack $1, Range $2 ⚡+1 dmg per sealed relic"],
   ["^攻撃(\\d+) 射程(\\d+) ⚡手札2枚以下で威力\\+2$","Attack $1, Range $2 ⚡+2 dmg if hand≤2"],
+  // B1 整備ドック(動的数値・relic名は$1で再帰翻訳)
+  ["^旗艦HP\\+1\\((\\d+)→(\\d+) / 最大(\\d+)\\)。$","Flagship HP +1 ($1→$2 / max $3)."],
+  ["^ロストカード1枚をデッキへ戻す\\((\\d+)枚回収可\\)。$","Restore 1 lost card to the deck ($1 recoverable)."],
+  ["^⛔ ₢(\\d+)に足りない\\(現在₢(\\d+)\\)$","⛔ need ₢$1 (have ₢$2)"],
+  ["^₢(\\d+)に足りない\\(現在₢(\\d+)\\)$","need ₢$1 (have ₢$2)"],
+  ["^🔗 (.+) 解体 \\+₢(\\d+)$","🔗 Scrap $1 +₢$2"],
+  ["^『(.+)』を素価値₢(\\d+)で今すぐ現金化。帰還時の集中×1\\.5〜2\\.0・深度倍率・安全帰還\\+20%は全部捨てる=常に損切り。生存閾値に届く現金が今すぐ要る時の非常弁$","Cash out ‘$1’ now at base value ₢$2. Forfeits concentration ×1.5–2.0, depth multiplier and safe-return +20% = always a haircut. A relief valve for when you need cash to cross a survival threshold right now."],
 );
 let EN_RULES_C=[];
 function trText(s){
@@ -3201,6 +3285,7 @@ function hudHtml(){
     <span class="zone">ZONE ${S.run.zone}/${CONFIG.ZONES} 《${esc(ZONE_NAMES[S.run.zone-1])}》</span>
     <span class="${hullCls}" style="color:${hullNow<=sd.hp/3?"var(--red)":"var(--txt)"}" data-tt="${attrEsc("旗艦の船体。<b>ゾーンをまたいで持ち越される</b>。回復は応急パッチ/補給/残骸修理のみ。0=ラン終了")}">🚀 ${hullNow}/${sd.hp}</span>
     <span class="${low}" data-tt="${attrEsc("残りカード総数=寿命。休息・被弾無効化・リープ燃料で減る。")}">🂠 ${alive}枚</span>
+    <span style="color:var(--gold)" data-tt="${attrEsc("ラン内クレジット — 整備ドックで使う(応急溶接₢"+DOCK_PATCH_COST+"=旗艦HP+1 / ブラックボックス回収₢"+DOCK_RECOVER_COST+"=ロスト1枚復帰)。残額は帰還でも撃沈でも精算で1:1メタへ持ち越す(没収なし)。獲得: 危険ルート第2戦域クリア/封印遺物の緊急解体")}">💠 ₢${S.run.credits}</span>
     ${(S.run.contracts||[]).length?`<span style="color:var(--amber)" data-tt="${attrEsc("航行契約: "+S.run.contracts.map(id=>{const c=CONTRACT_DEFS.find(x=>x.id===id);return c.icon+c.name+"("+c.desc+")";}).join("<br>")+"<br>スコア×"+contractMult(S.run).toFixed(1)+" / 帰還時 危険手当₢"+(S.run.contracts.length*2))}">☠${S.run.contracts.length} ×${contractMult(S.run).toFixed(1)}</span>`:""}
     ${lifebarHtml()}
     <div id="cargo">${cargo}</div>
@@ -3297,28 +3382,63 @@ function renderUpgrade(app){
     </div>`;
     return;
   }
+  const run=S.run, cr=run.credits;
+  if(!run.dockMainDone){
+    // ① 無料の主作業をひとつ
+    app.innerHTML=hudHtml()+`
+    <div class="panel" style="max-width:880px;margin:20px auto;">
+      <h2 style="color:var(--amber)">🛠 整備ドック ① — まず主作業をひとつ</h2>
+      <p class="muted">強化は投資、補給は保険。選んだあとに、ラン内クレジット(HUDの💠)で追加整備を買える。</p>
+      <div class="routebox">
+        <div class="rt" onclick="H.campUpgrade()">
+          <h4 style="color:var(--gold)">⚙ 強化</h4>
+          <p class="muted">カード1枚を恒久強化(+)。<br>将来へ複利で効く。</p>
+        </div>
+        ${LK.hasContract(run,"norepair")?`
+        <div class="rt" style="opacity:.45; cursor:not-allowed;" data-tt="${attrEsc("⛔ 契約『補給封鎖』により使用不可 — 回復は物理キルの装甲板だけだ")}">
+          <h4 style="color:var(--dim)">🔧 補給 ⛔</h4>
+          <p class="muted">契約『補給封鎖』発動中。</p>
+        </div>`:`
+        <div class="rt" onclick="H.campResupply()">
+          <h4 style="color:var(--green)">🔧 補給</h4>
+          <p class="muted">旗艦HP+3(現在 ${hp}/${sd.hp})<br>随伴機を完全復帰。</p>
+        </div>`}
+        <div class="rt" onclick="H.campScrap()">
+          <h4 style="color:var(--cyan)">📦 物資回収</h4>
+          <p class="muted">売却価値+1。<br>地味だが、確実。</p>
+        </div>
+      </div>
+    </div>`;
+    return;
+  }
+  // ② 有料の追加整備 + 封印遺物の緊急解体 + 出航
+  const norepair=LK.hasContract(run,"norepair");
+  const recov=LK.dockRecoverable(S);
+  const patchOk=!norepair && !run.dockPatch && hp<sd.hp && cr>=LK.DOCK_PATCH_COST;
+  const recovOk=!run.dockRecover && recov.length>0 && cr>=LK.DOCK_RECOVER_COST;
+  const patchWhy = run.dockPatch?"このドックでは溶接済み":norepair?"契約『補給封鎖』で封鎖":hp>=sd.hp?"旗艦は満タン":cr<LK.DOCK_PATCH_COST?`₢${LK.DOCK_PATCH_COST}に足りない(現在₢${cr})`:"";
+  const recovWhy = run.dockRecover?"このドックでは回収済み":!recov.length?"回収できるロストカードがない":cr<LK.DOCK_RECOVER_COST?`₢${LK.DOCK_RECOVER_COST}に足りない(現在₢${cr})`:"";
+  const cargoLiq = run.cargo.map(id=>{const r=RELIC_DEFS.find(x=>x.id===id);
+    return `<button class="danger" style="margin:2px" onclick="H.campLiquidate('${id}')" data-tt="${attrEsc("『"+esc(r.name)+"』を素価値₢"+r.value+"で今すぐ現金化。帰還時の集中×1.5〜2.0・深度倍率・安全帰還+20%は全部捨てる=常に損切り。生存閾値に届く現金が今すぐ要る時の非常弁")}">🔗 ${esc(r.name)} 解体 +₢${r.value}</button>`;
+  }).join("") || `<span class="muted">カーゴは空(解体するものがない)</span>`;
   app.innerHTML=hudHtml()+`
   <div class="panel" style="max-width:880px;margin:20px auto;">
-    <h2 style="color:var(--amber)">🛠 整備ドック — ひとつだけ選べ</h2>
-    <p class="muted">強化は投資、補給は保険。船体は次のゾーンに持ち越される — どうせ死なない、は終わりだ。</p>
+    <h2 style="color:var(--amber)">🛠 整備ドック ② — 追加整備</h2>
+    <p class="muted">主作業は済んだ。ラン内クレジットで追加整備を買うか、封印遺物を解体して現金化するか、そのまま出航するか。残額は帰還でも撃沈でも精算で1:1メタへ持ち越す。</p>
     <div class="routebox">
-      <div class="rt" onclick="H.campUpgrade()">
-        <h4 style="color:var(--gold)">⚙ 強化</h4>
-        <p class="muted">カード1枚を恒久強化(+)。<br>将来へ複利で効く。</p>
+      <div class="rt ${patchOk?"":"disabled"}" ${patchOk?'onclick="H.campPatch()"':`style="opacity:.45;cursor:not-allowed" data-tt="${attrEsc("⛔ "+patchWhy)}"`}>
+        <h4 style="color:var(--green)">🔧 応急溶接 — ₢${LK.DOCK_PATCH_COST}</h4>
+        <p class="muted">旗艦HP+1(${hp}→${Math.min(sd.hp,hp+1)} / 最大${sd.hp})。<br>${patchOk?"「次の1発で即死」から出る。":esc(patchWhy)}</p>
       </div>
-      ${LK.hasContract(S.run,"norepair")?`
-      <div class="rt" style="opacity:.45; cursor:not-allowed;" data-tt="${attrEsc("⛔ 契約『補給封鎖』により使用不可 — 回復は物理キルの装甲板だけだ")}">
-        <h4 style="color:var(--dim)">🔧 補給 ⛔</h4>
-        <p class="muted">契約『補給封鎖』発動中。</p>
-      </div>`:`
-      <div class="rt" onclick="H.campResupply()">
-        <h4 style="color:var(--green)">🔧 補給</h4>
-        <p class="muted">旗艦HP+3(現在 ${hp}/${sd.hp})<br>随伴機を完全復帰。</p>
-      </div>`}
-      <div class="rt" onclick="H.campScrap()">
-        <h4 style="color:var(--cyan)">📦 物資回収</h4>
-        <p class="muted">売却価値+1。<br>地味だが、確実。</p>
+      <div class="rt ${recovOk?"":"disabled"}" ${recovOk?'onclick="H.campRecover()"':`style="opacity:.45;cursor:not-allowed" data-tt="${attrEsc("⛔ "+recovWhy)}"`}>
+        <h4 style="color:var(--cyan)">📼 ブラックボックス回収 — ₢${LK.DOCK_RECOVER_COST}</h4>
+        <p class="muted">ロストカード1枚をデッキへ戻す(${recov.length}枚回収可)。<br>${recovOk?"寿命5→6で安全帰還+20%を跨ぐ。":esc(recovWhy)}</p>
       </div>
+    </div>
+    <div style="margin:14px 0 6px;"><b style="color:var(--amber)">🔗 緊急解体(非常弁)</b> <span class="muted">— 封印遺物を素価値で今すぐ現金化。上乗せ精算は捨てる=常に損切り。</span></div>
+    <div style="line-height:2;">${cargoLiq}</div>
+    <div class="opts" style="margin-top:16px;">
+      <button class="primary" onclick="H.campLeave()">出航する →</button>
     </div>
   </div>`;
 }
@@ -4155,6 +4275,7 @@ function renderSummary(app){
   if(!run.metaApplied && !run.tutorial){
     run.metaApplied=true;
     run.rewardMult=rewardMultiplier(run);
+    if(run.creditCarry>0) META.credits+=run.creditCarry; // ラン内クレジット残額を1:1で持越(勝敗共通・metaApplied内で1回だけ)
     // ローカル戦績(トップ5)
     META.history=META.history||[];
     META.history.push({score:run.score??runScore(S), zone:run.zone, ship:run.shipId, asc:run.asc, win:run.win,
@@ -4267,7 +4388,7 @@ function renderSummary(app){
       </div>`;})()}`}
     ${run.win?`
     <div class="panel" style="margin-top:12px;">
-      <h3>精算 — 所持クレジット: <b style="color:var(--gold)">₢${META.credits}</b>${run.bonusValue?` (回収ボーナス₢${run.bonusValue}×${rewardMultiplier(run)}=+₢${run.bonusPay||0}込み)`:""}${run.contractPay?` <span style="color:var(--amber)">(危険手当+₢${run.contractPay})</span>`:""}</h3>
+      <h3>精算 — 所持クレジット: <b style="color:var(--gold)">₢${META.credits}</b>${run.bonusValue?` (回収ボーナス₢${run.bonusValue}×${rewardMultiplier(run)}=+₢${run.bonusPay||0}込み)`:""}${run.contractPay?` <span style="color:var(--amber)">(危険手当+₢${run.contractPay})</span>`:""}${run.creditCarry?` <span style="color:var(--gold)">(ラン内残額+₢${run.creditCarry})</span>`:""}</h3>
       <p class="muted">遺物は<b>売却</b>(クレジット=格納庫でカード解放)か<b>インストール</b>(遺物カードを恒久コレクションへ)か。両方は取れない。</p>
       <table class="sum">${cargoRows||"<tr><td class='muted'>封印遺物なし — 命だけ持って帰った。それも才能だ。</td></tr>"}</table>
       ${(()=>{const ds=deployedStatus(S); if(!ds.length) return "";
@@ -4343,6 +4464,10 @@ const H={
   campBack(){ UI.campPick=false; render(); },
   campResupply(){ LK.applyResupply(S); sfx("good"); render(); },
   campScrap(){ LK.applyScrapLoot(S); sfx("salvage"); render(); },
+  campPatch(){ const r=LK.applyDockPatch(S); if(!r.ok){ UI.msg=r.msg; sfx("click"); } else sfx("good"); render(); },
+  campRecover(){ const r=LK.applyDockRecover(S); if(!r.ok){ UI.msg=r.msg; sfx("click"); } else sfx("salvage"); render(); },
+  campLiquidate(id){ const r=LK.liquidateCargo(S,id); if(!r.ok) UI.msg=r.msg; else sfx("salvage"); render(); },
+  campLeave(){ const r=LK.leaveDock(S); if(!r.ok) UI.msg=r.msg; else sfx("click"); render(); },
   crashRepair(){ const r=LK.crashSalvageRepair(S); if(!r.ok) UI.msg=r.msg; UI.salvageReady=false; render(); },
   bossEngage(){ S.enc.bossIntro=false; sfx("bad"); render(); },
   hangar(){ S.screen="hangar"; render(); },
