@@ -328,6 +328,50 @@ console.log("== rule checks ==");
   ok(LK.SPIKE_MIN_COST === 18 && LK.UNLOCK_POOL.filter(u => u.cost >= LK.SPIKE_MIN_COST).length === 4, "4 spike candidates ≥ ₢18");
 }
 {
+  // B3: 見送り(skip)→ドック値引き / 持参金は展開時のみ・素の3遺物だけ₢1(charter §2-③-3 / Sol v2)
+  const D = id => LK.RELIC_DEFS.find(r => r.id === id);
+  ok(LK.relicDowry(D("coil")) === 1 && LK.relicDowry(D("anchor")) === 1 && LK.relicDowry(D("echo")) === 1, "plain relics coil/anchor/echo → dowry ₢1");
+  ok(LK.relicDowry(D("fusion")) === 0 && LK.relicDowry(D("desperate")) === 0 && LK.relicDowry(D("sealecho")) === 0, "strong & conditional relics → dowry ₢0 (keep situationality)");
+
+  // skip: dockRebate++・rewardSkips++・credits/cargo/cards不変・relicsSeen++(下位互換でなく次ドック貯金)
+  const sk = LK.newRun(90); sk.run.zone = 2; sk.run.encIdx = 1;
+  const cargoB = sk.run.cargo.length, cardsB = sk.run.cards.length;
+  sk.pendingRelic = D("fusion"); sk.screen = "relic";
+  LK.resolveRelic(sk, "skip");
+  ok(sk.run.dockRebate === 1 && sk.run.rewardSkips === 1, "skip: dockRebate & rewardSkips +1");
+  ok(sk.run.credits === 0 && sk.run.cargo.length === cargoB && sk.run.cards.length === cardsB, "skip: no credits/cargo/cards change");
+  ok(sk.run.relicsSeen.includes("fusion"), "skip: relic marked seen (no re-roll)");
+
+  // dockRebate は最大3
+  const cap = LK.newRun(91); for (let i = 0; i < 5; i++) cap.run.dockRebate = Math.min(3, (cap.run.dockRebate || 0) + 1);
+  ok(cap.run.dockRebate === 3, "dockRebate caps at 3");
+
+  // dockPrice: 値引きが効き最低₢1、購入で全量消費
+  const dp = LK.newRun(92); const sd = LK.shipDef(dp.run.shipId);
+  dp.run.dockMainDone = true; dp.run.shipHp = sd.hp - 2; dp.run.dockRebate = 2; LK.earnRunCredits(dp, 5);
+  ok(LK.dockPrice(dp, LK.DOCK_PATCH_COST) === 1, "dockPrice: ₢3 - rebate₢2 = ₢1");
+  ok(LK.applyDockPatch(dp).ok && dp.run.credits === 4 && dp.run.dockRebate === 0, "patch with rebate: paid ₢1, rebate consumed");
+
+  // 持参金: 展開でだけ付く(seal/skipでは付かない)
+  const dep = LK.newRun(93); dep.run.zone = 2; dep.run.encIdx = 1;
+  dep.run.cards.slice(3).forEach(c => c.loc = "lost"); // 生存を減らして展開余地を作る
+  dep.pendingRelic = D("coil"); dep.screen = "relic";
+  LK.resolveRelic(dep, "deploy");
+  ok(dep.run.credits === 1, "deploy coil: +₢1 dowry", dep.run.credits + "");
+  const sl2 = LK.newRun(94); sl2.run.zone = 2; sl2.run.encIdx = 1;
+  sl2.pendingRelic = D("coil"); sl2.screen = "relic";
+  LK.resolveRelic(sl2, "seal");
+  ok(sl2.run.credits === 0, "seal coil: no dowry");
+
+  // deploy不可(デッキ上限)時は状態不変・画面も進めない(保存則)
+  const cd = LK.newRun(95); cd.run.zone = 2; cd.run.encIdx = 1;
+  while (LK.canDeploy(cd)) cd.run.cards.push({ uid: "z" + cd.run.cards.length, defId: "c_nano", loc: "pool" });
+  const beforeCards = cd.run.cards.length;
+  cd.pendingRelic = D("coil"); cd.screen = "relic";
+  const rr = LK.resolveRelic(cd, "deploy");
+  ok(rr && rr.ok === false && cd.run.credits === 0 && cd.run.cards.length === beforeCards && cd.screen === "relic", "deploy at deck cap rejected, state unchanged");
+}
+{
   // 掃討後のサルベージは改修(恒久+)に切替(FB: 「回収したのに消える」の根治)
   const s = LK.newRun(13);
   LK.startEncounter(s, null);
@@ -861,8 +905,10 @@ function makePolicy(kind, rnd) {
       return kind==="greedy" ? (LK.aliveCards(s).length>=8?"danger":"safe") : (rnd()<0.5?"danger":"safe");
     },
     relic(s){
-      if (kind==="deep") return "deploy";
-      return kind==="greedy" ? (LK.aliveCards(s).length>=7?"seal":"deploy") : (rnd()<0.5?"deploy":"seal");
+      const canDep = LK.canDeploy(s); // 展開はデッキ上限まで(resolveRelicがLOGICで拒否=上限時にdeployするとno-op/停滞)
+      if (kind==="deep") return canDep ? "deploy" : "seal";
+      if (kind==="greedy") return (canDep && LK.aliveCards(s).length<7) ? "deploy" : "seal";
+      const r = rnd(); return r<0.2 ? "skip" : ((canDep && r<0.6) ? "deploy" : "seal"); // random方策はたまに見送り(B3 skip経路)
     },
     leapOrKeep(s){
       if (s.run.zone >= LK.CONFIG.ZONES) return "keep";

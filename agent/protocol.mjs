@@ -144,7 +144,8 @@ export function legalChoices(s) {
   if (s.screen === "relic") {
     const r = s.pendingRelic;
     add("relic_seal", `封印: カーゴへ(売却価値${r ? r.value : "?"} — 帰還で確定)`);
-    if (LK.canDeploy ? LK.canDeploy(s) : true) add("relic_deploy", "展開: 即戦力カード化(価値放棄+喪失リスク)");
+    if (LK.canDeploy ? LK.canDeploy(s) : true) add("relic_deploy", `展開: 即戦力カード化(価値放棄+喪失リスク${r && LK.relicDowry && LK.relicDowry(r) > 0 ? ` / 持参金₢${LK.relicDowry(r)}` : ""})`);
+    add("relic_skip", "見送る: 取らずに次のドック整備を₢1値引き(最大3累積)");
     return out;
   }
   if (s.screen === "leapkeep") {
@@ -769,6 +770,7 @@ export function applyChoice(s, id) {
       case "route_danger": LK.chooseRoute(s, "danger"); return { ok: true };
       case "relic_seal": LK.resolveRelic(s, "seal"); return { ok: true };
       case "relic_deploy": LK.resolveRelic(s, "deploy"); return { ok: true };
+      case "relic_skip": LK.resolveRelic(s, "skip"); return { ok: true };
       case "keep": LK.doKeep(s); return { ok: true };
       case "leap": {
         const r = LK.doLeap(s, rest.join(":").split(","));

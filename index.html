@@ -739,6 +739,8 @@ const RELIC_DEFS = [
   {id:"sealecho", name:"封印共鳴器",   value:3, rare:false, tag:"obs", card:"c_sealshot",  desc:"カーゴに眠る遺物の数だけ、この砲は吠える。持ち帰る覚悟が火力になる。"},
   {id:"lonewolf", name:"孤狼ドライブ", value:2, rare:false, tag:"eng", card:"c_lonewolf",  desc:"手札が尽きかけるほど冴える一撃。孤独は、この船にとって燃料だ。"},
 ];
+// B3(charter §2-③-3 / Sol v2): 持参金=展開時のみの₢。素で押しの弱い3遺物だけ₢1(条件遺物・強遺物は₢0にして「噛み合う時に取る/明快さ」を薄めない)
+for(const _id of ["coil","anchor","echo"]) RELIC_DEFS.find(r=>r.id===_id).dowry=1;
 
 const ENEMY_DEFS = {
   miner:    {name:"暴走採掘ドローン", icon:"🤖", hp:2, dmg:1, desc:"最寄りの獲物へ1歩近づき、隣接していれば殴る。単純。だが慣性で滑って勝手に間合いを詰めてくる"},
@@ -839,6 +841,7 @@ function newRun(seed, deckDefIds, opts){
       cargo:[], relicsSeen:[], deployed:[], bonusValue:0,
       credits:0, creditsEarned:0, creditsSpent:0, creditCarry:0, // ラン内クレジット(金の出口=整備ドック。残額は精算で1:1メタへ持越)
       dockSeq:0, dockMainDone:false, dockPatch:false, dockRecover:false, // 二段ドック: 無料主作業→有料追加整備
+      dockRebate:0, rewardSkips:0, // B3: 報酬見送りで貯まる次ドック整備の値引き / 見送り回数(テレメトリ)
       bossTypes:{}, bossKills:0, leapStakes:0,
       events:[], // 航海記録(クロニクル)用の構造化イベント — LLMなしでドラマを再構成する材料
       fuelBurnt:0, restCount:0, burnCount:0, totalRounds:0,
@@ -1870,6 +1873,7 @@ function applyScrapLoot(state){
 }
 // 有料追加整備①: 応急溶接 ₢3 = 旗艦HP+1(1ドック1回・満タン不可・norepairで封鎖)。閾値HP1→2を跨ぐ生存投資
 const DOCK_PATCH_COST=3, DOCK_RECOVER_COST=7;
+function dockPrice(state, base){ return Math.max(1, base-(state.run.dockRebate||0)); } // B3見送り値引き(最低₢1)
 function applyDockPatch(state){
   const run=state.run;
   if(!run.dockMainDone) return {ok:false,msg:"先に主作業を選べ"};
@@ -1877,9 +1881,10 @@ function applyDockPatch(state){
   if(run.dockPatch) return {ok:false,msg:"このドックでは既に応急溶接済み"};
   const sd=shipDef(run.shipId), hp=run.shipHp??sd.hp;
   if(hp>=sd.hp) return {ok:false,msg:"旗艦はすでに満タンだ"};
-  if(!spendRunCredits(state,DOCK_PATCH_COST)) return {ok:false,msg:"クレジットが足りない"};
-  run.dockPatch=true; run.shipHp=Math.min(sd.hp,hp+1);
-  log(state,`応急溶接 — 旗艦HP+1(${run.shipHp}/${sd.hp})。₢${DOCK_PATCH_COST}を支払った。`,"good");
+  const cost=dockPrice(state,DOCK_PATCH_COST);
+  if(!spendRunCredits(state,cost)) return {ok:false,msg:"クレジットが足りない"};
+  run.dockRebate=0; run.dockPatch=true; run.shipHp=Math.min(sd.hp,hp+1); // 値引きは購入で全量消費
+  log(state,`応急溶接 — 旗艦HP+1(${run.shipHp}/${sd.hp})。₢${cost}を支払った。`,"good");
   return {ok:true};
 }
 // 有料追加整備②: ブラックボックス回収 ₢7 = 通常ロストカード1枚をpoolへ(燃料/展開遺物は不可)。閾値寿命5→6を跨ぐ
@@ -1891,9 +1896,10 @@ function applyDockRecover(state, uid){
   const cands=dockRecoverable(state);
   const c=uid?cands.find(c=>c.uid===uid):cands[0];
   if(!c) return {ok:false,msg:"回収できるロストカードがない"};
-  if(!spendRunCredits(state,DOCK_RECOVER_COST)) return {ok:false,msg:"クレジットが足りない"};
-  run.dockRecover=true; c.loc="pool";
-  log(state,`ブラックボックス回収 — 『${defOf(c).name}』が戻った。₢${DOCK_RECOVER_COST}を支払った。`,"good");
+  const cost=dockPrice(state,DOCK_RECOVER_COST);
+  if(!spendRunCredits(state,cost)) return {ok:false,msg:"クレジットが足りない"};
+  run.dockRebate=0; run.dockRecover=true; c.loc="pool"; // 値引きは購入で全量消費
+  log(state,`ブラックボックス回収 — 『${defOf(c).name}』が戻った。₢${cost}を支払った。`,"good");
   return {ok:true};
 }
 // 緊急解体(非常弁): 封印遺物を素価値でラン内通貨に流動化。集中/深度/安全帰還の上乗せは捨てる=常に損切り
@@ -2537,11 +2543,19 @@ function rollRelic(state){
   return sub[Math.floor(state.rand()*sub.length)];
 }
 
+function relicDowry(r){ return (r&&r.dowry)||0; } // B3: 持参金は展開時のみ・素の3遺物だけ₢1
 function resolveRelic(state, choice){
   const r=state.pendingRelic;
   if(r){
+    if(choice==="deploy" && !canDeploy(state)) return {ok:false,msg:"デッキ上限で展開できない"}; // 保存則: 不可時は状態不変・画面も進めない
     state.run.relicsSeen.push(r.id);
-    if(choice==="seal"){
+    if(choice==="skip"){
+      // B3: 見送り→次のドック整備の値引きへ貯金(sealの下位互換にしない=skipに本物の出口)
+      state.run.dockRebate=Math.min(3,(state.run.dockRebate||0)+1);
+      state.run.rewardSkips=(state.run.rewardSkips||0)+1;
+      chron(state,"relic",{name:r.name,choice:"skip"});
+      log(state,`『${r.name}』を見送った — 次のドック整備が₢1安くなる(値引き ${state.run.dockRebate})。`,"warn");
+    } else if(choice==="seal"){
       state.run.cargo.push(r.id);
       chron(state,"relic",{name:r.name,choice:"seal"});
       log(state,`『${r.name}』をカーゴに封印した。家まで持って帰るんだ。`,"good");
@@ -2549,8 +2563,9 @@ function resolveRelic(state, choice){
       const uid="u"+(state.run.nextUid++);
       state.run.cards.push({uid, defId:r.card, loc:"pool", relicId:r.id});
       state.run.deployed.push(r.id);
+      const dowry=relicDowry(r); if(dowry>0) earnRunCredits(state, dowry); // 展開の持参金
       chron(state,"relic",{name:r.name,choice:"deploy"});
-      log(state,`『${r.name}』を展開! 『${CARD_DEFS[r.card].name}』がデッキに加わった。売却価値は放棄した — カードを失えば、遺物ごと永遠に消える。`,"warn");
+      log(state,`『${r.name}』を展開! 『${CARD_DEFS[r.card].name}』がデッキに加わった。${dowry>0?`持参金₢${dowry}を得た。`:""}売却価値は放棄した — カードを失えば、遺物ごと永遠に消える。`,"warn");
     }
   }
   state.pendingRelic=null;
@@ -2559,6 +2574,7 @@ function resolveRelic(state, choice){
   } else {
     advanceArea(state);
   }
+  return {ok:true};
 }
 
 function canDeploy(state){ return aliveCards(state).length < CONFIG.DECK_CAP; }
@@ -2680,7 +2696,7 @@ const LK = { CONFIG, CARD_DEFS, RELIC_DEFS, RELIC_TAGS, ENEMY_DEFS, ENEMY_AI, ZO
   SHIP_DEFS, ASC_DEFS, shipDef, fuelCost, runScore, scorePreview, deathCoach, momentDefs, computeMoments, lossCredits, CAPTAIN_TYPES, captainType, voyageChronicle,
   voyageMemory, voyageMemoryProse, carryoverRecord, carryoverDigest, cardSpec, upSpec, applyUpgrade, ramOptions, targetables, moveBlocked,
   applyResupply, applyScrapLoot, crashSalvageRepair,
-  earnRunCredits, spendRunCredits, applyDockPatch, applyDockRecover, dockRecoverable, liquidateCargo, leaveDock,
+  earnRunCredits, spendRunCredits, applyDockPatch, applyDockRecover, dockRecoverable, liquidateCargo, leaveDock, dockPrice, relicDowry,
   DOCK_PATCH_COST, DOCK_RECOVER_COST };
 if(typeof module!=="undefined") module.exports=LK;
 /* ===== LOGIC-END ===== */
@@ -2966,6 +2982,9 @@ Object.assign(EN_EXACT,{
   "カーゴは空(解体するものがない)":"Cargo is empty (nothing to scrap)","出航する →":"Launch →",
   // B2 ローテ市場
   "🌟今季の漂着品":"🌟 This season's flotsam",
+  // B3 見送り+持参金
+  "見送る — 次のドック整備が₢1安く":"Pass — next dock repair is ₢1 cheaper",
+  "この遺物を取らない。代わりに次のドック整備が₢1安くなる(見送り値引き・最大3まで累積)。噛み合わない遺物を、生存投資への貯金に変える手":"Don't take this relic; instead your next dock repair costs ₢1 less (pass-discount, stacks up to 3). Turn a relic that doesn't fit into savings toward a survival repair.",
 });
 // unshiftで先頭に置く: 生成済みの汎用分割ルール(「$1 — $2」型)より先に、専用パターンを試させる
 EN_RULES.unshift(
@@ -2995,6 +3014,11 @@ EN_RULES.unshift(
   ["^今季 ₢(\\d+)$","This season ₢$1"],
   ["^今季 ₢(\\d+) \\+CB₢(\\d+)$","This season ₢$1 +CB₢$2"],
   ["^🌟今季の漂着品\\(ローテ展示中\\)。基準₢(\\d+)→今季₢(\\d+)。今買うか値下がりを待つか — 次の帰還では別の品が展示され、これは棚から消えることもある\\(一期一会\\)$","🌟 This season's flotsam (on rotation). Base ₢$1 → this season ₢$2. Buy now or wait for a further cut — but next return features a different item and this one may leave the shelf (once and only once)."],
+  // B3 見送り+持参金(動的)
+  ["^見送る — 次のドック整備が₢1安く\\(現在 -₢(\\d+)\\)$","Pass — next dock repair is ₢1 cheaper (currently -₢$1)"],
+  ["^展開する — 今、力が要る\\(\\+持参金₢(\\d+)\\)$","Deploy — power, right now (+dowry ₢$1)"],
+  ["^展開する — 今、力が要る\\(\\+持参金₢(\\d+)\\)\\(デッキ上限\\)$","Deploy — power, right now (+dowry ₢$1) (deck full)"],
+  ["^🎫 見送り値引き -₢(\\d+) 適用中\\(次に買う整備1件が安い\\)$","🎫 Pass-discount -₢$1 active (your next repair is cheaper)"],
 );
 let EN_RULES_C=[];
 function trText(s){
@@ -3447,10 +3471,12 @@ function renderUpgrade(app){
   // ② 有料の追加整備 + 封印遺物の緊急解体 + 出航
   const norepair=LK.hasContract(run,"norepair");
   const recov=LK.dockRecoverable(S);
-  const patchOk=!norepair && !run.dockPatch && hp<sd.hp && cr>=LK.DOCK_PATCH_COST;
-  const recovOk=!run.dockRecover && recov.length>0 && cr>=LK.DOCK_RECOVER_COST;
-  const patchWhy = run.dockPatch?"このドックでは溶接済み":norepair?"契約『補給封鎖』で封鎖":hp>=sd.hp?"旗艦は満タン":cr<LK.DOCK_PATCH_COST?`₢${LK.DOCK_PATCH_COST}に足りない(現在₢${cr})`:"";
-  const recovWhy = run.dockRecover?"このドックでは回収済み":!recov.length?"回収できるロストカードがない":cr<LK.DOCK_RECOVER_COST?`₢${LK.DOCK_RECOVER_COST}に足りない(現在₢${cr})`:"";
+  const reb=run.dockRebate||0; // B3見送り値引き(次の整備1件に適用)
+  const patchCost=LK.dockPrice(S,LK.DOCK_PATCH_COST), recovCost=LK.dockPrice(S,LK.DOCK_RECOVER_COST);
+  const patchOk=!norepair && !run.dockPatch && hp<sd.hp && cr>=patchCost;
+  const recovOk=!run.dockRecover && recov.length>0 && cr>=recovCost;
+  const patchWhy = run.dockPatch?"このドックでは溶接済み":norepair?"契約『補給封鎖』で封鎖":hp>=sd.hp?"旗艦は満タン":cr<patchCost?`₢${patchCost}に足りない(現在₢${cr})`:"";
+  const recovWhy = run.dockRecover?"このドックでは回収済み":!recov.length?"回収できるロストカードがない":cr<recovCost?`₢${recovCost}に足りない(現在₢${cr})`:"";
   const cargoLiq = run.cargo.map(id=>{const r=RELIC_DEFS.find(x=>x.id===id);
     return `<button class="danger" style="margin:2px" onclick="H.campLiquidate('${id}')" data-tt="${attrEsc("『"+esc(r.name)+"』を素価値₢"+r.value+"で今すぐ現金化。帰還時の集中×1.5〜2.0・深度倍率・安全帰還+20%は全部捨てる=常に損切り。生存閾値に届く現金が今すぐ要る時の非常弁")}">🔗 ${esc(r.name)} 解体 +₢${r.value}</button>`;
   }).join("") || `<span class="muted">カーゴは空(解体するものがない)</span>`;
@@ -3458,13 +3484,14 @@ function renderUpgrade(app){
   <div class="panel" style="max-width:880px;margin:20px auto;">
     <h2 style="color:var(--amber)">🛠 整備ドック ② — 追加整備</h2>
     <p class="muted">主作業は済んだ。ラン内クレジットで追加整備を買うか、封印遺物を解体して現金化するか、そのまま出航するか。残額は帰還でも撃沈でも精算で1:1メタへ持ち越す。</p>
+    ${reb?`<p style="color:var(--amber);font-size:.85rem;">🎫 見送り値引き -₢${reb} 適用中(次に買う整備1件が安い)</p>`:""}
     <div class="routebox">
       <div class="rt ${patchOk?"":"disabled"}" ${patchOk?'onclick="H.campPatch()"':`style="opacity:.45;cursor:not-allowed" data-tt="${attrEsc("⛔ "+patchWhy)}"`}>
-        <h4 style="color:var(--green)">🔧 応急溶接 — ₢${LK.DOCK_PATCH_COST}</h4>
+        <h4 style="color:var(--green)">🔧 応急溶接 — ₢${patchCost}</h4>
         <p class="muted">旗艦HP+1(${hp}→${Math.min(sd.hp,hp+1)} / 最大${sd.hp})。<br>${patchOk?"「次の1発で即死」から出る。":esc(patchWhy)}</p>
       </div>
       <div class="rt ${recovOk?"":"disabled"}" ${recovOk?'onclick="H.campRecover()"':`style="opacity:.45;cursor:not-allowed" data-tt="${attrEsc("⛔ "+recovWhy)}"`}>
-        <h4 style="color:var(--cyan)">📼 ブラックボックス回収 — ₢${LK.DOCK_RECOVER_COST}</h4>
+        <h4 style="color:var(--cyan)">📼 ブラックボックス回収 — ₢${recovCost}</h4>
         <p class="muted">ロストカード1枚をデッキへ戻す(${recov.length}枚回収可)。<br>${recovOk?"寿命5→6で安全帰還+20%を跨ぐ。":esc(recovWhy)}</p>
       </div>
     </div>
@@ -4260,7 +4287,8 @@ function renderRelic(app){
     </div>
     <div class="opts">
       <button class="primary" onclick="H.relic('seal')">封印する — 家まで持って帰る</button>
-      <button class="danger" onclick="H.relic('deploy')" ${deployOk?"":"disabled"}>展開する — 今、力が要る${deployOk?"":"(デッキ上限)"}</button>
+      <button class="danger" onclick="H.relic('deploy')" ${deployOk?"":"disabled"}>展開する — 今、力が要る${relicDowry(r)>0?`(+持参金₢${relicDowry(r)})`:""}${deployOk?"":"(デッキ上限)"}</button>
+      <button onclick="H.relic('skip')" data-tt="${attrEsc("この遺物を取らない。代わりに次のドック整備が₢1安くなる(見送り値引き・最大3まで累積)。噛み合わない遺物を、生存投資への貯金に変える手")}">見送る — 次のドック整備が₢1安く${S.run.dockRebate?`(現在 -₢${S.run.dockRebate})`:""}</button>
     </div>
   </div>`;
 }
