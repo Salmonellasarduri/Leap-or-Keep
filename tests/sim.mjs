@@ -293,6 +293,31 @@ console.log("== rule checks ==");
   ok(dk.screen === "upgrade" && dk.run.dockMainDone === false, "dock always opens even when all cards upgraded");
 }
 {
+  // pre0: 精算の正本 settlementValue が集中×深度×安全帰還を「実際に」払う(旧: プレビューだけの餅)
+  const byTag = {}; for (const r of LK.RELIC_DEFS) { (byTag[r.tag] = byTag[r.tag] || []).push(r); }
+  const pair = Object.values(byTag).find(a => a.length >= 2);
+  ok(!!pair, "pre0 test needs a same-tag relic pair");
+  const [a, b] = pair;
+  const mk = (win, alive, cargo, bonus, leap) => { const s = LK.newRun(80); let k = 0; for (const c of s.run.cards) { c.loc = (k < alive) ? "pool" : "lost"; k++; } s.run.cargo = cargo.slice(); s.run.bonusValue = bonus || 0; s.run.win = win; s.run.leapStakes = leap || 0; return s; };
+  // 集中: 同系統2個目は×1.5(直線 a+b でなく a+round(1.5b))
+  ok(LK.concentratedValue([a.id, b.id]) === a.value + Math.round(b.value * 1.5), "concentration: 2nd same-tag ×1.5", LK.concentratedValue([a.id, b.id]) + " vs " + (a.value + Math.round(b.value * 1.5)));
+  const sw = mk(true, 6, [a.id, b.id], 4, 1); const m = LK.rewardMultiplier(sw.run);
+  // 空カーゴ精算 = bonusValue×深度×安全帰還(勝利・生存≥6)
+  ok(LK.settlementValue(sw, []) === Math.round(4 * m * 1.2), "settlement([]) = bonus×mult×safe", LK.settlementValue(sw, []) + "");
+  // プレビュー=実支給: 全部売れば cargoPayoutValue と一致(pre0の眼目)
+  ok(LK.settlementValue(sw, sw.run.cargo) === LK.cargoPayoutValue(sw), "settlementValue(all) === cargoPayoutValue (preview=reality)", LK.settlementValue(sw, sw.run.cargo) + " vs " + LK.cargoPayoutValue(sw));
+  // 望遠鏡和: bonusPay + 逐次限界売却 = settlementValue(all)(売却順不変・分割インストール可)
+  let pool = sw.run.cargo.slice(), total = LK.settlementValue(sw, []);
+  while (pool.length) { const id = pool[0]; total += LK.settlementValue(sw, pool) - LK.settlementValue(sw, pool.filter(x => x !== id)); pool = pool.filter(x => x !== id); }
+  ok(total === LK.settlementValue(sw, sw.run.cargo), "telescoping: bonusPay + Σ marginal = settlementValue(all)", total + " vs " + LK.settlementValue(sw, sw.run.cargo));
+  // 安全帰還: 生存<6では×1.2が付かない
+  const sw5 = mk(true, 5, [a.id], 0, 1); const m5 = LK.rewardMultiplier(sw5.run);
+  ok(LK.settlementValue(sw5, [a.id]) === Math.round(a.value * m5), "no safe bonus when alive<6", LK.settlementValue(sw5, [a.id]) + "");
+  // 敗北: bonusValueも安全帰還も付かない(集中×深度のみ=カーゴ没収なしだが安全帰還は勝利者だけ)
+  const sl = mk(false, 8, [a.id, b.id], 4, 1); const ml = LK.rewardMultiplier(sl.run);
+  ok(LK.settlementValue(sl, sl.run.cargo) === Math.round(LK.concentratedValue([a.id, b.id]) * ml), "loss: no bonus/no safe, concentration×depth only", LK.settlementValue(sl, sl.run.cargo) + "");
+}
+{
   // 掃討後のサルベージは改修(恒久+)に切替(FB: 「回収したのに消える」の根治)
   const s = LK.newRun(13);
   LK.startEncounter(s, null);

@@ -2606,18 +2606,29 @@ function doLeap(state, fuelUids){
 function doKeep(state){ runOver(state,true,"returned"); }
 
 // 集中型(勝利4類型): 同系統の封印は2個目×1.5・3個目×2.0 — 封印を「消去法」から「セット収集」に変える(design-economy-charter §2-②③)
-function cargoValue(state){
+// 同系統の集中階和(bonusValue抜き)。cargoValue と settlementValue が共有
+function concentratedValue(relicIds){
   const cnt={};
-  return state.run.bonusValue + state.run.cargo.reduce((s,id)=>{
+  return relicIds.reduce((s,id)=>{
     const r=RELIC_DEFS.find(x=>x.id===id);
     const k=(cnt[r.tag]=(cnt[r.tag]||0)+1);
     return s+Math.round(r.value*(1+0.5*(k-1)));
   },0);
 }
+function cargoValue(state){ return state.run.bonusValue + concentratedValue(state.run.cargo); }
 // 安全帰還ボーナス: 残り寿命6枚以上で+20%(Keep側の金銭的裏打ち。固定値でなく寿命参照=ラン長調整に強い)
 function safeReturnBonus(state){ return aliveCards(state).length>=6?1.2:1; }
 function cargoPayoutValue(state){
-  return Math.round(cargoValue(state)*rewardMultiplier(state.run)*safeReturnBonus(state)); // 通貨は常に整数
+  return Math.round(cargoValue(state)*rewardMultiplier(state.run)*safeReturnBonus(state)); // Leap/Keepプレビュー: 帰還を仮定した「全部売れば」額
+}
+// pre0(2026-07-14): カーゴ精算の正本 — 集中階和×深度×安全帰還を「実際に」支払う。
+// 旧実装は遺物ごとに value×mult で精算し、集中(×1.5/2.0)も安全帰還(×1.2)もプレビュー表示だけの絵に描いた餅だった(全観点監査が検出)。
+// 個別売却額 = settlementValue(集合) − settlementValue(集合−その遺物) と定義すれば、売却順・分割インストールに依らず総額が一致する(望遠鏡和)。
+function settlementValue(state, relicIds){
+  const r=state.run;
+  const base=(r.win?r.bonusValue:0)+concentratedValue(relicIds); // bonusValueと安全帰還は勝利時のみ。集中と深度は敗北でも払う(カーゴ没収なし)
+  const safe=(r.win && aliveCards(state).length>=6)?1.2:1;
+  return Math.round(base*rewardMultiplier(r)*safe);
 }
 function relicPayoutValue(state, value){ return value*rewardMultiplier(state.run); }
 
@@ -2652,7 +2663,7 @@ const LK = { CONFIG, CARD_DEFS, RELIC_DEFS, RELIC_TAGS, ENEMY_DEFS, ENEMY_AI, ZO
   CONTRACT_DEFS, hasContract, contractMult,
   newRun, startEncounter, pump, doRest, restShift, restShiftSkip, restShiftOptions, selectPair, actionSpec, execAction, fizzleAction,
   pendingDamage, resolveDamage, finishEncounter, chooseRoute, resolveRelic, canDeploy, doLeap, doKeep,
-  moveOptions, attackTargets, cardsIn, aliveCards, cardByUid, defOf, cargoValue, cargoPayoutValue, relicPayoutValue, safeReturnBonus,
+  moveOptions, attackTargets, cardsIn, aliveCards, cardByUid, defOf, cargoValue, cargoPayoutValue, relicPayoutValue, safeReturnBonus, settlementValue, concentratedValue,
   rewardMultiplier, nextRewardMultiplier, isBossZone, bossChapterForZone, unlocks,
   unitAt, players, enemies, unitById, tdist, tdelta, wrap, encounterEnemyList, bossOf, log,
   enemyStep, enemyPhaseAll, nextActingEnemy, commitTurn, undoTurn, canUndo, effDamage, driftPhase,
@@ -2962,6 +2973,11 @@ EN_RULES.unshift(
   ["^₢(\\d+)に足りない\\(現在₢(\\d+)\\)$","need ₢$1 (have ₢$2)"],
   ["^🔗 (.+) 解体 \\+₢(\\d+)$","🔗 Scrap $1 +₢$2"],
   ["^『(.+)』を素価値₢(\\d+)で今すぐ現金化。帰還時の集中×1\\.5〜2\\.0・深度倍率・安全帰還\\+20%は全部捨てる=常に損切り。生存閾値に届く現金が今すぐ要る時の非常弁$","Cash out ‘$1’ now at base value ₢$2. Forfeits concentration ×1.5–2.0, depth multiplier and safe-return +20% = always a haircut. A relief valve for when you need cash to cross a survival threshold right now."],
+  // pre0 精算表示(集中×深度×安全帰還を反映した売却額)
+  ["^売却 \\+₢(\\d+)$","Sell +₢$1"],
+  ["^集中×深度倍率x(\\d+)×安全1\\.2を反映した確定額。今売れば ₢(\\d+)\\(残りカーゴの集中ボーナスも動く\\)$","Locked-in value with concentration × depth ×$1 × safe 1.2. Sell now for ₢$2 (the remaining cargo's concentration bonus shifts too)"],
+  ["^集中×深度倍率x(\\d+)を反映した確定額。今売れば ₢(\\d+)\\(残りカーゴの集中ボーナスも動く\\)$","Locked-in value with concentration × depth ×$1. Sell now for ₢$2 (the remaining cargo's concentration bonus shifts too)"],
+  ["^ ?\\(回収ボーナス₢(\\d+)×([\\d.]+)=\\+₢(\\d+)込み\\)$"," (salvage bonus ₢$1×$2 = +₢$3 incl.)"],
 );
 let EN_RULES_C=[];
 function trText(s){
@@ -4297,7 +4313,7 @@ function renderSummary(app){
     if(run.score>META.bestScore){ META.bestScore=run.score; run.newBest=true; }
     if(run.win){
       META.wins++;
-      run.bonusPay=run.bonusValue*run.rewardMult;
+      run.bonusPay=LK.settlementValue(S,[]); // pre0: bonusValue×深度×安全帰還(空カーゴ精算=床)。遺物分は下の売却で望遠鏡和として積む
       META.credits+=run.bonusPay;
       // 危険手当: 契約1件につき₢2(実利は線形 — 名誉は称号で青天井、が荒れない鉄則)
       if((run.contracts||[]).length){ run.contractPay=run.contracts.length*2; META.credits+=run.contractPay; }
@@ -4317,15 +4333,16 @@ function renderSummary(app){
   const legend=run.win&&run.bossKilled;
   const title=run.win?(legend?"伝 説":"帰 還"):"M I A";
   const color=legend?"var(--gold)":(run.win?"var(--green)":"var(--red)");
+  const pendingSale=run.cargo.filter(x=>UI.sold[x]!=="sold" && UI.sold[x]!=="installed"); // 未売却・未インストール(集中の母集団)
   const cargoRows=run.cargo.map(id=>{
     const r=RELIC_DEFS.find(x=>x.id===id);
-    const sale=relicPayoutValue(S,r.value);
+    const marginal=LK.settlementValue(S,pendingSale)-LK.settlementValue(S,pendingSale.filter(x=>x!==id)); // 限界寄与=今売った時の確定額(集中×深度×安全帰還込み)
     const st=UI.sold[id];
     const installed=META.installed.includes(id);
     let act;
-    if(st==="sold") act=`<span style="color:var(--gold)">売却済 +₢${sale}</span>`;
+    if(st==="sold") act=`<span style="color:var(--gold)">売却済 +₢${(UI.soldAmt||{})[id]??marginal}</span>`;
     else if(st==="installed") act=`<span style="color:var(--green)">インストール済(次ランから使用可)</span>`;
-    else act=`<button onclick="H.sellRelic('${id}')" data-tt="${attrEsc("価値"+r.value+" × 深度倍率x"+rewardMultiplier(run)+" = クレジット₢"+sale+"に換える")}">売却 +₢${sale}</button>
+    else act=`<button onclick="H.sellRelic('${id}')" data-tt="${attrEsc("集中×深度倍率x"+rewardMultiplier(run)+(safeReturnBonus(S)>1?"×安全1.2":"")+"を反映した確定額。今売れば ₢"+marginal+"(残りカーゴの集中ボーナスも動く)")}">売却 +₢${marginal}</button>
       <button onclick="H.installRelic('${id}')" ${installed?"disabled":""} data-tt="${attrEsc("遺物カード『"+esc(CARD_DEFS[r.card].name)+"』を恒久的にコレクションへ(死んでも残る)。売却益は放棄")}">${installed?"既に保有":"インストール"}</button>`;
     return `<tr><td>◆${esc(r.name)}</td><td>${r.rare?"★レア":"コモン"}</td><td>${act}</td></tr>`;
   }).join("");
@@ -4749,8 +4766,10 @@ const H={
   },
   sellRelic(id){
     if(UI.sold[id]) return;
-    const r=RELIC_DEFS.find(x=>x.id===id);
-    UI.sold[id]="sold"; META.credits+=relicPayoutValue(S,r.value); saveMeta();
+    // pre0: 限界寄与で精算(集中×深度×安全帰還を実際に払う)。未売却・未インストール集合に対する差分=売却順・分割インストールに依らず総額一致
+    const pending=S.run.cargo.filter(x=>UI.sold[x]!=="sold" && UI.sold[x]!=="installed");
+    const sale=LK.settlementValue(S,pending)-LK.settlementValue(S,pending.filter(x=>x!==id));
+    UI.sold[id]="sold"; (UI.soldAmt=UI.soldAmt||{})[id]=sale; META.credits+=sale; saveMeta();
     UI.sellN=(UI.sellN||0)+1; sfx("salvage", 1+UI.sellN*0.18); // 連続売却でピッチ上昇(コンボ感)
     render();
   },
