@@ -803,8 +803,9 @@ export function createHolo(ctx) {
     if (room.active) {
       const w = bg.canvas.clientWidth, h = bg.canvas.clientHeight;
       roomCam(w, h);
-      // 背景は視差移動/リサイズ時のみ再描画(ビート中は静止=描画スキップで負荷ゼロ。前フレームはpreserveで保持)
-      if (!room.drawn || w !== room.lw || h !== room.lh
+      const moved = positionRig(w, h); // 盤の矩形が変わった時のみ再配置(=再描画要求。ビート中は不変)
+      // 背景は視差移動/リサイズ/リグ再配置時のみ再描画(ビート中は静止=描画スキップで負荷ゼロ。preserveで前フレーム保持)
+      if (!room.drawn || moved || w !== room.lw || h !== room.lh
           || Math.abs(bg.px - room.lpx) > 4e-4 || Math.abs(bg.py - room.lpy) > 4e-4) {
         bg.renderer.render(bg.scene, bg.cam);
         room.lpx = bg.px; room.lpy = bg.py; room.lw = w; room.lh = h; room.drawn = true;
@@ -827,7 +828,29 @@ export function createHolo(ctx) {
   // 既定ON(META.room3d===false で明示OFF / ?room=0 強制OFF / ?room=1 強制ON)。
   // 見た目=この three.js リグ(GLBはCyclesライトを持ち込まない)。GLB失敗/WebGL不可はマット絵へ自動退避。
   // 照明数値は Sol 独立監査(tmp/sol-room-audit.md)処方。テーマ憲章: docs/design-room-theme.md。
-  const room = { loading: false, failed: false, obj: null, lights: [], fog: null, active: false, lpx: 0, lpy: 0, lw: 0, lh: 0, drawn: false };
+  const room = { loading: false, failed: false, obj: null, lights: [], fog: null, active: false, lpx: 0, lpy: 0, lw: 0, lh: 0, drawn: false, rig: null, brx: -1, bry: -1, brw: -1 };
+  // ウォーテーブルPhase1: 卓に「投影機ソケット」を実在させ、盤ホロが卓上の実機から立ち上がって見せる。
+  // リグは静的ジオメトリ+レイアウト変化時だけ再配置=dirty-renderスキップを壊さない(ビート中コスト0)。
+  const DESK_Y = 0.7375; // desk_top上面(Blender(0,0.38,0.70)size(_,_,0.075)→three-Y 0.70+0.0375。salvage_desk.py:302と一致)
+  const PROJ = { x: 0.0, z: 0.0 };  // 初期フォールバック中心(初回描画でpositionRigが盤直下へ再配置)
+  let _ray = null, _deskPlane = null, _ndc = null, _hit = null;
+  // 盤ホロ(前面canvas・HUD次第で左右に寄る)の実位置へソケットを毎レイアウト追従させる。
+  // 盤前端中央のスクリーン点を部屋カメラで卓平面(y=DESK_Y)へ逆投影し、そこへリグを置く。
+  // 盤の矩形が変わった時のみtrue(=再描画要求)。ビート中は矩形不変=描画スキップ維持。
+  function positionRig(cw, ch) {
+    if (!room.rig || typeof document === "undefined") return false;
+    const b = document.getElementById("board"); if (!b) return false;
+    const r = b.getBoundingClientRect();
+    const cx = r.left + r.width / 2, by = r.top + r.height;
+    if (Math.abs(cx - room.brx) < 1 && Math.abs(by - room.bry) < 1 && Math.abs(r.width - room.brw) < 1) return false;
+    room.brx = cx; room.bry = by; room.brw = r.width;
+    if (!_ray) { _ray = new THREE.Raycaster(); _deskPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -DESK_Y); _ndc = new THREE.Vector2(); _hit = new THREE.Vector3(); }
+    _ndc.set((cx / cw) * 2 - 1, -((by - r.height * 0.05) / ch) * 2 + 1); // 前端よりわずかに奥=土台が盤下端の下へ覗く
+    _ray.setFromCamera(_ndc, bg.cam);
+    const hit = _ray.ray.intersectPlane(_deskPlane, _hit);
+    if (hit) room.rig.position.set(hit.x, DESK_Y, hit.z + 0.03); // +z=手前へ寄せ、土台が盤下端から少し覗く
+    return true;
+  }
   function roomWanted() {
     let q = null; try { q = new URLSearchParams(location.search).get("room"); } catch (_) {}
     if (q === "1") return true;
@@ -876,9 +899,91 @@ export function createHolo(ctx) {
     const front = mk(new THREE.PointLight(0x7899a3, 11, 6, 2.0)); front.position.set(-0.35, 1.55, 1.35);
     // 大気: 冷色の指数フォグ=奥へ落ちる暗がり(密度0.10・#080D11。手前の暖色プールが際立つ)
     room.fog = new THREE.FogExp2(0x080d11, 0.10);
+    buildRoomRig();
     roomShow();
     // ウォームアップ: 実レンダ1発でシェーダ+ジオメトリをGPUへ(初回ビート中の166msヒッチ回避。fps既定経路の要)
     try { roomCam(bg.canvas.clientWidth || 1280, bg.canvas.clientHeight || 800); bg.renderer.render(bg.scene, bg.cam); } catch (_) {}
+  }
+
+  // ==== ウォーテーブルPhase1: 卓上のサルベージ投影機ソケット(静的リグ) ====
+  // Solステージング=45-60cmの改造ユニット/不揃い装甲/露出ボルト/4本のシアン発光ポスト。
+  // 盤ホロ(前面canvas)がこの実機の発光面から立ち上がって見える。全て静的=fpsコスト0。
+  function buildRoomRig() {
+    if (room.rig || typeof THREE === "undefined") return;
+    const rig = new THREE.Group();
+    // 子はリグ局所座標(原点=卓面上の接地中心。yは卓面からの高さ)。配置はrig.positionで一括移動。
+    const metalDark = new THREE.MeshStandardMaterial({ color: 0x1c1710, roughness: 0.60, metalness: 0.55 });
+    const metalHousing = new THREE.MeshStandardMaterial({ color: 0x181410, roughness: 0.66, metalness: 0.50 }); // ブラケット暗色housing
+    const metalPlate = new THREE.MeshStandardMaterial({ color: 0x2a2219, roughness: 0.74, metalness: 0.42 });
+    const seamMat = new THREE.MeshStandardMaterial({ color: 0x0d0a07, roughness: 0.80, metalness: 0.30 });     // 継ぎ目の暗い溝
+    // 発光: ACES白飛び対策=シアンはアパーチャ/コア/リップのみ。輝度は加算グロー(トーン後も加算=シアン保持)で足す。
+    const apertureMat = new THREE.MeshStandardMaterial({ color: 0x0a1c20, emissive: 0x3fd0e0, emissiveIntensity: 1.3, roughness: 0.40, metalness: 0.30 });
+    const lipMat = new THREE.MeshStandardMaterial({ color: 0x0a1c20, emissive: 0x35c2d6, emissiveIntensity: 1.15, roughness: 0.45, metalness: 0.30 });
+    const lampAmber = new THREE.MeshStandardMaterial({ color: 0x1a0f04, emissive: 0xff9a3c, emissiveIntensity: 1.4, roughness: 0.50, metalness: 0.30 });
+    const add = (geo, mat, x, y, z, ry) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (ry) m.rotation.y = ry; rig.add(m); return m; };
+    const haloTex = bgRadialTex(64, "rgba(80,215,230,0.95)", "rgba(80,215,230,0)");
+    const addHalo = (x, y, z, w, h, op) => { const g = add(new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: haloTex, transparent: true, opacity: op == null ? 0.52 : op, blending: THREE.AdditiveBlending, depthWrite: false }), x, y, z);
+      g.scale.set(w, h, 1); g.renderOrder = 4; return g; };
+    // Sol再監査#1: 非発光の中性エッジキャッチで暗い合成中でもハードのシルエットを保つ(ワイヤ縁を淡く)
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0x5c6d75, transparent: true, opacity: 0.30 });
+    const edgeCatch = (mesh) => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), edgeMat); mesh.add(e); return e; };
+    // === 基部プリンス(低・広。盤footprint内は隠れる前提。前面/ブラケット/井戸だけ盤外へ覗かせる) ===
+    add(new THREE.BoxGeometry(0.72, 0.06, 0.42), metalDark, 0, 0.030, 0);
+    edgeCatch(add(new THREE.BoxGeometry(0.60, 0.028, 0.34), metalPlate, 0.012, 0.075, -0.01, 0.04)); // 天板(非対称)
+    // === 前面ファサード(Sol#1: 盤下端の下に露出する暗い前面=着地の主読点。継ぎ目/ボルト/アンバー計器/埋込リップ) ===
+    const bz = 0.17, bf = bz + 0.026; // ファサードz・前面z
+    edgeCatch(add(new THREE.BoxGeometry(0.76, 0.11, 0.05), metalDark, 0, 0.055, bz));       // 本体(盤前縁より広い)
+    add(new THREE.BoxGeometry(0.22, 0.07, 0.006), seamMat, -0.19, 0.055, bf);              // 継ぎ目プレートL(非対称)
+    add(new THREE.BoxGeometry(0.15, 0.055, 0.006), seamMat, 0.16, 0.048, bf);              // 継ぎ目プレートR
+    add(new THREE.BoxGeometry(0.70, 0.013, 0.006), lipMat, 0, 0.090, bf);                  // シアンリップ=前面に彫込む横溝(浮かせない)
+    for (let i = 0; i < 4; i++)                                                            // 大ボルト4本
+      add(new THREE.CylinderGeometry(0.017, 0.017, 0.014, 10), metalPlate, -0.28 + i * 0.187, 0.030, bf + 0.002).rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.011, 0.011, 0.012, 10), lampAmber, 0.315, 0.076, bf + 0.002).rotation.x = Math.PI / 2; // アンバー計器灯1点
+    // === エミッタ・ブラケット(Sol#2: 前2本=機械的ブラケット。暗housing+足+クランプ+内向きシアンアパーチャ。発光はコアのみ) ===
+    const bracket = (px, pz, tilt) => {
+      const inw = px < 0 ? 1 : -1;                                                          // 内向き(中心へ)
+      add(new THREE.BoxGeometry(0.07, 0.028, 0.07), metalHousing, px, 0.014, pz);           // 暗い足
+      const body = add(new THREE.CylinderGeometry(0.028, 0.033, 0.10, 12), metalHousing, px, 0.078, pz); // 暗housing(非発光)
+      if (tilt) body.rotation.z = inw * 0.11;                                               // 1本だけ傾ける(損傷=非対称)
+      edgeCatch(body);                                                                       // Sol再監査#1: シルエット保持
+      add(new THREE.CylinderGeometry(0.037, 0.037, 0.018, 12), metalPlate, px, 0.052, pz);  // クランプ・カラー
+      const ap = add(new THREE.BoxGeometry(0.012, 0.05, 0.03), apertureMat, px + inw * 0.028, 0.100, pz); // 内向きシアンアパーチャ
+      ap.rotation.y = inw * 0.5;
+      addHalo(px + inw * 0.03, 0.100, pz + 0.02, 0.10, 0.15, 0.55);                         // アパーチャのシアン核ハロー(body発光でなく)
+      addHalo(px + inw * 0.03, 0.100, pz + 0.03, 0.045, 0.055, 0.85);                       // Sol再監査#2: アパーチャ起点の高輝度コア点
+    };
+    bracket(-0.32, 0.14, false);
+    bracket(0.32, 0.14, true);
+    for (const px of [-0.30, 0.30]) {                                                        // 後2本(盤下=ほぼ隠れる):短い暗ポスト+小シアン先端
+      add(new THREE.CylinderGeometry(0.022, 0.026, 0.075, 10), metalHousing, px, 0.060, -0.13);
+      add(new THREE.CylinderGeometry(0.020, 0.020, 0.010, 10), apertureMat, px, 0.100, -0.13);
+    }
+    // === エミッタ発光面(この円盤の上にグリッドが浮く=Sol処方) ===
+    const discTex = bgRadialTex(128, "rgba(95,220,230,0.9)", "rgba(95,220,230,0)");
+    const disc = add(new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: discTex, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }), 0, 0.100, 0);
+    disc.rotation.x = -Math.PI / 2; disc.scale.set(0.56, 0.36, 1); disc.renderOrder = 3;
+    // === 投影スピル(Sol#3: 各前アパーチャ→盤角の浅いシアン台形シート。盤外/下のみ覗く) ===
+    const sheetTex = bgRadialTex(64, "rgba(90,210,225,0.5)", "rgba(90,210,225,0)");
+    for (const sgn of [-1, 1]) {
+      const sheet = add(new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({ map: sheetTex, transparent: true, opacity: 0.30, blending: THREE.AdditiveBlending, depthWrite: false }), sgn * 0.24, 0.15, 0.08);
+      sheet.rotation.x = -Math.PI / 2.4; sheet.scale.set(0.30, 0.44, 1); sheet.renderOrder = 3;
+    }
+    // === 接地の光の井戸(Sol#3: 約1.5倍広く・柔らかく・青寄りシアン=投影スピル。盤外へあふれる分が着地を語る) ===
+    const glowTex = bgRadialTex(128, "rgba(65,180,220,0.55)", "rgba(65,180,220,0)");
+    const glow = add(new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, opacity: 0.34, blending: THREE.AdditiveBlending, depthWrite: false }), 0, 0.004, 0.02);
+    glow.rotation.x = -Math.PI / 2; glow.scale.set(2.0, 1.45, 1); glow.renderOrder = 2;
+    // === 接地影(接触AO=暗い放射。卓が暗いので控えめ) ===
+    const shTex = bgRadialTex(128, "rgba(0,0,0,0.62)", "rgba(0,0,0,0)");
+    const sh = add(new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: shTex, transparent: true, opacity: 0.5, depthWrite: false }), 0, 0.002, 0);
+    sh.rotation.x = -Math.PI / 2; sh.scale.set(1.0, 0.66, 1); sh.renderOrder = 1;
+    rig.position.set(PROJ.x, DESK_Y, PROJ.z); // 初期フォールバック。初回描画でpositionRigが盤直下へ
+    room.rig = rig;
+    bg.scene.add(rig);
   }
 
   // 部屋を前面に(絵アンカーを隠し・フォグ/トーン/ヴィネットを部屋用に)
@@ -886,6 +991,8 @@ export function createHolo(ctx) {
     if (!room.obj) return;
     room.obj.visible = true;
     for (const l of room.lights) l.visible = true;
+    if (room.rig) room.rig.visible = true;
+    if (bg.boardGlow) bg.boardGlow.visible = false; // 部屋モードはリグの接地グローが担う(screen空間boardGlowは退避)
     setAnchorsVisible(false);
     bg.scene.fog = room.fog;
     bg.renderer.toneMapping = THREE.ACESFilmicToneMapping;             // 部屋はPBR(bg canvasは独立レンダラ=盤ホロに影響なし)
@@ -897,6 +1004,7 @@ export function createHolo(ctx) {
   function roomHide() {
     if (room.obj) room.obj.visible = false;
     for (const l of room.lights) l.visible = false;
+    if (room.rig) room.rig.visible = false;
     setAnchorsVisible(true);
     bg.scene.fog = null;
     bg.renderer.toneMapping = THREE.NoToneMapping;                     // 2Dマットは非トーンマップ(SRGBそのまま=CSS一致)
@@ -1165,6 +1273,15 @@ export function createHolo(ctx) {
       const w = bg.canvas.clientWidth, h = bg.canvas.clientHeight;
       return { ready: true, cover: [bg.coverW, bg.coverH], topY: bg.topY, group: [bg.px, bg.py],
         eyes: bg.eyes.map(e => ({ wx: e.position.x, wy: e.position.y, sx: w / 2 + e.position.x + bg.px, sy: h / 2 - (e.position.y + bg.py), op: e.material.opacity, vis: e.visible })) };
+    },
+    rigInfo() { // Phase1診断: ソケットの存在/可視/ワールド位置/スクリーン投影
+      if (!room.rig) return { rig: false, active: room.active, obj: !!room.obj, loading: room.loading, failed: room.failed };
+      const w = bg.canvas.clientWidth, h = bg.canvas.clientHeight, p = room.rig.position;
+      const proj = (x, y, z) => { const v = new THREE.Vector3(x, y, z).project(bg.cam); return [Math.round((v.x * 0.5 + 0.5) * w), Math.round((-v.y * 0.5 + 0.5) * h), +v.z.toFixed(3)]; };
+      let board = null; try { const b = document.getElementById("board"); const r = b.getBoundingClientRect(); board = { cx: Math.round(r.left + r.width / 2), by: Math.round(r.top + r.height) }; } catch (_) {}
+      return { rig: true, active: room.active, vis: room.rig.visible, children: room.rig.children.length,
+        pos: [+p.x.toFixed(3), +p.y.toFixed(3), +p.z.toFixed(3)],
+        originScreen: proj(p.x, p.y, p.z), postTL: proj(p.x - 0.19, p.y + 0.265, p.z - 0.12), board };
     },
   };
 
