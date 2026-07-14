@@ -2715,7 +2715,7 @@ function labelHtml(spec){
     case "attack_push": return wrap2(`${atk(spec.dmg)}${tag("sp","押出",spec.n)}`);
     case "attack_pull": return wrap2(`${atk(spec.dmg)}${SEP}${rg(spec.range)}${tag("sp","引寄",spec.n)}`);
     case "warp": return wrap2(`${st("sp","i-warp","ワープ")}`);
-    case "attack": return wrap2(`${atk(spec.dmg)}${SEP}${rg(spec.range)}`);
+    case "attack": return wrap2(`${atk(spec.dmg)}${SEP}${rg(spec.range)}${spec.cond?tag("atk","⚡"):""}`);
     case "attack_line": return wrap2(`${atk(spec.dmg)}${SEP}${rg(spec.range)}${tag("sp","直線")}`);
     case "attack_all": return wrap2(`${atk(spec.dmg)}${SEP}${rg(spec.range)}${tag("sp","全周")}`);
     case "attack_multi": return wrap2(`${atk(spec.dmg)}${SEP}${rg(spec.range)}${tag("sp","×",spec.count)}`);
@@ -3417,7 +3417,7 @@ function cardFaceHtml(c, opts){
   const d=defOf(c);
   opts=opts||{};
   const st=upSpec(d.top,c.up||c.hot,d,"top"), sb=upSpec(d.bottom,c.up||c.hot,d,"bottom");
-  const nm=`${esc(d.name)}${c.up?'<span style="color:var(--gold)">+</span>':(c.hot?'<span style="color:var(--amber)" data-tt="残骸の熱: この戦域中は強化(+)相当">+🔥</span>':"")}${d.relic?" ◆":""}`;
+  const nm=`${esc(d.name)}${c.up?'<span style="color:var(--gold)">+</span>':(c.hot?'<span style="color:var(--amber)" data-tt="残骸の熱: この戦域中は強化(+)相当">+🔥</span>':"")}${d.relic?'<span class="relicmark"> ◆</span>':""}`;
   const click=opts.onclick?`onclick="${opts.onclick}"`:"";
   return `<div class="card ${opts.selected?"selcard":""} ${d.relic?"relic-card":""} ${opts.mini?"mini":""} ${opts.onclick?"pickable":""}" ${click}>
     <div class="ttl">${nm}</div>
@@ -3757,7 +3757,7 @@ function renderBattle(app){
     const clickAttr = h => clickable?`onclick="H.halfClick('${c.uid}','${h}')"`:(unpairable?`onclick="H.unpair()"`:"");
     const st=upSpec(d.top,c.up||c.hot,d,"top"), sb=upSpec(d.bottom,c.up||c.hot,d,"bottom");
     handHtml+=`<div class="card ${lock?"locked":""} ${d.relic?"relic-card":""}" ${fanStyle}>
-      <div class="ttl">${esc(d.name)}${c.up?'<span style="color:var(--gold)">+</span>':(c.hot?'<span style="color:var(--amber)" data-tt="残骸の熱: この戦域中は強化(+)相当">+🔥</span>':"")}${d.relic?" ◆":""}</div>
+      <div class="ttl">${esc(d.name)}${c.up?'<span style="color:var(--gold)">+</span>':(c.hot?'<span style="color:var(--amber)" data-tt="残骸の熱: この戦域中は強化(+)相当">+🔥</span>':"")}${d.relic?'<span class="relicmark"> ◆</span>':""}</div>
       <div class="${topCls}" data-tt="${specTT(d.name,st)}" ${clickAttr("top")}><span class="tag">▲航行${st.lost?"🔥":""}</span><br>${labelHtml(st)}</div>
       <div class="${botCls}" data-tt="${specTT(d.name,sb)}" ${clickAttr("bottom")}><span class="tag">▼戦闘${sb.lost?"🔥":""}</span><br>${labelHtml(sb)}</div>
     </div>`;
