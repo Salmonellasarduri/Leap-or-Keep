@@ -18,7 +18,7 @@
 
 操作のコツ: カード・ユニット・赤マスにマウスを乗せると全部説明が出る。**「敵ターンへ」を押すまではターン丸ごとやり直せる(⟲)**。初めてなら📚訓練航行(3分)から。
 
-## 主な要素(v0.9)
+## 主な要素（[v0.9.1](https://github.com/Salmonellasarduri/Leap-or-Keep/releases/tag/v0.9.1)）
 
 - 5×5トーラス盤+ハザード(岩/機雷誘爆)+重力渦+太陽フレア
 - 敵11種(各敵=攻略法の語彙: 装甲種は物理でしか割れない、修復網は最優先で潰せ…)+**ラスボス3種からランごとに抽選**
@@ -33,12 +33,17 @@
 
 ## ローカルで遊ぶ・開発する
 
-`index.html` をダブルクリックするだけ(ビルド・ネットワーク不要)。`?seed=数字` で同じ展開を再現。
+Node.js 22 以降で `npm run serve` を実行し、表示された
+`http://localhost:8322/` を開くと公開版と同じ機能で遊べます。`index.html` の
+ダブルクリックでも 2D 版は動きますが、browser の `file://` 制限により 3D 表示は
+無効になります。`?seed=数字` で同じ展開を再現できます。
 
 - 仕様: [SPEC.md](SPEC.md)(デザインピラー・UX強調文法・ジレンマ監査表・調査付録)
-- テスト: `npm test` — ルール検証+全カード網羅スモーク+3方策収支シミュレーション(計258件)
+- テスト: `npm test` — ルール検証+全カード網羅スモーク+3方策収支シミュレーション
 - スクリーンショット検証: `npm run shot`(Playwright)/ 自動プレイ: `node tools/playrun.mjs`
 - バランス定数は `index.html` の `CONFIG` と各定義表(`CARD_DEFS`/`SHIP_DEFS`/`ENEMY_DEFS`/`ZONE_TABLE`/`CONTRACT_DEFS`/`CAPTAIN_TYPES`)に集約
 - 初回のみ: `npm i` と `npx playwright install chromium`(検証ツール用)
 
-ライセンス: [MIT](LICENSE)（© 2026 なばて / nabaaatee）。fork・改変・エージェント AI に遊ばせる、いずれも歓迎。同梱の外部スキル2件は各原作者の MIT — [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) 参照。
+ライセンス: [MIT](LICENSE)（© 2026 なばて / nabaaatee）。fork・改変・エージェント
+AI に遊ばせる、いずれも歓迎。同梱の外部由来 component と各 license・改変内容は
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) を参照。

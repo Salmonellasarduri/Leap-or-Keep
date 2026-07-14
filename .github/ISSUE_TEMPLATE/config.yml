@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 非公開のセキュリティ報告
+    url: https://github.com/Salmonellasarduri/Leap-or-Keep/security/advisories/new
+    about: 脆弱性の疑いはこちらから非公開で報告してください。
