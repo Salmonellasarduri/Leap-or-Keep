@@ -27,6 +27,7 @@ const headless = process.argv.includes("--headless");
 const noholo = process.argv.includes("--noholo"); // DOM版ベースライン計測(ヒッチの帰属切り分け用)
 if (headless) console.warn("warn: headless=SwiftShaderレンダ — fps数値は実GPUと無関係(参考値)");
 
+async function measure() {
 const browser = await chromium.launch({ headless });
 const page = await browser.newPage(desktop
   ? { viewport: { width: 1280, height: 920 } }
@@ -86,7 +87,25 @@ const result = await page.evaluate(async (noholo) => {
 
   return { dpr, idle, beat, pass: beat.p95 <= 17.5 && beat.hitches <= 4 };
 }, noholo);
+  await browser.close();
+  return result;
+}
+
+// L-041 の機械化: 単発 FAIL は「回帰」と「マシン負荷由来の偽陽性」を区別できない。
+// idle も同時に劣化していれば負荷が濃厚。FAIL 時は数秒あけて単独で再計測し、2回連続 FAIL のみ本物とする。
+let result = await measure();
+if (result && result.pass === false && !headless) {
+  const loadHint = result.idle && result.idle.p95 > 20
+    ? "(idle も劣化 → マシン負荷が濃厚)" : "(idle は健全 → 回帰の可能性)";
+  console.warn(`\n⚠ beat FAIL: p95=${result.beat.p95}ms hitches=${result.beat.hitches} ${loadHint}`);
+  console.warn("  負荷由来の偽陽性を切り分けるため 4 秒あけて単独で再計測します(2回連続 FAIL のみ回帰扱い)...");
+  await new Promise(r => setTimeout(r, 4000));
+  const retry = await measure();
+  const confirmed = retry && retry.pass === false;
+  console.warn(`  再計測: ${confirmed ? "FAIL 確定(回帰を疑え)" : "PASS(初回は負荷由来の偽陽性だった)"}`);
+  result = { ...retry, firstAttempt: { beat: result.beat, idle: result.idle }, confirmedFail: confirmed };
+}
 
 console.log(JSON.stringify({ mode: (desktop ? "desktop(throttle1x)" : "mobile390x844(throttle4x,DPR3)") + (noholo ? " [DOM baseline]" : ""), headless, ...result }, null, 1));
-await browser.close(); server.close();
+server.close();
 process.exit(result && result.pass === false ? 1 : 0);

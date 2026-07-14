@@ -294,7 +294,7 @@ if "--room" in argv:
         if o: bpy.data.objects.remove(o, do_unlink=True)
     mat_bench = make_mat("bench_top", srgb(0x303A39), rough=0.63, metal=0.32)
     mat_bench_frame = make_mat("bench_frame", srgb(0x151C1D), rough=0.38, metal=0.72)
-    bevel(add_box("desk_top", (2.30, 1.18, 0.075), (0, 0.38, 0.70), mat_bench), 0.018)
+    bevel(add_box("desk_top", (2.30, 1.18, 0.075), (0, 0.38, 0.70), mat_bench), 0.025, 4)  # Sol R3#5
     bevel(add_box("desk_frame", (2.42, 1.30, 0.055), (0, 0.38, 0.665), mat_bench_frame), 0.012)
     add_box("desk_leg_l2", (0.12, 1.0, 0.63), (-1.05, 0.38, 0.32), mat_bench_frame)
     add_box("desk_leg_r2", (0.12, 1.0, 0.63), (1.05, 0.38, 0.32), mat_bench_frame)
@@ -307,24 +307,45 @@ if "--room" in argv:
     add_box("wall_back", (5.6, 0.1, 3.0), (0, 2.1, 1.5), mat_wall)
     add_box("wall_left", (0.1, 4.4, 3.0), (-2.6, 0.4, 1.5), mat_wall)
     add_box("wall_right", (0.1, 4.4, 3.0), (2.6, 0.4, 1.5), mat_wall)
-    for i in range(4):  # 背面パネルの浅い継ぎ目(埋め込み機器: ベベル代わりの浮き板)
-        add_box(f"panel_{i}", (0.9, 0.04, 0.7), (-1.9 + i * 1.25, 2.04, 1.15 + (i % 2) * 0.5), mat_machine)
+    # 背面パネル(Sol R3#5): 3階調に分散+壁から0.018前へ+間隔を広げ、継ぎ目で情報密度
+    panel_mats = [make_mat(f"panel_m{k}", srgb(c), rough=0.7, metal=0.3)
+                  for k, c in enumerate((0x081217, 0x10191B, 0x172123))]
+    for i in range(4):
+        add_box(f"panel_{i}", (0.86, 0.04, 0.7), (-1.95 + i * 1.30, 2.032, 1.15 + (i % 2) * 0.5),
+                panel_mats[i % 3])
+    # 壁上部の配管(左右各2本 — 「宇宙船の設備」感)
+    for i, (px, pz) in enumerate([(-2.05, 2.35), (-2.05, 2.05), (2.05, 2.35), (2.05, 2.05)]):
+        add_cyl(f"wall_pipe_{i}", 0.0175, 1.1, (px, 2.02, pz),
+                make_mat(f"pipe_m{i}", srgb(0x10191B), rough=0.5, metal=0.6),
+                rot=(0, math.radians(90), 0), verts=12)
 
-    # 窓(右上、painting準拠の構図) — 枠+虚空+星+船骸+シアン縁
-    add_box("win_frame", (1.5, 0.12, 1.05), (1.55, 2.02, 1.78), mat_frame_sol)
-    add_box("win_void", (1.32, 0.06, 0.88), (1.55, 2.0, 1.78),
-            make_mat("void2", (0.0, 0.002, 0.006, 1), rough=1.0))
-    add_box("win_glow", (1.34, 0.02, 0.02), (1.55, 1.96, 1.34), mat_edge_teal)  # 窓下縁のシアン
+    # 窓(右上) — Sol R4#1: 上部へ上げて画角内(x=870-1240,y=10-165px)へ。明るいシアン内枠+バックライトで光源化し、最終画面で確実に読ませる
+    mat_win_frame = make_mat("win_frame_m", srgb(0x151C1D), rough=0.34, metal=0.72)
+    mat_win_glow = make_mat("win_glow_m", (0.01, 0.06, 0.06, 1), emit=(0.10, 0.52, 0.56, 1), strength=2.4)
+    WX, WZ = 0.98, 1.86  # 上端で見切れないよう少し下げ、キャニスターとの重なりを抑える
+    add_box("win_frame", (1.34, 0.12, 0.60), (WX, 1.99, WZ), mat_win_frame)
+    add_box("win_void", (1.20, 0.06, 0.48), (WX, 2.02, WZ),
+            make_mat("void2", (0.004, 0.03, 0.05, 1), rough=1.0, emit=(0.02, 0.10, 0.14, 1), strength=0.6))  # 外宇宙を壁より0.7EV明るく
+    # 明るいシアン内枠(上下左右、幅約0.03=最終12-18px)
+    add_box("win_in_t", (1.22, 0.05, 0.03), (WX, 1.975, WZ + 0.24), mat_win_glow)
+    add_box("win_in_b", (1.22, 0.05, 0.03), (WX, 1.975, WZ - 0.24), mat_win_glow)
+    add_box("win_in_l", (0.03, 0.05, 0.48), (WX - 0.61, 1.975, WZ), mat_win_glow)
+    add_box("win_in_r", (0.03, 0.05, 0.48), (WX + 0.61, 1.975, WZ), mat_win_glow)
+    # 窓のバックライト(窓を光源化=室内へ寒色を差し込む)
+    bpy.ops.object.light_add(type='AREA', location=(WX, 2.12, WZ))
+    winl = bpy.context.object
+    winl.data.energy = 24; winl.data.size = 1.15; winl.data.size_y = 0.5
+    winl.data.color = (0.20, 0.55, 0.62); winl.rotation_euler = (math.radians(90), 0, 0)
     random.seed(707)
-    for i in range(46):
-        sx = 1.55 + random.uniform(-0.6, 0.6)
-        sz = 1.78 + random.uniform(-0.38, 0.38)
+    for i in range(24):
+        sx = WX + random.uniform(-0.55, 0.55)
+        sz = WZ + random.uniform(-0.21, 0.21)
         bpy.ops.mesh.primitive_uv_sphere_add(segments=6, ring_count=4,
-                                             radius=random.uniform(0.003, 0.008),
-                                             location=(sx, 1.97, sz))
+                                             radius=random.uniform(0.004, 0.009),
+                                             location=(sx, 1.99, sz))
         st = bpy.context.object; st.name = f"wstar_{i}"; st.data.materials.append(mat_star)
-    # 船骸シルエット(窓の中、ほぼ黒)
-    add_box("wreck_sil", (0.5, 0.04, 0.16), (1.75, 1.98, 1.9),
+    # 船骸シルエット(窓内右上)
+    add_box("wreck_sil", (0.40, 0.04, 0.11), (WX + 0.30, 1.99, WZ + 0.12),
             make_mat("wreck", (0.004, 0.008, 0.012, 1), rough=0.9),
             rot=(0, math.radians(12), math.radians(-8)))
 
@@ -354,7 +375,7 @@ if "--room" in argv:
             rot=(math.radians(-30), 0, 0), verts=12)
 
     # #2 デスクランプ(Sol数値): ベース+支柱+シェード+発光面+スポット55W
-    mat_lampshell = make_mat("lampshell", srgb(0x151C1D), rough=0.4, metal=0.7)
+    mat_lampshell = make_mat("lampshell", srgb(0x151C1D), rough=0.31, metal=0.78)  # Sol R3#2
     bevel(add_box("lamp_base", (0.32, 0.24, 0.055), (-0.92, 0.55, 0.765), mat_lampshell), 0.008)
     add_cyl("lamp_pole", 0.016, 0.48, (-0.87, 0.62, 1.02), mat_lampshell,
             rot=(math.radians(12), math.radians(-8), 0), verts=12)
@@ -362,43 +383,49 @@ if "--room" in argv:
                                     location=(-0.80, 0.72, 1.28),
                                     rotation=(math.radians(158), math.radians(-14), 0))
     shade = bpy.context.object; shade.name = "lamp_shade"; shade.data.materials.append(mat_lampshell)
-    add_cyl("lamp_face", 0.08, 0.015, (-0.77, 0.665, 1.20),
-            make_mat("lamp_face", (0.05, 0.02, 0, 1), emit=(0.95, 0.71, 0.42, 1), strength=7.0),
+    add_cyl("lamp_face", 0.065, 0.015, (-0.77, 0.665, 1.20),
+            make_mat("lamp_face", (0.05, 0.02, 0, 1), emit=(1.0, 0.38, 0.09, 1), strength=2.8),  # Sol R3#2: 暖色を絞る
             rot=(math.radians(158), math.radians(-14), 0), verts=16)
     bpy.ops.object.light_add(type='SPOT', location=(-0.78, 0.67, 1.24))
     dlamp = bpy.context.object
-    dlamp.data.energy = 55
-    dlamp.data.color = (1.0, 0.72, 0.42)
-    dlamp.data.spot_size = math.radians(58)
-    dlamp.data.spot_blend = 0.45
-    # 照射点 (-0.38, 0.28, 0.70) へ向ける
+    dlamp.data.energy = 200           # Sol R4#2: 左卓面に暖色プールを作る
+    dlamp.data.color = (1.0, 0.52, 0.22)
+    dlamp.data.spot_size = math.radians(40)
+    dlamp.data.spot_blend = 0.68
+    # 照射点 (-0.58, 0.30, 0.742) へ向ける(中央セーフゾーンまでは届かせない)
     import mathutils
-    dv = mathutils.Vector((-0.38, 0.28, 0.70)) - dlamp.location
+    dv = mathutils.Vector((-0.58, 0.30, 0.742)) - dlamp.location
     dlamp.rotation_euler = dv.to_track_quat('-Z', 'Y').to_euler()
 
     # #3 縦型エネルギー容器(旧relicを置換)
     for oname in ("relic", "relic_slit"):
         o = bpy.data.objects.get(oname)
         if o: bpy.data.objects.remove(o, do_unlink=True)
-    mat_cap = make_mat("can_cap", srgb(0x1B2222), rough=0.28, metal=0.82)
-    mat_glass = make_mat("can_glass", (1, 1, 1, 1), rough=0.10)
+    mat_cap = make_mat("can_cap", srgb(0x1B2222), rough=0.34, metal=0.74)  # Sol R3#4
+    mat_glass = make_mat("can_glass", (1, 1, 1, 1), rough=0.18)
     try:
         gb = mat_glass.node_tree.nodes["Principled BSDF"]
         gb.inputs["Transmission Weight"].default_value = 1.0
-        gb.inputs["IOR"].default_value = 1.45
+        gb.inputs["IOR"].default_value = 1.46
     except Exception:
         pass
-    bevel(add_cyl("can_cap_top", 0.135, 0.075, (0.91, 0.70, 1.163), mat_cap, verts=24), 0.008)
-    bevel(add_cyl("can_cap_bot", 0.135, 0.075, (0.91, 0.70, 0.775), mat_cap, verts=24), 0.008)
-    add_cyl("can_glass", 0.125, 0.30, (0.91, 0.70, 0.97), mat_glass, verts=24)
-    add_cyl("can_core", 0.055, 0.25, (0.91, 0.70, 0.97),
-            make_mat("can_core", (0, 0.05, 0.05, 1), emit=(0.26, 0.90, 0.88, 1), strength=3.2), verts=16)
+    CR = 0.122  # 全体を約90%へ縮小(視線を奪いすぎない)
+    bevel(add_cyl("can_cap_top", CR, 0.075, (0.91, 0.70, 1.163), mat_cap, verts=24), 0.008)
+    bevel(add_cyl("can_cap_bot", CR, 0.075, (0.91, 0.70, 0.775), mat_cap, verts=24), 0.008)
+    add_cyl("can_glass", 0.112, 0.30, (0.91, 0.70, 0.97), mat_glass, verts=24)
+    mat_core = make_mat("can_core", (0, 0.05, 0.05, 1), emit=(0.26, 0.90, 0.88, 1), strength=1.55)  # 白飛び抑制
+    add_cyl("can_core", 0.038, 0.25, (0.91, 0.70, 0.97), mat_core, verts=16)
+    for i in range(3):  # コア周囲リング3本(内部構造を見せる)
+        add_cyl(f"can_ring_{i}", 0.073, 0.008, (0.91, 0.70, 0.90 + i * 0.07), mat_cap, verts=20)
+    for i, dz in enumerate((0.90, 1.02)):  # 低発光の液面円盤2枚
+        add_cyl(f"can_fluid_{i}", 0.10, 0.006, (0.91, 0.70, dz),
+                make_mat(f"can_fluid_m{i}", (0, 0.03, 0.03, 1), emit=(0.16, 0.60, 0.60, 1), strength=0.7), verts=20)
     for i in range(3):
         a = math.radians(120 * i)
         add_box(f"can_bracket_{i}", (0.018, 0.02, 0.42),
-                (0.91 + 0.135 * math.cos(a), 0.70 + 0.135 * math.sin(a), 0.97), mat_cap)
+                (0.91 + CR * math.cos(a), 0.70 + CR * math.sin(a), 0.97), mat_cap)
     bpy.ops.object.light_add(type='POINT', location=(0.91, 0.55, 1.0))
-    cl = bpy.context.object; cl.data.energy = 12; cl.data.color = (0.25, 0.85, 0.85)
+    cl = bpy.context.object; cl.data.energy = 4; cl.data.color = (0.25, 0.85, 0.85)
 
     # #4 背面コンソール(黒箱→計器: 傾き12°+ステータス灯8個)
     con_root = bpy.data.objects.new("con_root", None)
@@ -435,6 +462,67 @@ if "--room" in argv:
     rear.data.energy = 90; rear.data.size = 0.7; rear.data.size_y = 0.45
     rear.data.color = (0.26, 0.78, 0.82)
     rear.rotation_euler = (math.radians(-55), 0, math.radians(35))
+
+    # ---- Sol R3(tmp/sol-room-r2.md 残指摘「黒潰れ解消と主役の情報密度」)----
+    # (a) 黒潰れ解消: 露出は上げず、局所照明+世界光の床値で暗部を読める暗ティールへ持ち上げる
+    bg.inputs[0].default_value = (0.008, 0.015, 0.022, 1)  # 純黒の床値をわずかに底上げ(卓奥の黒帯対策)
+    bg.inputs[1].default_value = 1.1
+    # 背面壁ウォッシュ: 卓と壁の間の黒帯へシアン光を薄く当てる(「暖色ランプ vs シアン宇宙光」の物語を保つ)
+    bpy.ops.object.light_add(type='AREA', location=(0, 1.42, 1.05))
+    wash = bpy.context.object
+    wash.data.energy = 48; wash.data.size = 3.4; wash.data.size_y = 1.5  # Sol R3#5: 36→48
+    wash.data.color = (0.20, 0.52, 0.58)
+    wash.rotation_euler = (math.radians(-90), 0, 0)  # -Z→+Y: 背面壁を舐める
+    # 中景リム: 椅子・バスト・コンソールの輪郭を壁の暗部から切り離す(Sol R1「暗部に埋没」対策)
+    bpy.ops.object.light_add(type='AREA', location=(0, 1.95, 1.5))
+    midrim = bpy.context.object
+    midrim.data.energy = 38; midrim.data.size = 2.6; midrim.data.size_y = 1.2  # Sol R3#5: 22→38
+    midrim.data.color = (0.18, 0.52, 0.58)
+    midrim.rotation_euler = (math.radians(90), 0, 0)  # 壁側から手前へ=シルエットに縁光
+    # バスト背面専用灯(Sol R3#5: 相手の頭肩シルエットと眼を復活=「対戦相手のいる場所」)
+    bpy.ops.object.light_add(type='AREA', location=(0, 1.78, 1.48))
+    bustl = bpy.context.object
+    bustl.data.energy = 18; bustl.data.size = 0.48
+    bustl.data.color = (0.30, 0.72, 0.78)
+    bustl.rotation_euler = (math.radians(90), 0, 0)
+
+    # (b) 主役卓の情報密度: 前面フェイシア(継ぎ目+計器)/隅マウント座/セクション板/前左ヒーロー小物
+    mat_seam = make_mat("desk_seam", srgb(0x0A0E0F), rough=0.6, metal=0.4)
+    mat_section = make_mat("desk_section", srgb(0x232C2B), rough=0.55, metal=0.42)  # 天板より一段濃い作業区画
+    # 前面フェイシア(垂れ壁): 重い家具の量感+継ぎ目で情報密度。中央盤の手前・下に落ちるので盤面を侵さない
+    bevel(add_box("desk_apron", (2.12, 0.035, 0.15), (0, -0.205, 0.598), mat_bench_frame), 0.006)
+    for i, sx in enumerate((-0.74, -0.26, 0.26, 0.74)):  # 縦の継ぎ目溝×4
+        add_box(f"apron_seam_{i}", (0.014, 0.02, 0.14), (sx, -0.224, 0.598), mat_seam)
+    add_box("apron_label", (0.36, 0.012, 0.055), (-1.02, -0.225, 0.63),
+            make_mat("apron_label", srgb(0x0E1A1C), rough=0.5, emit=srgb(0x1C5A5F), strength=0.6))  # 銘板(淡い発光)
+    add_box("apron_ind0", (0.022, 0.012, 0.022), (0.80, -0.225, 0.62), mat_coral)                    # 警告灯(コーラル1点)
+    add_box("apron_ind1", (0.022, 0.012, 0.022), (0.88, -0.225, 0.62), mat_lamp_ind)                 # 通常灯
+    # 四隅マウント座(既存ボルトの下に一段濃い金属座=接地・巨大感/Sol #5)
+    for i, (px, py) in enumerate([(-1.0, -0.13), (1.0, -0.13), (-1.0, 0.89), (1.0, 0.89)]):
+        add_box(f"desk_pad_{i}", (0.17, 0.17, 0.008), (px, py, 0.737), mat_bench_frame)
+    # 天板セクション板(左右奥の作業区画=面の単調さを割る。中央43%は空ける)
+    add_box("desk_sec_l", (0.5, 0.34, 0.005), (-0.80, 0.74, 0.7405), mat_section)
+    add_box("desk_sec_r", (0.5, 0.34, 0.005), (0.80, 0.74, 0.7405), mat_section)
+    # 前左ヒーロー小物: サルベージ・タグリーダー(Sol R3#3: 判読可能サイズへ拡大・左外周へ移動)
+    mat_reader_amber = make_mat("reader_amber", (0.05, 0.02, 0, 1), emit=(1.0, 0.55, 0.18, 1), strength=3.0)
+    RTILT = math.radians(-10)  # 上面をカメラ側へ
+    RX = -0.82  # Sol R4#3: フレーム切れをなくすため少し内側へ
+    bevel(add_box("reader_body", (0.34, 0.25, 0.15), (RX, 0.40, 0.815), mat_machine, rot=(RTILT, 0, 0)), 0.012)
+    add_box("reader_scr", (0.20, 0.012, 0.078), (RX, 0.272, 0.865),
+            make_mat("reader_scr", srgb(0x07191C), rough=0.4, emit=srgb(0x1E787E), strength=2.0))  # 画面(発光1.2→2.0)
+    add_box("reader_slot", (0.23, 0.012, 0.02), (RX, 0.272, 0.795), mat_edge_teal)   # カード投入スリット(シアン)
+    add_box("reader_ind", (0.03, 0.012, 0.03), (RX + 0.13, 0.272, 0.86), mat_reader_amber)  # アンバー灯
+    for i, (bx, bz) in enumerate([(RX - 0.14, 0.885), (RX + 0.14, 0.885), (RX - 0.14, 0.75), (RX + 0.14, 0.75)]):
+        add_cyl(f"reader_bolt_{i}", 0.006, 0.01, (bx, 0.28, bz), mat_bench_frame,
+                rot=(math.radians(90), 0, 0), verts=8)
+    add_box("reader_foot", (0.32, 0.23, 0.012), (RX, 0.40, 0.7405), mat_bench_frame)  # 接地座
+    # 左前フィル(Sol R4#3: 左機材とリーダー暗部を純黒から救う。弱く5500K)
+    bpy.ops.object.light_add(type='AREA', location=(-1.35, -0.55, 1.05))
+    lfill = bpy.context.object
+    lfill.data.energy = 30; lfill.data.size = 0.9; lfill.data.size_y = 0.9
+    lfill.data.color = (1.0, 0.95, 0.9)
+    lv = mathutils.Vector((-0.85, 0.30, 0.80)) - lfill.location
+    lfill.rotation_euler = lv.to_track_quat('-Z', 'Y').to_euler()
 
     # 一人称カメラ(Sol R2: 38mm / eye(0,-1.58,1.62) / aim(0,0.43,0.82) — 広角の箱庭感を消す)
     aim_room = bpy.data.objects.new("aim_room", None)

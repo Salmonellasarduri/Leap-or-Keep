@@ -1,6 +1,14 @@
 # Lessons — Leap or Keep
 
 > 実プレイQA・開発で得た教訓。再発したら「シムの不変条件」へ昇格させる。形式: L-XXX / タグ / 教訓 / 対策。
+>
+> **卒業=機械化の原則**(隣プロジェクト `Artificial Personality/.claude/skills/lesson-record` の仕組みを本作に移植: `.claude/skills/lesson-record/SKILL.md`)。
+> 散文の教訓は「従われない」。静的に検知できる罠はガードに卒業させ、毎コミット自動実行する:
+> - `node tools/lint-guards.mjs` … LOGIC区間の純度(L-037)/ EN_RULES.unshift強制(L-038)を静的検査
+> - `node tools/fps.mjs` … 負荷由来の偽FAILを自動再計測で切り分け(L-041)
+> - `npm test` / `npm run test:agent` … 仕様不変条件(L-020/L-042 ほか)
+> - `window.__holo.calibCheck()` … 盤の投影整合 ≤2.5px(L-039)
+> 各レッスンの末尾に **卒業先** を書く。卒業先を持つレッスンは「再発は機械が止める」状態。
 
 - **L-001** [rules][torus] 4×4トーラスでは「左に2」と「右に2」の着地マスが同一になり、マスクリック式の移動UIでは**ドリフト方向がプレイヤーの意図と食い違う**(find()が先に見つけた方向を採用していた)。→ 対策: 移動は方向明示(曖昧マスには方向矢印ボタン)。シム性質テスト「実行後のドリフト=指定方向」で恒久ガード。オーナー報告 2026-06-11「ドリフトの方向が正しくない」の根本原因。
 - **L-002** [rules][gh] 「移動2で1マスだけ動く」(GHの up to N)は本作では**意図の読みにくさ+慣性の軽さ**につながる。オーナー裁定: 移動Nはちょうど N。→ moveOptions を exact-N に変更。「精密は有料」のピラーが強化される副作用も良。
@@ -38,3 +46,12 @@
 - **L-034** [agent][design] **エージェントの記憶は「想い出(情緒)」と「引き継ぎ(次回読む事実)」の2チャンネルに分ける**: 同じ記録を両用途に使うと、情緒の記憶は事実で薄まり、次回読む要約は感傷で重くなる。分離が正解。①想い出=chronicle(機械ドラマ)+voice(本人の声)+captain(自己像)を素材に、保存はそのまま散文/推奨は本人の声で蒸留。②引き継ぎ=軽量レコード(船/結果/型/note)を**エージェントが永続化し、new時に渡し返す**=ゲームはstatelessのまま任意のエージェントに汎用化できる。鍵は`note`(本人が書く心残り/抱負)で、これが次ランの冒頭に想起されると**ランをまたいだ物語の連続性**が生まれる(イナンナの「次は殲滅プロトコルの声を聞く」→次ラン回収が実証)。想起はゲーム冒頭1回だけ表示(毎ターンはノイズ)。
 - **L-035** [visual][design] **連鎖演出の核心は「逐次性」— 同フレーム一括描画の連鎖はGIFで連鎖に見えない**: 再帰ロジックは一瞬で解決するが、演出は1段ずつ(本作110ms/段)ずらして波及を見せる。実装はfxイベントに遅延dを持たせ、ドレイン時にsetTimeoutで再キュー(ロジックは即時のまま=シム/エージェントに影響ゼロ)。エスカレーションは「同じ場所で育つ単一カウンタ」(誘爆×2→連鎖爆発×3→花火大会×N)が正解 — セル位置に段数スタンプを重ね置きすると異時刻・異セルの组合せで必ず文字が重畳する(L-023縦スタックでも防げない)。Codex処方で効いた順: 白芯(発光階層)>着弾ショックリング>連鎖ビーム>焦げ跡残光>HUD沈み。連鎖の「頻度」はfxでなく地形が作る — 機雷を6割で既存機雷の隣にクラスタ湧きさせたことでプレイヤーが狙って連鎖を組めるようになった(sonnetテスターが「1発で安定して連鎖する」と実証)。
 - **L-036** [i18n][visual] **単一HTML+インライン和文のi18nは「DOM境界のMutationObserver+完全一致辞書+正規表現ルール」が最小侵襲**: ロジック/プロトコル/保存データは日本語のまま、#appへのaddedNodesだけを翻訳する(モーダル後差し込みもfxスタンプも自動で拾える)。ハマりどころ3つ: ①インライン要素(<b>等)でテキストノードは分割される — 辞書は「文」でなく「断片」単位で作る(実ページで未翻訳ノードを列挙するデバッグハーネスが必須、推測では潰れない) ②翻訳前にJSで加工される文字列(u.name.slice(0,6)等)は辞書に当たらない — 加工箇所で明示的にtrText() ③既存要素のtextContent更新はchildList変異でないのでObserverが拾わない — 更新系は明示trText()。ルールの捕獲群はEN_EXACT→再帰trTextで入れ子解決(旗艦ヴァグランツ→FS Vagrants)。辞書ソースはtools/i18n/*.part.json(ファイル名昇順マージ・先勝ち=aaa-fixが上書き層)、注入はtools/geni18n.mjs。
+
+<!-- ここから下は Phase 2〜5(ホロ盤・全画面3D・Blender部屋)セッションで実際に踏んだ罠。旧HANDOFF-phase5.5 §罠 を lesson-record 形式へ昇格。 -->
+- **L-037** [tooling][process] **index.html の LOGIC-START〜LOGIC-END 区間はブラウザ参照ゼロの純ロジックに保つ**: sim/agent テストはこの区間を `node:vm`(与える global は `module` と `console` だけ)で丸ごと評価する。区間内に `document`/`window`/`localStorage`/`THREE`/`import`/`require` を1つ書くだけで評価時 ReferenceError が起き、**全テストが道連れで落ちる**(3D化作業中に holo フック直書きで踏んだ)。UI・描画・three 参照は必ず LOGIC-END の外へ。→ 卒業先: **`node tools/lint-guards.mjs` の logic-purity ガード**(区間を走査し禁止識別子/import を実行番付きで弾く。誤検知回避に `obj.location` 等のプロパティは除外)。毎コミット実行。
+- **L-038** [i18n] **英訳ルールの追加は `EN_RULES.unshift(...)` のみ。`push` は禁止**: EN_RULES は先勝ちで、配列末尾に汎用分割ルール(`^(.+) — (.+)$` 等)が居る。新しい具体ルールを push すると末尾=汎用の後ろに入り、**汎用が先にマッチして具体ルールが永久に発火しない**(新規英文が「A — B」形に化ける)。文字列は EN_EXACT(完全一致辞書)へ、パターンは EN_RULES.unshift へ。→ 卒業先: **`tools/lint-guards.mjs` の en-rules-unshift ガード**(`EN_RULES.push(` を静的に検出して落とす)+ `node tools/i18n-audit.mjs`(残JPノード0)。
+- **L-039** [visual][process] **`body.holo3` 等レイアウトを動かすクラスを付けたら盤 canvas を再キャリブする**: DOM盤面を透明ヒット面として温存し three カメラで CSS投影(perspective+rotateX)を数学再現しているため、HUDフレームや手札トレイの CSS が動くと盤の bbox がズレ、キャリブ誤差が 0.3px→8px 級に腐る(次の render まで stale)。対策済み: `bgShow` が `requestAnimationFrame(()=>sync())` で1フレーム後に再同期。**同種の「レイアウトを動かす3D関連クラス」を今後足すときは再同期を忘れるな**。→ 卒業先: **`window.__holo.calibCheck()`(閾値2.5px・現在0.31px)** を検証手順に常設。
+- **L-040** [visual] **背景(bg)カメラの near/far は px空間とメートル空間で切り替える**: 盤ホロは CSS px を世界単位に使う(near=100/far=2400)。一方 Blender由来の GLB部屋はメートル建て — px用の near=10 のままだと「10メートル手前でクリップ」になり**部屋が丸ごと消える**(実際に「部屋が見えない」で踏んだ)。`roomCam` で near=0.05/far=60 に切替済み。単位系の違う3D資産を bg に載せるときは near/far の単位を最初に確認する。→ 卒業先: なし(runtime依存)。`roomCam()` のコメントに単位注記を残す。
+- **L-041** [tooling] **`tools/fps.mjs` の単発FAILは「回帰」と「マシン負荷由来の偽陽性」を区別できない**: フレームゲートは並走プロセス(Blender/複数Chromium)の負荷でp95が33ms級に偽悪化する(git stash二分法で v0.9.16 も負荷下では"FAIL"、無負荷で PASS と確認)。→ 卒業先: **fps.mjs に自動再計測を実装済み** — FAIL時に4秒あけて単独で再計測し、**2回連続FAILのみ回帰扱い**。加えて idle も同時劣化していれば「負荷濃厚」、idle健全なら「回帰の可能性」と診断表示。手動で単独再実行する運用を機械化した。
+- **L-042** [process][agent] **crashsalvage 等の合法手仕様を変えたら `agent/protocol.mjs` の合法手列挙も同条件に更新する**: エージェント用MCPは合法手をID列挙する(誤入力を構造的に不能にする設計=L-032)。ロジック側の合法条件(例: クラッシュサルベージの「戦域クリア済み かつ 未回収」分岐)を変えると、protocol が列挙した手が実際には非合法になり、**agentテストが「enumerated choice failed」で落ちる**。ロジックの合法判定と protocol の列挙は常に同じ述語を参照させる。→ 卒業先: **`npm run test:agent`**(列挙した全手の実行可能性を機械検証)。仕様変更時は sim と agent の両方を回す。
+- **L-043** [tooling] **日本語ファイル名は Read ツール/PowerShell のリテラルパスで壊れることがある**: 添付PDF(和名)が Read で開けず、PowerShell の文字列パスでも化けた。回避: `Get-ChildItem` の**オブジェクトをパイプで渡して**ASCII名にコピーしてから扱う(`Get-ChildItem '*.pdf' | Copy-Item -Destination ascii.pdf`)。画像スライドPDFは pdf-parse で0文字 → pdfjs-dist + @napi-rs/canvas でレンダリング(CJKは cMapUrl/cMapPacked/standardFontDataUrl 指定が必須)。→ 卒業先: なし(環境依存の運用知)。和名ファイルを触るときはオブジェクト経由コピーを先にやる。

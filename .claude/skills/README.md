@@ -17,6 +17,7 @@
 ## プロジェクト内で生成したスキル
 
 - `game-design-essence` — 西村裕『ルールデザインノート』(オーナー提供PDF)のエッセンスを汎用化(2026-06-11)。非線形性≒ゲーム性/多脚構造/順序選好ループ/勝利モジュール4類型/ジレンマ監査チェックリスト。**他プロジェクトへコピー可能な自己完結スキル**
+- `lesson-record` — 2026-07-14 追加。`Artificial Personality/.claude/skills/lesson-record` を本作の lessons.md(コンパクト箇条書き)・実ツール(`tools/lint-guards.mjs` / sim / agent / fps / calibCheck)へ適応移植。当初 migration では「密結合」としてスキップしていたが、Phase2〜5 で踏んだ罠を **散文の教訓 → 機械ガードへ卒業** させる仕組みが必要になり移植。中核は「静的検知できる罠は lint-guards へ卒業」。
 - `qa-lenses` `anti-human-bottleneck` 等は下記マイグレーション由来
 
 ## 外部由来スキルの出典・ライセンス（再配布時の帰属）
@@ -35,6 +36,6 @@
 
 - **コマンド群のうち /design /strategy /strategy_deep /reviewing /implement**: Fableのプランモード・組み込み /code-review・通常の実装フローで代替できるためスキップ(2026-06-11判断)。ゴール契約の考え方自体は autonomous-milestone-runner と qa-lenses に吸収済み
 
-- **INANNA固有**: behavior-validate, inanna-skill-validate, inanna-sprite-action-gif, enqueue-book, skill-promote, sync-cewk, docs-map, doc-updater, lesson-record(同プロジェクトのdoc構造・lessons.md分類に密結合)
+- **INANNA固有**: behavior-validate, inanna-skill-validate, inanna-sprite-action-gif, enqueue-book, skill-promote, sync-cewk, docs-map, doc-updater(~~lesson-record は密結合のためスキップ~~ → 2026-07-14 に本作向け適応移植済み。上記「生成したスキル」参照)
 - **Codex CLI / 外部CLI固有**: agent-dispatch, codex-analyst, gemini-researcher, plan-researcher(Fableは組み込みのAgent/Workflowツールで代替)、memory-curate(FableはネイティブのMemoryシステムを持つ)、empirical-prompt-tuning(Codex命令チューニング用)
 - **無関係**: create-note-header, recording-visual-qa(OBS録画検証), python-patterns(本ゲームはJS), remind, anthropics-skills-*(Fableに組み込み済み or 用途外)

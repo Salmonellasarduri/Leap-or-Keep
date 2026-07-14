@@ -201,6 +201,42 @@ console.log("== rule checks ==");
   ok(Number.isInteger(LK.cargoPayoutValue(s)), "payout is always an integer");
 }
 {
+  // 条件付きスパイク(charter §2 ③-2): 局面参照で威力が折れ曲がる + ラベルも実効値へ追従(L-032)
+  const condRelics = LK.RELIC_DEFS.filter(r => {
+    const cardDef = LK.CARD_DEFS[r.card];
+    return cardDef && ((cardDef.bottom && cardDef.bottom.cond) || (cardDef.top && cardDef.top.cond));
+  });
+  ok(condRelics.length >= 3, "reward pool has 3+ conditional-spike relics (charter 1/3)", "got " + condRelics.length);
+  ok(condRelics.length / LK.RELIC_DEFS.length >= 0.2, "conditional relics are ~1/4-1/3 of reward pool",
+     `${condRelics.length}/${LK.RELIC_DEFS.length}`);
+
+  // lowlife: 生存カード5枚以下で威力2倍(直線性能は下位でも局面で最強に折れ曲がる)
+  const s1 = LK.newRun(31);
+  const cd = { uid: "tc1", defId: "c_desperado", loc: "hand" }; s1.run.cards.push(cd);
+  ok(LK.cardSpec(s1, cd, "bottom").dmg === 2, "lowlife inactive: dmg 2 when lifespan>5");
+  let kept = 0;
+  for (const c of s1.run.cards) { if (c === cd) continue; if (kept < 4) { c.loc = "hand"; kept++; } else c.loc = "lost"; }
+  const act = LK.cardSpec(s1, cd, "bottom");   // 生存=cd+4=5枚
+  ok(act.dmg === 4, "lowlife active: dmg x2 = 4 when lifespan<=5", "got " + act.dmg);
+  ok(act.label.includes("攻撃4"), "lowlife label follows actual dmg (L-032)", act.label);
+
+  // sealsync: 封印遺物1つにつき威力+1
+  const s2 = LK.newRun(32);
+  const cs = { uid: "tc2", defId: "c_sealshot", loc: "hand" }; s2.run.cards.push(cs);
+  s2.run.cargo = [];
+  ok(LK.cardSpec(s2, cs, "bottom").dmg === 1, "sealsync base dmg 1 with empty cargo");
+  s2.run.cargo = ["nano", "fusion", "coil"];
+  ok(LK.cardSpec(s2, cs, "bottom").dmg === 4, "sealsync dmg 1 + 3 cargo = 4", "got " + LK.cardSpec(s2, cs, "bottom").dmg);
+
+  // lonewolf: 手札2枚以下で威力+2
+  const s3 = LK.newRun(33);
+  for (const c of s3.run.cards) c.loc = "pool";
+  const cl = { uid: "tc3", defId: "c_lonewolf", loc: "hand" }; s3.run.cards.push(cl);  // 手札=1
+  ok(LK.cardSpec(s3, cl, "bottom").dmg === 4, "lonewolf dmg 2+2 when hand<=2", "got " + LK.cardSpec(s3, cl, "bottom").dmg);
+  s3.run.cards.forEach(c => c.loc = "hand");  // 手札>2
+  ok(LK.cardSpec(s3, cl, "bottom").dmg === 2, "lonewolf base dmg 2 when hand>2");
+}
+{
   // 掃討後のサルベージは改修(恒久+)に切替(FB: 「回収したのに消える」の根治)
   const s = LK.newRun(13);
   LK.startEncounter(s, null);
