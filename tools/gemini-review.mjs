@@ -14,8 +14,24 @@
 import { spawn } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import path from "node:path";
+
+// gemini CLI と同じ .env を node 側にも取り込む(~/.gemini/.env / リポの .gemini/.env)。
+// これで「setx で環境変数」でも「~/.gemini/.env に1行」でも、どちらの入れ方でも動く。
+function loadDotEnv() {
+  const files = [path.join(homedir(), ".gemini", ".env"), path.join(process.cwd(), ".gemini", ".env")];
+  for (const f of files) {
+    if (!existsSync(f)) continue;
+    for (const line of readFileSync(f, "utf8").split(/\r?\n/)) {
+      const m = line.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)\s*$/i);
+      if (!m) continue;
+      const k = m[1]; let v = m[2].replace(/^["']|["']$/g, "");
+      if (!process.env[k]) process.env[k] = v;
+    }
+  }
+}
+loadDotEnv();
 
 // 最新モデル。AI Studio の最新IDに合わせて調整可(--model / 環境変数 GEMINI_REVIEW_MODEL でも上書き)。
 // 正確な最新IDは `--list-models` で確認できる。
