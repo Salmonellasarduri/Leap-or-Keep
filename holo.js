@@ -818,7 +818,8 @@ export function createHolo(ctx) {
 
   // ==== Phase 5(実験): BlenderフルGLB部屋 — Claude→Blender→GLB→three.js 一気通貫 ====
   // 起動: URL ?room=1 または lkDebug().META.room3d。失敗時はマット絵モードへ自動フォールバック。
-  // Solゲート(tmp/sol-room-r2.md)を超えるまで既定OFF — 既定背景は8.5/10の2D画のまま。
+  // Sol磨きR3-R5で 6.8→7.7/10(2026-07-14)。昇格ゲート7.8まであと0.1のため既定OFF据え置き。
+  // 既定背景は8.5/10の2D画のまま。残処方は docs/HANDOFF-phase5.5-room-polish.md §次タスク①。
   const room = { want: false, loading: false, failed: false, obj: null, lights: [] };
   try { room.want = new URLSearchParams(location.search).get("room") === "1"; } catch (_) {}
 
