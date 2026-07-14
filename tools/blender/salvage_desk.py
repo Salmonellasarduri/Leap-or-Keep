@@ -319,35 +319,47 @@ if "--room" in argv:
                 make_mat(f"pipe_m{i}", srgb(0x10191B), rough=0.5, metal=0.6),
                 rot=(0, math.radians(90), 0), verts=12)
 
-    # 窓(右上) — Sol R4#1: 上部へ上げて画角内(x=870-1240,y=10-165px)へ。明るいシアン内枠+バックライトで光源化し、最終画面で確実に読ませる
+    # 窓(右上) — GLBにも入る静的シーンジオメトリ。
+    # cam_room 38mm の固定画角で外枠が概ね x=870-1240, y=10-165px に収まる。
     mat_win_frame = make_mat("win_frame_m", srgb(0x151C1D), rough=0.34, metal=0.72)
     mat_win_glow = make_mat("win_glow_m", (0.01, 0.06, 0.06, 1), emit=(0.10, 0.52, 0.56, 1), strength=2.4)
-    WX, WZ = 0.98, 1.86  # 上端で見切れないよう少し下げ、キャニスターとの重なりを抑える
-    add_box("win_frame", (1.34, 0.12, 0.60), (WX, 1.99, WZ), mat_win_frame)
-    add_box("win_void", (1.20, 0.06, 0.48), (WX, 2.02, WZ),
-            make_mat("void2", (0.004, 0.03, 0.05, 1), rough=1.0, emit=(0.02, 0.10, 0.14, 1), strength=0.6))  # 外宇宙を壁より0.7EV明るく
+    WX, WZ = 1.08, 0.98
+    add_box("win_frame_t", (1.00, 0.12, 0.05), (WX, 1.99, WZ + 0.185), mat_win_frame)
+    add_box("win_frame_b", (1.00, 0.12, 0.05), (WX, 1.99, WZ - 0.185), mat_win_frame)
+    add_box("win_frame_l", (0.05, 0.12, 0.32), (WX - 0.475, 1.99, WZ), mat_win_frame)
+    add_box("win_frame_r", (0.05, 0.12, 0.32), (WX + 0.475, 1.99, WZ), mat_win_frame)
+    add_box("win_void", (0.90, 0.06, 0.32), (WX, 2.02, WZ),
+            make_mat("void2", (0.006, 0.045, 0.065, 1), rough=1.0,
+                     emit=(0.025, 0.18, 0.24, 1), strength=1.4))
     # 明るいシアン内枠(上下左右、幅約0.03=最終12-18px)
-    add_box("win_in_t", (1.22, 0.05, 0.03), (WX, 1.975, WZ + 0.24), mat_win_glow)
-    add_box("win_in_b", (1.22, 0.05, 0.03), (WX, 1.975, WZ - 0.24), mat_win_glow)
-    add_box("win_in_l", (0.03, 0.05, 0.48), (WX - 0.61, 1.975, WZ), mat_win_glow)
-    add_box("win_in_r", (0.03, 0.05, 0.48), (WX + 0.61, 1.975, WZ), mat_win_glow)
+    add_box("win_in_t", (0.92, 0.05, 0.025), (WX, 1.975, WZ + 0.16), mat_win_glow)
+    add_box("win_in_b", (0.92, 0.05, 0.025), (WX, 1.975, WZ - 0.16), mat_win_glow)
+    add_box("win_in_l", (0.025, 0.05, 0.32), (WX - 0.45, 1.975, WZ), mat_win_glow)
+    add_box("win_in_r", (0.025, 0.05, 0.32), (WX + 0.45, 1.975, WZ), mat_win_glow)
     # 窓のバックライト(窓を光源化=室内へ寒色を差し込む)
     bpy.ops.object.light_add(type='AREA', location=(WX, 2.12, WZ))
     winl = bpy.context.object
-    winl.data.energy = 24; winl.data.size = 1.15; winl.data.size_y = 0.5
+    winl.data.energy = 24; winl.data.size = 0.90; winl.data.size_y = 0.34
     winl.data.color = (0.20, 0.55, 0.62); winl.rotation_euler = (math.radians(90), 0, 0)
     random.seed(707)
-    for i in range(24):
-        sx = WX + random.uniform(-0.55, 0.55)
-        sz = WZ + random.uniform(-0.21, 0.21)
+    for i in range(18):
+        sx = WX + random.uniform(-0.40, 0.40)
+        sz = WZ + random.uniform(-0.13, 0.13)
         bpy.ops.mesh.primitive_uv_sphere_add(segments=6, ring_count=4,
                                              radius=random.uniform(0.004, 0.009),
                                              location=(sx, 1.99, sz))
-        st = bpy.context.object; st.name = f"wstar_{i}"; st.data.materials.append(mat_star)
-    # 船骸シルエット(窓内右上)
-    add_box("wreck_sil", (0.40, 0.04, 0.11), (WX + 0.30, 1.99, WZ + 0.12),
-            make_mat("wreck", (0.004, 0.008, 0.012, 1), rough=0.9),
-            rot=(0, math.radians(12), math.radians(-8)))
+        st = bpy.context.object; st.name = f"win_star_{i}"; st.data.materials.append(mat_star)
+    # 船骸シルエット: 折れた胴体・主翼・尾部を分け、遠目にも一塊の黒棒に見えない形へ。
+    mat_wreck = make_mat("win_wreck_m", (0.003, 0.006, 0.009, 1), rough=0.92)
+    add_box("win_wreck_hull", (0.28, 0.035, 0.055),
+            (WX + 0.10, 1.965, WZ + 0.07), mat_wreck,
+            rot=(0, math.radians(8), math.radians(-8)))
+    add_box("win_wreck_wing", (0.15, 0.032, 0.105),
+            (WX + 0.02, 1.963, WZ + 0.045), mat_wreck,
+            rot=(0, math.radians(-12), math.radians(22)))
+    add_box("win_wreck_tail", (0.085, 0.032, 0.065),
+            (WX + 0.22, 1.963, WZ + 0.09), mat_wreck,
+            rot=(0, math.radians(10), math.radians(-28)))
 
     # 相手席(中央奥) — 椅子+暗いシルエット+琥珀の眼2点(ゲーム内の「相手の実在」と同一存在)
     add_box("chair_seat", (0.5, 0.45, 0.08), (0, 1.35, 0.55), mat_machine)
