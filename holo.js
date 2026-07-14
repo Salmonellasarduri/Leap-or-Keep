@@ -496,7 +496,7 @@ export function createHolo(ctx) {
   function fx(ev) {
     if (!active) return;
     const { META } = dbg();
-    if (ev.type === "boom") { burst(ev.x, ev.y, !!ev.big); if (ev.big) disturb(0.6); bg.eyeSpike = performance.now() + 170; return; }
+    if (ev.type === "boom") { burst(ev.x, ev.y, !!ev.big); if (ev.big) { disturb(0.6); cabinKick(ev.x - 1.5, ev.y - 1.5, 130, 5); } bg.eyeSpike = performance.now() + 170; return; }
     if (ev.type === "flash") {
       for (const c of ev.cells || []) { const st = tileState[c.y * GRID + c.x]; if (st) st.hot = 1; }
       bg.eyeSpike = performance.now() + 170; // 発射の瞬間、椅子の眼が見開く
@@ -506,13 +506,11 @@ export function createHolo(ctx) {
       glitches.set(ev.unitId, performance.now() + 180);
       const { S } = dbg(); // 自機側の被弾は投影全体が乱れる(Phase 2.5)
       const u = S && S.enc && S.enc.units.find(x => x.id === ev.unitId);
-      if (u && u.side === "player") disturb(1);
+      if (u && u.side === "player") { disturb(1); cabinAlert(0.95); cabinKick(u.x - 1.5, 0.6, DMG_T, DMG_R, 1); } // Phase2: 被弾=赤アラート+鋭い方向キック(周波数up)(Sol)
       return;
     }
     if (ev.type === "shake") {
-      if (META.fxLite) return;
-      const cls = ev.n >= 3 ? "shake3" : (ev.n === 2 ? "shake2" : "shake");
-      canvas.classList.remove("shake", "shake2", "shake3"); void canvas.offsetWidth; canvas.classList.add(cls);
+      cabinKick(0.25, 1, SHAKE_T * (ev.n || 1), SHAKE_R * (ev.n || 1)); // Phase2: 攻撃反動=下方向の一撃(link段階)。CSS classシェイクは統一のため廃止
       return;
     }
   }
@@ -524,6 +522,90 @@ export function createHolo(ctx) {
   function hover(x, y) { hoverKey = x + "," + y; }
   function hoverOff() { hoverKey = null; }
   function hlUnit(id, on) { const rec = units.get(id); if (rec) rec._hl = !!on; } // 意図リストホバー→機体増光(Sol D)
+
+  // ==== ウォーテーブルPhase2: 反応する船内(embodied command) ====================
+  // Solの処方=ランダム揺れでなく「指令方向と反対へ押される」方向性プッシュ+被弾の鋭いキック+赤アラート。
+  // 実装=three.jsカメラ/ライトは触らず、canvasのCSS transform(合成のみ=部屋PBR再描画ゼロ=fpsゲート不変)と
+  // 赤ヴィネットのopacity脈動だけで表現。減衰バネで「よろけて戻る」+わずかなオーバーシュート(二次リバウンド)。
+  const cabin = { x: 0, y: 0, r: 0, vx: 0, vy: 0, vr: 0, sh: 0, vsh: 0, applied: false };
+  const blag = { x: 0, y: 0, r: 0, sh: 0 };          // Sol#4a: 盤ホロは部屋を~40ms遅れて追う(減衰した接続感=剛結でない)
+  let wBoost = 0;                                     // Sol#4b: 被弾は周波数も上げる(強打ほど速くスナップ)
+  let alertUntil = 0, alertMag = 0, alertT0 = 0;
+  // 調律(スクリーンpx/度。速度impulseを与え、W(固有角)/Z(減衰比)のバネで0へ)
+  const CAB_W = 33, CAB_Z = 0.42;                     // ζ<1=不足減衰→よろけ+小リバウンド、~250msで収束
+  const INERTIA_T = 270, INERTIA_R = 14;              // 慣性プッシュ(移動)の並進/回転impulse(ドリフト時~0.26°=Sol 0.15-0.35°域)
+  const DRIFT_MUL = 1.7, MOVE_MUL = 0.6;              // ドリフト(慣性)ビートは強く/通常移動は控えめ
+  const DMG_T = 700, DMG_R = 60;                       // 被弾の鋭いキック(~0.66°=Sol 0.5-1.2°域)
+  const SHAKE_T = 170, SHAKE_R = 9;                    // 攻撃反動(link段階)
+  function reducedMotionFx() {
+    if ((dbg().META || {}).fxLite) return true;
+    try { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (_) { return false; }
+  }
+  // dx,dy=スクリーン方向(x右/y下)。並進impulse tMag・回転impulse rMag(符号はdxで決める)。snap=被弾で周波数up。
+  function cabinKick(dx, dy, tMag, rMag, snap) {
+    if (reducedMotionFx()) return;
+    const n = Math.hypot(dx, dy) || 1;
+    cabin.vx += (dx / n) * tMag; cabin.vy += (dy / n) * tMag;
+    cabin.vr += (rMag || 0) * (dx >= 0 ? 1 : -1);
+    cabin.vsh += (rMag || 0) * 0.5 * (dx >= 0 ? 1 : -1); // ホロの一瞬のせん断(Sol: 較正が乱れる)
+    if (snap) wBoost = Math.max(wBoost, snap);           // Sol#4b: 強打は速くスナップ
+  }
+  function cabinAlert(mag) { // 被弾赤アラート(赤非常灯の点灯+脈動。動きと独立=減モーションでも点く)
+    const now = performance.now();
+    alertT0 = now; alertUntil = now + (mag > 0.7 ? 2300 : 1450); alertMag = Math.max(alertMag, mag);
+  }
+  function stepCabin(now, dt) {
+    if (typeof document === "undefined") return;
+    const dts = Math.min(40, dt) / 1000;
+    wBoost *= Math.exp(-Math.min(40, dt) / 220);        // 被弾スナップは~220msで通常周波数へ緩む
+    const W = CAB_W * (1 + 0.5 * wBoost);               // Sol#4b: 強打直後は固有周波数を最大+50%(速くスナップ)
+    const acc = (p, v) => -W * W * p - 2 * CAB_Z * W * v; // 減衰バネ→0
+    cabin.vx += acc(cabin.x, cabin.vx) * dts; cabin.x += cabin.vx * dts;
+    cabin.vy += acc(cabin.y, cabin.vy) * dts; cabin.y += cabin.vy * dts;
+    cabin.vr += acc(cabin.r, cabin.vr) * dts; cabin.r += cabin.vr * dts;
+    cabin.vsh += acc(cabin.sh, cabin.vsh) * dts; cabin.sh += cabin.vsh * dts;
+    // 盤ホロは部屋を~40msの時定数で追う(Sol#4a・#3: 同方向だが少し遅れて減衰=剛結でない接続感)
+    const la = 1 - Math.exp(-Math.min(40, dt) / 40);
+    blag.x += (cabin.x - blag.x) * la; blag.y += (cabin.y - blag.y) * la; blag.r += (cabin.r - blag.r) * la; blag.sh += (cabin.sh - blag.sh) * la;
+    const live = Math.abs(cabin.x) + Math.abs(cabin.y) + Math.abs(cabin.r) + Math.abs(cabin.sh)
+      + Math.abs(cabin.vx) + Math.abs(cabin.vy) + Math.abs(cabin.vr) + Math.abs(blag.x) + Math.abs(blag.y) > 0.03;
+    if (live) {
+      const mag = Math.min(1, (Math.abs(cabin.x) + Math.abs(cabin.y)) / 20 + Math.abs(cabin.r) / 1.1);
+      const sc = 1 + mag * 0.05; // オーバースキャン=揺れで部屋canvasの縁の外(背景)が覗くのを隠す
+      // 部屋(3D世界)は全振幅で揺れる=「世界が反応」。盤ホロは遅延した0.55=戦術盤の可読性+減衰した接続感。
+      if (bg.canvas) bg.canvas.style.transform =
+        `translate(${cabin.x.toFixed(2)}px,${cabin.y.toFixed(2)}px) rotate(${cabin.r.toFixed(3)}deg) scale(${sc.toFixed(3)})`;
+      if (canvas) canvas.style.transform =
+        `translate(${(blag.x * 0.55).toFixed(2)}px,${(blag.y * 0.55).toFixed(2)}px) rotate(${(blag.r * 0.55).toFixed(3)}deg) skewX(${blag.sh.toFixed(3)}deg)`;
+      cabin.applied = true;
+    } else if (cabin.applied) { // 収束→inline transformを1度だけ消す(以後アイドルコスト0)
+      cabin.x = cabin.y = cabin.r = cabin.sh = cabin.vx = cabin.vy = cabin.vr = cabin.vsh = 0;
+      blag.x = blag.y = blag.r = blag.sh = 0;
+      if (bg.canvas) bg.canvas.style.transform = "";
+      if (canvas) canvas.style.transform = "";
+      cabin.applied = false;
+    }
+    // 赤アラート: エッジ・ヴィネットのopacityを脈動(Sol: 1.5-2Hz)。onset直後は少し強い=露出ディップ相当。
+    if (bg.alert) {
+      let op = 0;
+      if (now < alertUntil) {
+        const reduce = reducedMotionFx();
+        const life = 1 - (now - alertT0) / (alertUntil - alertT0);           // 1→0のエンベロープ
+        const onset = Math.min(1, (now - alertT0) / 120);                    // 立ち上がりの一瞬強め
+        const pulse = reduce ? 0.6 : (0.55 + 0.45 * Math.sin(now / 1000 * Math.PI * 2 * 1.8)); // ~1.8Hz
+        op = alertMag * (0.35 + 0.65 * life) * (0.4 + 0.6 * pulse) * (0.5 + 0.5 * onset);
+      } else if (alertMag) { alertMag = 0; }
+      const cur = bg.alert.__op || 0;
+      if (Math.abs(op - cur) > 0.004) { bg.alert.style.opacity = op.toFixed(3); bg.alert.__op = op; }
+    }
+  }
+  function cabinReset() { // 戦闘離脱時にtransform/アラートを消す
+    cabin.x = cabin.y = cabin.r = cabin.sh = cabin.vx = cabin.vy = cabin.vr = cabin.vsh = 0;
+    blag.x = blag.y = blag.r = blag.sh = 0; wBoost = 0;
+    cabin.applied = false; alertUntil = 0; alertMag = 0;
+    try { if (bg.canvas) bg.canvas.style.transform = ""; if (canvas) canvas.style.transform = "";
+      if (bg.alert) { bg.alert.style.opacity = "0"; bg.alert.__op = 0; } } catch (_) {}
+  }
 
   // ==== Phase 3a: 背景シーン(2枚分割 — 敵対レビュー反映) ====================
   // 盤ホロcanvasとは独立した全画面fixed canvas。deskbg.webpの「完成した一人称卓の絵」を
@@ -569,6 +651,9 @@ export function createHolo(ctx) {
     bg.curtain = document.createElement("div");
     bg.curtain.id = "holo-curtain";
     document.body.insertBefore(bg.curtain, app); // canvasの後=同z-indexでも上に描かれる
+    bg.alert = document.createElement("div"); // Phase2: 被弾赤アラートのエッジ・ヴィネット層
+    bg.alert.id = "cabin-alert";
+    document.body.insertBefore(bg.alert, app);
     // P6: グリーブル装飾層(機材のフチ。英字のみ=情報と装飾の分離。curtainの後=最前の-1層)
     const gre = document.createElement("div");
     gre.id = "greeble";
@@ -1056,6 +1141,7 @@ export function createHolo(ctx) {
     document.body.classList.remove("holo");
     bgHide();
     stopLoop();
+    cabinReset(); // Phase2: 揺れ/赤アラートのinline transformを消して離脱
     if (canvas.parentElement) canvas.remove();
   }
 
@@ -1136,6 +1222,11 @@ export function createHolo(ctx) {
           tweenUnit(rec, to, 500, easeOutBack); // 慣性オーバーシュート(D4)
         } else {
           tweenUnit(rec, to, 340, easeOutCubic); // DOM FLIPと同尺
+        }
+        if (u.side === "player") { // Phase2: 自機移動→船内が慣性でよろける。Sol=指令方向の反対へ押される(両軸とも反対で統一)
+          const dd = wrapDir ? DIRS[wrapDir] : { x: u.x - rec.gx, y: u.y - rec.gy }; // grid→screen(+x右/+y下)
+          const mul = driftBeat ? DRIFT_MUL : MOVE_MUL;                              // ドリフト=慣性ビートは強く/通常移動は控えめ
+          cabinKick(-dd.x, -dd.y, INERTIA_T * mul, INERTIA_R * mul);
         }
         rec.gx = u.x; rec.gy = u.y;
       }
@@ -1224,6 +1315,7 @@ export function createHolo(ctx) {
     }
     if (wellRing.visible && amb) wellRing.rotation.z = now / 1200; // Sol #5: 0.7-1.0 rad/s
     try { bgDraw(now, dt, amb); } catch (e) { bgKill(); } // 背景シーンは死んでも盤ホロを巻き込まない
+    try { stepCabin(now, dt); } catch (_) {}              // Phase2: 反応する船内(CSS変形/赤アラート=三再描画なし)
 
     // ---- Phase 2.5: 井戸の宇宙(星ドリフト・星雲・投影乱れ) ----
     for (const st of env.stars) {

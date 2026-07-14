@@ -458,6 +458,12 @@ body.holo3.room-live #holo-curtain{top:0;
   background:
     radial-gradient(ellipse 82% 88% at 44% 47%, transparent 40%, rgba(2,6,11,.20) 74%, rgba(1,4,8,.44) 100%),
     linear-gradient(to bottom, rgba(2,7,15,.34) 0%, transparent 20%, transparent 60%, rgba(2,7,15,.70) 100%);}
+/* ===== ウォーテーブルPhase2: 被弾赤アラート(CSSエッジ・ヴィネット。opacityはholo.jsが脈動駆動=three再描画ゼロ) ===== */
+#cabin-alert{display:none; position:fixed; inset:0; z-index:6; pointer-events:none; opacity:0;
+  background:
+    radial-gradient(ellipse 132% 120% at 50% 50%, rgba(150,0,0,0) 58%, rgba(210,18,18,.30) 80%, rgba(205,4,4,1) 100%);
+  will-change:opacity;}
+body.holo3 #cabin-alert{display:block;}
 /* ===== Phase 3.5: 視線アンカー(Sol処方: 全画面ズームでなく「盤列と背景の相対運動」。盤canvasは#boardwrap内=DOM/3D整合が自動維持) ===== */
 body.holo3 #boardwrap{transition:transform .55s cubic-bezier(.22,.75,.18,1);}
 body.holo3.gaze-lean #boardwrap{transform:scale(1.016) translateY(4px);} /* 敵の手番: 盤へ身を乗り出す(背景は3D側で後退・減光) */

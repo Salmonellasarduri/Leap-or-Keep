@@ -59,5 +59,15 @@ DOMホモグラフィ(Approach A)を耐久的な終点にし、フル3D merge(Ap
 - **ゲート**: モバイルfps p95 16.8ms/hitches 3(≤17.5/≤4)PASS、`npm test` 360 PASS、lint L-037 OK。入力/calibrate/2Dフォールバック不変。
 - 検証ハーネス(gitignore): `tmp/phase1-shot.mjs`(合成)/`tmp/phase1-debug.mjs`(盤ホロ隠して部屋のみ)/`tmp/proj-calc.mjs`(投影計算)。デバッグ: `window.__holo.rigInfo()`。
 
+## Phase 2 実装完了(2026-07-14 — 反応する船内 / embodied command)
+既存 `fx()`(boom/flash/hitflash/shake)+ `sync()` の自機移動を船内反応へ fan-out。**核心=three.jsカメラ/ライトは一切触らない**(触るとビート毎に重PBR部屋を再描画→dirty-skip破壊→モバイルfps崩壊=このプランで唯一の実リスク)。代わりに:
+- **CSS transform の減衰バネ**を毎フレーム部屋canvas(#holo-bg)+盤canvas(#holo-canvas)に適用=合成のみ=**three再描画ゼロ**。部屋=全振幅で「世界が反応」、盤ホロ=0.55×で戦術可読性を残す。`stepCabin`(holo.js)。
+- **慣性揺れ**: 自機がドリフト/移動→指令方向の**反対**へ方向性プッシュ(Sol処方)。ドリフト(慣性)ビート=強め(DRIFT_MUL 1.7)、通常移動=控えめ(0.6)。実測 ~0.17°(Sol 0.15-0.35°域)。
+- **被弾赤アラート**: 自機hitflash→赤エッジ・ヴィネット(`#cabin-alert`・CSS)を~1.8Hzで脈動+鋭い方向キック(実測0.665°=Sol 0.5-1.2°域)+scaleパンチ~1.05。中心は可読・全面赤にしない(Sol)。
+- **攻撃反動**: link段階の下方向ジョルト。**ホロせん断**(skewX)を揺れに随伴。
+- **アクセシビリティ**: `prefers-reduced-motion` か `META.fxLite` で揺れOFF(赤アラートは静的表示)。`cabinReset()` で離脱時にinline transform消去。
+- **fpsゲート維持**: reactive層active下でも beat p95 16.8ms / hitches 3(≤17.5/≤4)PASS。`npm test` 360 PASS、入力/LOGIC不変。
+- 検証: `tmp/phase2-shot.mjs`(fx別のpeak計測+赤アラート撮影)、`tmp/phase2-inertia.mjs`(実ドリフトで慣性発火検証)、`tmp/phase2-gif.mjs`(慣性→被弾のモーションGIF `tmp/gif-warroom2.gif`)。
+
 ## Solのステージング(ビジュアル)
 卓上に**サルベージ製ホロ投影機ユニット**(45–60cm・不揃い装甲・露出ボルト・溶接補修・4本のシアン発光ポスト)、グリッドは発光面の2–4cm上・船は更に4–8cm上に浮遊、浅い**切頭光錐**(半透明シアン+ノイズ+走査帯+塵)。駒は**ミニチュア船シルエット**(識別可能な船体+明るいエンジン/艦橋/武装、被弾でホロ不安定化・ピクセル片剥離)。移動=浮上→目的地へバンク→着地→ホロ再走査+軌跡リボン。攻撃=抑制されたベクトル線+着弾ブルーム。右のHUDは卓横の**直立補助ディスプレイ**として世界内化=卓全体を1つの指揮ステーションに。
