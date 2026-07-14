@@ -493,6 +493,7 @@ export function createHolo(ctx) {
     }
   }
   const glitches = new Map(); // unitId -> until(ms)
+  let selfHitT0 = 0, selfHitId = null; // Phase2磨き(Gemini初見指摘): 被弾時に自機を見失わないビーコン
   function fx(ev) {
     if (!active) return;
     const { META } = dbg();
@@ -506,7 +507,7 @@ export function createHolo(ctx) {
       glitches.set(ev.unitId, performance.now() + 180);
       const { S } = dbg(); // 自機側の被弾は投影全体が乱れる(Phase 2.5)
       const u = S && S.enc && S.enc.units.find(x => x.id === ev.unitId);
-      if (u && u.side === "player") { disturb(1); cabinAlert(0.95); cabinKick(u.x - 1.5, 0.6, DMG_T, DMG_R, 1); } // Phase2: 被弾=赤アラート+鋭い方向キック(周波数up)(Sol)
+      if (u && u.side === "player") { disturb(1); cabinAlert(0.95); cabinKick(u.x - 1.5, 0.6, DMG_T, DMG_R, 1); selfHitT0 = performance.now(); selfHitId = ev.unitId; } // Phase2: 被弾=赤アラート+鋭いキック+自機ビーコン(Gemini初見指摘=赤の中で自機を見失う)
       return;
     }
     if (ev.type === "shake") {
@@ -556,14 +557,21 @@ export function createHolo(ctx) {
   }
   function stepCabin(now, dt) {
     if (typeof document === "undefined") return;
-    const dts = Math.min(40, dt) / 1000;
     wBoost *= Math.exp(-Math.min(40, dt) / 220);        // 被弾スナップは~220msで通常周波数へ緩む
     const W = CAB_W * (1 + 0.5 * wBoost);               // Sol#4b: 強打直後は固有周波数を最大+50%(速くスナップ)
     const acc = (p, v) => -W * W * p - 2 * CAB_Z * W * v; // 減衰バネ→0
-    cabin.vx += acc(cabin.x, cabin.vx) * dts; cabin.x += cabin.vx * dts;
-    cabin.vy += acc(cabin.y, cabin.vy) * dts; cabin.y += cabin.vy * dts;
-    cabin.vr += acc(cabin.r, cabin.vr) * dts; cabin.r += cabin.vr * dts;
-    cabin.vsh += acc(cabin.sh, cabin.vsh) * dts; cabin.sh += cabin.vsh * dts;
+    // 大きなdt(負荷/スロットル/タブ復帰)でも明示Eulerが発散しないよう≤8msに細分化して積分
+    for (let rem = Math.min(80, dt); rem > 1e-4; rem -= 8) {
+      const h = Math.min(8, rem) / 1000;
+      cabin.vx += acc(cabin.x, cabin.vx) * h; cabin.x += cabin.vx * h;
+      cabin.vy += acc(cabin.y, cabin.vy) * h; cabin.y += cabin.vy * h;
+      cabin.vr += acc(cabin.r, cabin.vr) * h; cabin.r += cabin.vr * h;
+      cabin.vsh += acc(cabin.sh, cabin.vsh) * h; cabin.sh += cabin.vsh * h;
+    }
+    // 安全クランプ: 数値ブリップでも船内が暴れない上限(通常ピーク~7px/0.66°よりずっと上=常用は非クリップ)
+    const cl = (v, m) => v < -m ? -m : v > m ? m : v;
+    cabin.x = cl(cabin.x, 48); cabin.y = cl(cabin.y, 48); cabin.r = cl(cabin.r, 3.5); cabin.sh = cl(cabin.sh, 3.5);
+    cabin.vx = cl(cabin.vx, 1400); cabin.vy = cl(cabin.vy, 1400); cabin.vr = cl(cabin.vr, 500); cabin.vsh = cl(cabin.vsh, 500);
     // 盤ホロは部屋を~40msの時定数で追う(Sol#4a・#3: 同方向だが少し遅れて減衰=剛結でない接続感)
     const la = 1 - Math.exp(-Math.min(40, dt) / 40);
     blag.x += (cabin.x - blag.x) * la; blag.y += (cabin.y - blag.y) * la; blag.r += (cabin.r - blag.r) * la; blag.sh += (cabin.sh - blag.sh) * la;
@@ -1297,7 +1305,21 @@ export function createHolo(ctx) {
       rec.body.position.z = rec.spec.h / 2 * heightScale() + 2 + bob + rec.raise;
       if (rec.edges) rec.edges.position.z = rec.body.position.z;
       rec.glow.position.z = 0.8 + rec.raise;
-      rec.glow.material.opacity = rec._hl ? 0.3 : 0.16; // 意図ホバー中は足元光を増す
+      // 自機ビーコン: 被弾~1.1sは足元光を明シアン白へ+拡大脈動=赤アラート中でも自機を発見できる(Gemini初見指摘)
+      if (selfHitId === id && now - selfHitT0 < 1100) {
+        const t = (now - selfHitT0) / 1100, ping = 0.5 + 0.5 * Math.sin(now / 70);
+        rec.glow.material.color.setHex(0xcffcff);
+        rec.glow.material.opacity = (0.4 + 0.5 * ping) * (1 - 0.35 * t);
+        rec.glow.scale.setScalar(1 + 0.9 * t);
+        if (rec.edges) rec.edges.material.opacity = 0.85 + 0.15 * ping;
+        rec._beaconOn = true;
+      } else {
+        if (rec._beaconOn) { // ビーコン終了時に既定へ1度だけ戻す
+          rec.glow.material.color.setHex(rec.side === "player" ? COL.player : (rec.side === "hazard" ? COL.hazard : COL.enemy));
+          rec.glow.scale.setScalar(1); if (rec.edges) rec.edges.material.opacity = 0.8; rec._beaconOn = false;
+        }
+        rec.glow.material.opacity = rec._hl ? 0.3 : 0.16; // 意図ホバー中は足元光を増す
+      }
       if (rec._popT0) {
         const t = Math.min(1, (now - rec._popT0) / 220);
         const s = easeOutBack(t);
