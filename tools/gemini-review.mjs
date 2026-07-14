@@ -11,7 +11,7 @@
 //
 // 認証: gemini CLI が GEMINI_API_KEY(AI Studio 無料キー)を要求する。未設定なら下で明示エラー。
 //   OAuth(Login with Google)はこのアカウントが Code Assist 無料枠 ineligible のため不可(2026-07-14実測)。
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { writeFileSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
@@ -35,7 +35,7 @@ loadDotEnv();
 
 // 最新モデル。AI Studio の最新IDに合わせて調整可(--model / 環境変数 GEMINI_REVIEW_MODEL でも上書き)。
 // 正確な最新IDは `--list-models` で確認できる。
-const DEFAULT_MODEL = process.env.GEMINI_REVIEW_MODEL || "gemini-2.5-pro";
+const DEFAULT_MODEL = process.env.GEMINI_REVIEW_MODEL || "gemini-3.1-pro-preview"; // 最新(2026-07-14時点)。--list-modelsで確認可
 
 // --- 引数パース ---
 const argv = process.argv.slice(2);
@@ -107,12 +107,25 @@ const imgTokens = absImgs.map(p => "@" + p).join(" ");
 
 const prompt = `${personaText}\n\n== 見てほしいもの ==\n${briefText || "(添付の画像/映像)"}\n\n${imgTokens}`;
 
+// gemini CLI の node エントリを解決(.cmd を shell 経由で呼ぶと Windows で複数行 -p が
+// 最初の改行で切れる+空白で分割される→ node で直接叩き shell:false で argv をそのまま渡す)。
+function geminiEntry() {
+  if (process.env.GEMINI_CLI_ENTRY && existsSync(process.env.GEMINI_CLI_ENTRY)) return process.env.GEMINI_CLI_ENTRY;
+  try {
+    const root = execSync("npm root -g", { encoding: "utf8" }).trim();
+    const p = path.join(root, "@google", "gemini-cli", "dist", "index.js");
+    if (existsSync(p)) return p;
+  } catch (_) {}
+  return null;
+}
+
 // --- gemini 呼び出し(cwd=temp で巨大リポのworkspace走査を避け、画像親dirだけ include) ---
-const geminiBin = process.platform === "win32" ? "gemini.cmd" : "gemini";
-const args = ["-m", model, "-p", prompt];
+const entry = geminiEntry();
+if (!entry) { console.error("gemini CLI の node エントリが見つかりません。GEMINI_CLI_ENTRY で dist/index.js を指定するか、npm i -g @google/gemini-cli を確認。"); process.exit(1); }
+const args = [entry, "-m", model, "-p", prompt];
 for (const d of imgDirs) { args.push("--include-directories", d); }
 
-const child = spawn(geminiBin, args, { cwd: tmpdir(), shell: process.platform === "win32", stdio: ["ignore", "pipe", "pipe"] });
+const child = spawn(process.execPath, args, { cwd: tmpdir(), shell: false, stdio: ["ignore", "pipe", "pipe"] });
 let stdout = "", stderr = "";
 child.stdout.on("data", d => { stdout += d; });
 child.stderr.on("data", d => { stderr += d; });
