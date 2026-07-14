@@ -1111,16 +1111,24 @@ export function createHolo(ctx) {
     for (const k of ["winGlow", "lampGlow", "wreck", "dustN", "dustF"]) if (bg[k]) bg[k].visible = v;
   }
 
+  const RESTAGE = (() => { try { return new URLSearchParams(location.search).get("restage") === "1"; } catch (_) { return false; } })(); // 卓上化再ステージの作業フラグ(?restage=1)
   function roomCam(w, h) {
-    // Blender cam_room(38mm/36mmセンサ・横FOV50.6°)をthree座標へ: eye(0,1.62,1.58)→aim(0,0.82,-0.43)
-    const hfov = 2 * Math.atan(18 / 38);
-    bg.cam.fov = 2 * Math.atan(Math.tan(hfov / 2) * h / w) * 180 / Math.PI;
-    bg.cam.aspect = w / h;
-    bg.cam.near = 0.05; bg.cam.far = 60; // 部屋はメートル空間 — px用のnear10だと全てニアクリップされる
-    // マウス視差: 頭が数cm動く(DOM整合の制約なし — 部屋は自由)
     const px = bg.px * 0.004, py = bg.py * 0.004;
-    bg.cam.position.set(0 + px, 1.62 + py, 1.58);
-    bg.cam.lookAt(0 + px * 0.4, 0.82 + py * 0.4, -0.43);
+    if (RESTAGE) {
+      // 再ステージStep1(?restage=1): 盤のCSS(perspective:1050px+rotateX34°)=「水平面を約56°見下ろす」と同じ潰れ方(Sol)。
+      // 56°見下ろし+FOV=CSS perspective一致で机が盤と同率に潰れ、盤が卓に載って見える。新テーブルモデルと組で仕上げる。
+      bg.cam.fov = 2 * Math.atan((h / 2) / 1050) * 180 / Math.PI; // vFOV=CSS一致(aspectで水平も自動一致)
+      bg.cam.aspect = w / h; bg.cam.near = 0.05; bg.cam.far = 60;
+      bg.cam.position.set(0 + px, 2.22 + py, 0.57);          // 約56°見下ろし(Sol: eye)
+      bg.cam.lookAt(0 + px * 0.4, 0.75 + py * 0.4, -0.43);   // aim(机上面 y≈0.7375 の少し上)
+    } else {
+      // 現行(既定): Blender cam_room(38mm・約22°見下ろし)。再ステージ完了まで既定はこのまま。
+      const hfov = 2 * Math.atan(18 / 38);
+      bg.cam.fov = 2 * Math.atan(Math.tan(hfov / 2) * h / w) * 180 / Math.PI;
+      bg.cam.aspect = w / h; bg.cam.near = 0.05; bg.cam.far = 60;
+      bg.cam.position.set(0 + px, 1.62 + py, 1.58);
+      bg.cam.lookAt(0 + px * 0.4, 0.82 + py * 0.4, -0.43);
+    }
     bg.cam.updateProjectionMatrix();
   }
 
