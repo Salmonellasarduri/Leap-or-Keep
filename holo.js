@@ -957,7 +957,7 @@ export function createHolo(ctx) {
     room.loading = true;
     Promise.all([
       import("./vendor/three/GLTFLoader.js"),
-      fetch("art/salvage_room.glb").then(r => { if (!r.ok) throw new Error("glb " + r.status); return r.arrayBuffer(); }),
+      fetch(RESTAGE ? "art/salvage_table.glb" : "art/salvage_room.glb").then(r => { if (!r.ok) throw new Error("glb " + r.status); return r.arrayBuffer(); }),
     ]).then(([mod, buf]) => new Promise((res, rej) => new mod.GLTFLoader().parse(buf, "art/", res, rej)))
       .then(gltf => { roomBuild(gltf.scene); })
       .catch(e => { room.failed = true; try { console.info("room3d unavailable:", e && e.message || e); } catch (_) {} });
@@ -975,6 +975,7 @@ export function createHolo(ctx) {
   function roomBuild(obj) {
     // glTFはY-up(Blender Z-up から変換済み)。シーン単位=メートルのまま、カメラをBlenderの一人称位置へ。
     room.obj = obj;
+    if (RESTAGE) obj.position.set(0, 0, -0.43); // 卓上化: ウェル中心(three z=0)をカメラ注視点(z=-0.43)へ寄せる(第1パス・要調整)
     bg.scene.add(obj);
     // ==== 暖⇔冷の照明リグ(決定的レバー — Sol独立監査の処方値。左=暖色タングステン / 右奥=冷色) ====
     // 座標=Blender(x, z, -y)。decay=2.0(物理falloff)で「本物の光源」に。過度な寒色フィルで前景を平板化しない。
@@ -992,7 +993,7 @@ export function createHolo(ctx) {
     const front = mk(new THREE.PointLight(0x7899a3, 11, 6, 2.0)); front.position.set(-0.35, 1.55, 1.35);
     // 大気: 冷色の指数フォグ=奥へ落ちる暗がり(密度0.10・#080D11。手前の暖色プールが際立つ)
     room.fog = new THREE.FogExp2(0x080d11, 0.10);
-    buildRoomRig();
+    if (!RESTAGE) buildRoomRig(); // 卓上化ではウェルが物理アンカー=旧投影機ソケットは不要
     roomShow();
     // ウォームアップ: 実レンダ1発でシェーダ+ジオメトリをGPUへ(初回ビート中の166msヒッチ回避。fps既定経路の要)
     try { roomCam(bg.canvas.clientWidth || 1280, bg.canvas.clientHeight || 800); bg.renderer.render(bg.scene, bg.cam); } catch (_) {}
