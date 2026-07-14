@@ -7,8 +7,9 @@
 #
 # GLBへ含めるもの:
 #   - 八角形サルベージ司令テーブル
-#   - 凹んだ物理グリッド・ウェル
+#   - 二段構造化した凹み物理グリッド・ウェル
 #   - 薄いシアン発光リム
+#   - 8分割装甲カラー、交換パッチ、外周の欠け・深い傷
 #   - 個別ノード化した卓上小物
 #   - 背面左寄りのコックピット壁パネル、配管、アンバー計器灯
 #
@@ -54,7 +55,9 @@ scene["asset_name"] = "salvage_table"
 scene["coordinate_system"] = "Blender Z-up"
 scene["table_surface_z"] = 0.74
 scene["well_floor_z"] = 0.70
-scene["well_opening_m"] = 0.86
+scene["well_opening_m"] = 0.91
+scene["well_floor_size_m"] = 0.852
+scene["well_slope_run_m"] = 0.029
 
 
 # ----------------------------------------------------------------------
@@ -150,6 +153,12 @@ mat_well = make_mat(
     rough=0.84,
     metal=0.28,
 )
+mat_well_slope = make_mat(
+    "well_sloped_transition",
+    srgb(0x09171C),
+    rough=0.79,
+    metal=0.34,
+)
 mat_well_recess = make_mat(
     "well_recess_shadow",
     srgb(0x02070A),
@@ -158,11 +167,11 @@ mat_well_recess = make_mat(
 )
 mat_grid_line = make_mat(
     "well_grid_engraving",
-    srgb(0x0C3034),
-    rough=0.62,
-    metal=0.35,
-    emit=srgb(0x1A8088),
-    strength=0.08,
+    srgb(0x09272B),
+    rough=0.72,
+    metal=0.30,
+    emit=srgb(0x15585E),
+    strength=0.015,
 )
 mat_cyan_rim = make_mat(
     "well_cyan_emissive_rim",
@@ -171,6 +180,20 @@ mat_cyan_rim = make_mat(
     metal=0.22,
     emit=srgb(0x31D5DF),
     strength=1.8,
+)
+
+# ウェル外周カラー
+mat_collar = make_mat(
+    "well_armor_collar",
+    srgb(0x263138),
+    rough=0.66,
+    metal=0.58,
+)
+mat_collar_alt = make_mat(
+    "well_armor_collar_alt",
+    srgb(0x1B252B),
+    rough=0.72,
+    metal=0.50,
 )
 
 # ハザード・摩耗
@@ -389,6 +412,35 @@ def add_oct_prism(name, outer_points, z_bottom, z_top, mat):
     return o
 
 
+def add_extruded_polygon(name, points, z_bottom, z_top, mat):
+    """凸多角形をZ方向へ押し出した薄い装甲板を作る。"""
+    n = len(points)
+    verts = []
+
+    for x, y in points:
+        verts.append((x, y, z_bottom))
+    for x, y in points:
+        verts.append((x, y, z_top))
+
+    faces = [
+        tuple(range(n - 1, -1, -1)),
+        tuple(range(n, n * 2)),
+    ]
+
+    for i in range(n):
+        j = (i + 1) % n
+        faces.append((i, j, n + j, n + i))
+
+    mesh = bpy.data.meshes.new(name + "_mesh")
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+
+    o = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(o)
+    o.data.materials.append(mat)
+    return o
+
+
 def add_octagonal_ring(
     name,
     outer_points,
@@ -443,6 +495,52 @@ def add_octagonal_ring(
     o = bpy.data.objects.new(name, mesh)
     bpy.context.collection.objects.link(o)
     o.data.materials.append(mat)
+    return o
+
+
+def add_sloped_octagonal_ring(
+    name,
+    outer_points,
+    inner_points,
+    outer_z,
+    inner_z,
+    mat,
+    thickness=0.004,
+):
+    """
+    上端開口から床外周へ落ちる傾斜面。
+    outer_pointsとinner_pointsは対応する8頂点を持つ。
+    """
+    n = len(outer_points)
+    verts = []
+
+    for x, y in outer_points:
+        verts.append((x, y, outer_z))
+    for x, y in inner_points:
+        verts.append((x, y, inner_z))
+
+    faces = []
+
+    for i in range(n):
+        j = (i + 1) % n
+        faces.append((i, j, n + j, n + i))
+
+    mesh = bpy.data.meshes.new(name + "_mesh")
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+
+    o = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(o)
+    o.data.materials.append(mat)
+
+    solidify = o.modifiers.new("slope_backing", "SOLIDIFY")
+    solidify.thickness = thickness
+    solidify.offset = -1.0
+
+    bevel_mod = o.modifiers.new("slope_edge_bevel", "BEVEL")
+    bevel_mod.width = 0.0015
+    bevel_mod.segments = 2
+
     return o
 
 
@@ -533,11 +631,11 @@ def convert_curves_to_mesh():
 # 八角テーブル本体
 #
 # 外形はX/Yとも約1.50m。
-# 角を落とした八角形で、開口は約0.86m角。
+# 角を落とした八角形で、ウェル上端開口は約0.91m角。
 
 OUTER_A = 0.75
 OUTER_B = 0.55
-INNER = 0.43
+INNER = 0.455
 
 outer_points = [
     (OUTER_A, OUTER_B),
@@ -583,13 +681,31 @@ bevel(table_ring, 0.008, 2)
 
 
 # ----------------------------------------------------------------------
-# 凹みウェル
+# 二段構造ウェル
+#
+# 上端開口: 0.910m
+# 床:       0.852m
+# 傾斜面:   片側29mm
+#
+# 上端から短い垂直壁を残し、その下を29mmの傾斜面で床へ接続する。
 
-# 深い影を作る下地
+FLOOR_HALF = 0.426
+floor_edge_points = [
+    (FLOOR_HALF, 0.0),
+    (FLOOR_HALF, FLOOR_HALF),
+    (0.0, FLOOR_HALF),
+    (-FLOOR_HALF, FLOOR_HALF),
+    (-FLOOR_HALF, 0.0),
+    (-FLOOR_HALF, -FLOOR_HALF),
+    (0.0, -FLOOR_HALF),
+    (FLOOR_HALF, -FLOOR_HALF),
+]
+
+# 深い影を作る下地。上端開口寸法に合わせる。
 bevel(
     add_box(
         "well_recess",
-        (0.895, 0.895, 0.024),
+        (0.910, 0.910, 0.024),
         (0, 0, 0.679),
         mat_well_recess,
     ),
@@ -597,7 +713,7 @@ bevel(
     2,
 )
 
-# 上面がZ=0.700
+# 上面がZ=0.700。床面寸法0.852mを維持。
 bevel(
     add_box(
         "well_floor",
@@ -609,53 +725,181 @@ bevel(
     2,
 )
 
-# 物理刻線。three.jsの4×4盤より弱く、盤の下地としてだけ見える。
+# 上端開口から床へ落ちる片側29mmの傾斜面。
+# 外側Z=0.718から床面Z=0.700へ接続し、上部には短い垂直壁を残す。
+add_sloped_octagonal_ring(
+    "well_sloped_transition",
+    inner_points,
+    floor_edge_points,
+    outer_z=0.718,
+    inner_z=0.700,
+    mat=mat_well_slope,
+    thickness=0.004,
+)
+
+# 約0.5mmの物理刻線。
+# 床から突出させず、上面を床面とほぼ同じ高さへ合わせる。
 grid_positions = (-0.2125, 0.0, 0.2125)
+GRID_WIDTH = 0.0014
+GRID_DEPTH = 0.0005
+GRID_CENTER_Z = 0.69975
 
 for i, x in enumerate(grid_positions):
     add_box(
         f"well_grid_x_{i}",
-        (0.0028, 0.835, 0.0015),
-        (x, 0, 0.7004),
+        (GRID_WIDTH, 0.835, GRID_DEPTH),
+        (x, 0, GRID_CENTER_Z),
         mat_grid_line,
     )
 
 for i, y in enumerate(grid_positions):
     add_box(
         f"well_grid_y_{i}",
-        (0.835, 0.0028, 0.0015),
-        (0, y, 0.7005),
+        (0.835, GRID_WIDTH, GRID_DEPTH),
+        (0, y, GRID_CENTER_Z),
         mat_grid_line,
     )
 
-# 内周の薄いシアンリム。ホログラム本体ではなく物理LED/inlay。
-RIM_HALF = 0.426
-RIM_Z = 0.716
+# 床側へ下げた物理LED/inlay。
+# 幅6mm、高さ5mm、中心Z=0.7045。
+RIM_HALF = 0.429
+RIM_WIDTH = 0.006
+RIM_HEIGHT = 0.005
+RIM_Z = 0.7045
 
 add_box(
     "well_rim_cyan_front",
-    (0.852, 0.010, 0.009),
+    (0.852, RIM_WIDTH, RIM_HEIGHT),
     (0, -RIM_HALF, RIM_Z),
     mat_cyan_rim,
 )
 add_box(
     "well_rim_cyan_back",
-    (0.852, 0.010, 0.009),
+    (0.852, RIM_WIDTH, RIM_HEIGHT),
     (0, RIM_HALF, RIM_Z),
     mat_cyan_rim,
 )
 add_box(
     "well_rim_cyan_left",
-    (0.010, 0.852, 0.009),
+    (RIM_WIDTH, 0.852, RIM_HEIGHT),
     (-RIM_HALF, 0, RIM_Z),
     mat_cyan_rim,
 )
 add_box(
     "well_rim_cyan_right",
-    (0.010, 0.852, 0.009),
+    (RIM_WIDTH, 0.852, RIM_HEIGHT),
     (RIM_HALF, 0, RIM_Z),
     mat_cyan_rim,
 )
+
+
+# ----------------------------------------------------------------------
+# ウェル外周8分割装甲カラー
+#
+# 幅55mm、段差4〜5mm、外側四隅30mm面取り。
+# 4枚の辺パネルと4枚の三角コーナーパネルで8分割する。
+
+COLLAR_INNER = INNER
+COLLAR_OUTER = 0.510
+COLLAR_CHAMFER = 0.030
+COLLAR_BASE_Z = 0.740
+
+collar_specs = [
+    (
+        "well_collar_front",
+        [
+            (-COLLAR_OUTER + COLLAR_CHAMFER, -COLLAR_OUTER),
+            (COLLAR_OUTER - COLLAR_CHAMFER, -COLLAR_OUTER),
+            (COLLAR_INNER, -COLLAR_INNER),
+            (-COLLAR_INNER, -COLLAR_INNER),
+        ],
+        0.744,
+        mat_collar,
+    ),
+    (
+        "well_collar_front_right_chamfer",
+        [
+            (COLLAR_INNER, -COLLAR_INNER),
+            (COLLAR_OUTER - COLLAR_CHAMFER, -COLLAR_OUTER),
+            (COLLAR_OUTER, -COLLAR_OUTER + COLLAR_CHAMFER),
+        ],
+        0.745,
+        mat_collar_alt,
+    ),
+    (
+        "well_collar_right",
+        [
+            (COLLAR_INNER, -COLLAR_INNER),
+            (COLLAR_OUTER, -COLLAR_OUTER + COLLAR_CHAMFER),
+            (COLLAR_OUTER, COLLAR_OUTER - COLLAR_CHAMFER),
+            (COLLAR_INNER, COLLAR_INNER),
+        ],
+        0.744,
+        mat_collar,
+    ),
+    (
+        "well_collar_back_right_chamfer",
+        [
+            (COLLAR_INNER, COLLAR_INNER),
+            (COLLAR_OUTER, COLLAR_OUTER - COLLAR_CHAMFER),
+            (COLLAR_OUTER - COLLAR_CHAMFER, COLLAR_OUTER),
+        ],
+        0.745,
+        mat_collar_alt,
+    ),
+    (
+        "well_collar_back",
+        [
+            (-COLLAR_INNER, COLLAR_INNER),
+            (COLLAR_INNER, COLLAR_INNER),
+            (COLLAR_OUTER - COLLAR_CHAMFER, COLLAR_OUTER),
+            (-COLLAR_OUTER + COLLAR_CHAMFER, COLLAR_OUTER),
+        ],
+        0.744,
+        mat_collar,
+    ),
+    (
+        "well_collar_back_left_chamfer",
+        [
+            (-COLLAR_INNER, COLLAR_INNER),
+            (-COLLAR_OUTER + COLLAR_CHAMFER, COLLAR_OUTER),
+            (-COLLAR_OUTER, COLLAR_OUTER - COLLAR_CHAMFER),
+        ],
+        0.745,
+        mat_collar_alt,
+    ),
+    (
+        "well_collar_left",
+        [
+            (-COLLAR_OUTER, COLLAR_OUTER - COLLAR_CHAMFER),
+            (-COLLAR_OUTER, -COLLAR_OUTER + COLLAR_CHAMFER),
+            (-COLLAR_INNER, -COLLAR_INNER),
+            (-COLLAR_INNER, COLLAR_INNER),
+        ],
+        0.744,
+        mat_collar,
+    ),
+    (
+        "well_collar_front_left_chamfer",
+        [
+            (-COLLAR_INNER, -COLLAR_INNER),
+            (-COLLAR_OUTER, -COLLAR_OUTER + COLLAR_CHAMFER),
+            (-COLLAR_OUTER + COLLAR_CHAMFER, -COLLAR_OUTER),
+        ],
+        0.745,
+        mat_collar_alt,
+    ),
+]
+
+for name, points, z_top, mat in collar_specs:
+    collar_piece = add_extruded_polygon(
+        name,
+        points,
+        z_bottom=COLLAR_BASE_Z,
+        z_top=z_top,
+        mat=mat,
+    )
+    bevel(collar_piece, 0.0015, 2)
 
 
 # ----------------------------------------------------------------------
@@ -715,6 +959,44 @@ for i, y in enumerate((-0.39, 0.39)):
         (0.620, y, 0.747),
         mat_seam,
     )
+
+
+# ----------------------------------------------------------------------
+# 交換パッチ板
+#
+# 卓面の高さに合わせた3枚の交換板。
+# 元の卓上寸法を変えず、既存装甲上または露出卓面上へ薄く追加する。
+
+repair_patch_specs = [
+    (
+        "repair_patch_plate_0",
+        (0.145, 0.080, 0.003),
+        (0.530, -0.570, 0.7415),
+        math.radians(-7),
+    ),
+    (
+        "repair_patch_plate_1",
+        (0.150, 0.065, 0.003),
+        (-0.330, 0.600, 0.7475),
+        math.radians(4),
+    ),
+    (
+        "repair_patch_plate_2",
+        (0.105, 0.075, 0.003),
+        (0.610, 0.135, 0.7475),
+        math.radians(-3),
+    ),
+]
+
+for name, size, loc, rot_z in repair_patch_specs:
+    patch = add_box(
+        name,
+        size,
+        loc,
+        mat_top_plate,
+        rot=(0, 0, rot_z),
+    )
+    bevel(patch, 0.004, 2)
 
 
 # ----------------------------------------------------------------------
@@ -788,37 +1070,40 @@ for i, x in enumerate((-0.46, -0.23, 0.23, 0.46)):
 
 # ----------------------------------------------------------------------
 # ハザード縞
+#
+# 浮いた棒ではなく、装甲カラー上へ0.8mm厚で収まる寸法にクリップ。
+# 黒い下地も0.5mm厚の薄いインレイとする。
 
-# 正面左寄り
+# 正面左寄り。frontカラー上面Z=0.744。
 add_box(
     "hazard_front_mount",
-    (0.51, 0.105, 0.006),
-    (-0.245, -0.621, 0.748),
+    (0.400, 0.048, 0.0005),
+    (-0.200, -0.4825, 0.74425),
     mat_hazard_black,
 )
 
-for i in range(8):
+for i in range(7):
     add_box(
         f"hazard_front_yellow_{i}",
-        (0.030, 0.104, 0.004),
-        (-0.455 + i * 0.060, -0.621, 0.754),
+        (0.024, 0.038, 0.0008),
+        (-0.350 + i * 0.050, -0.4825, 0.7449),
         mat_hazard_yellow,
         rot=(0, 0, math.radians(34)),
     )
 
-# 左奥の追加パッチ
+# 左奥。leftカラー上面Z=0.744。
 add_box(
     "hazard_left_mount",
-    (0.105, 0.33, 0.006),
-    (-0.621, 0.335, 0.748),
+    (0.048, 0.280, 0.0005),
+    (-0.4825, 0.220, 0.74425),
     mat_hazard_black,
 )
 
 for i in range(5):
     add_box(
         f"hazard_left_yellow_{i}",
-        (0.104, 0.026, 0.004),
-        (-0.621, 0.205 + i * 0.060, 0.754),
+        (0.038, 0.024, 0.0008),
+        (-0.4825, 0.100 + i * 0.060, 0.7449),
         mat_hazard_yellow,
         rot=(0, 0, math.radians(34)),
     )
@@ -893,6 +1178,44 @@ for cx, cy, rx, ry in scuff_zones:
             rot=(0, 0, math.radians(angle)),
         )
         scuff_index += 1
+
+
+# ----------------------------------------------------------------------
+# 外周角の欠け・深い傷
+#
+# 8つの外周角それぞれへ深い暗部と露出金属の縁を加える。
+# テーブル外形自体は変えず、GLB上で読める傷ジオメトリにする。
+
+for i, point in enumerate(outer_points):
+    prev_point = Vector(outer_points[(i - 1) % len(outer_points)])
+    next_point = Vector(outer_points[(i + 1) % len(outer_points)])
+    tangent = next_point - prev_point
+    angle = math.atan2(tangent.y, tangent.x)
+
+    x = point[0] * 0.965
+    y = point[1] * 0.965
+    gouge_length = 0.034 + (i % 3) * 0.007
+    gouge_width = 0.005 + (i % 2) * 0.002
+
+    add_box(
+        f"outer_corner_gouge_{i}",
+        (gouge_length, gouge_width, 0.0012),
+        (x, y, 0.7403),
+        mat_seam,
+        rot=(0, 0, angle + math.radians(-14 + i * 4)),
+    )
+
+    add_box(
+        f"outer_corner_exposed_edge_{i}",
+        (gouge_length * 0.72, 0.0025, 0.0010),
+        (
+            x - math.sin(angle) * 0.004,
+            y + math.cos(angle) * 0.004,
+            0.7407,
+        ),
+        mat_scuff if i % 3 else mat_rust,
+        rot=(0, 0, angle + math.radians(-10 + i * 3)),
+    )
 
 
 # ----------------------------------------------------------------------
@@ -1004,9 +1327,10 @@ def add_chipped_mug_body(
     return o
 
 
+# 左装甲板上面Z=0.746へ実接地。
 mug_root = make_prop_root(
     "prop_mug",
-    (-0.585, 0.265, 0.748),
+    (-0.585, 0.265, 0.746),
     rot=(0, 0, math.radians(-8)),
 )
 
@@ -1068,9 +1392,10 @@ parent_all(mug_root, mug_parts)
 # ----------------------------------------------------------------------
 # レンチ
 
+# 子メッシュ最下点が左装甲板上面Z=0.746へ接地。
 wrench_root = make_prop_root(
     "prop_wrench",
-    (-0.592, -0.105, 0.752),
+    (-0.592, -0.105, 0.743),
     rot=(0, 0, math.radians(-21)),
 )
 
@@ -1145,9 +1470,10 @@ parent_all(wrench_root, wrench_parts)
 # ----------------------------------------------------------------------
 # ペンチ
 
+# 約26mm内寄せし、左装甲板上面へ実接地。
 pliers_root = make_prop_root(
     "prop_pliers",
-    (-0.590, -0.385, 0.752),
+    (-0.568, -0.371, 0.743),
     rot=(0, 0, math.radians(14)),
 )
 
@@ -1254,9 +1580,10 @@ parent_all(pliers_root, pliers_parts)
 # ----------------------------------------------------------------------
 # とぐろケーブル + 垂れた線
 
+# カーブ断面の最下点が卓面Z=0.740付近へ接地。
 cable_root = make_prop_root(
     "prop_cable",
-    (-0.535, 0.570, 0.758),
+    (-0.535, 0.570, 0.7425),
 )
 
 cable_paths = []
@@ -1362,30 +1689,31 @@ def build_loose_nut(name, loc, rot_z):
     parent_all(root, [body, hole])
 
 
+# 各位置の卓面／装甲板高さに合わせて実接地。
 build_loose_bolt(
     "prop_bolt_0",
-    (0.572, 0.330, 0.752),
+    (0.572, 0.330, 0.742),
     math.radians(20),
 )
 build_loose_bolt(
     "prop_bolt_1",
-    (0.622, 0.405, 0.752),
+    (0.622, 0.405, 0.736),
     math.radians(-18),
 )
 build_loose_bolt(
     "prop_bolt_2",
-    (0.535, 0.485, 0.752),
+    (0.535, 0.485, 0.736),
     math.radians(42),
 )
 
 build_loose_nut(
     "prop_nut_0",
-    (0.674, 0.300, 0.752),
+    (0.674, 0.300, 0.7445),
     math.radians(11),
 )
 build_loose_nut(
     "prop_nut_1",
-    (0.586, 0.540, 0.752),
+    (0.586, 0.540, 0.7385),
     math.radians(-20),
 )
 
@@ -1393,9 +1721,10 @@ build_loose_nut(
 # ----------------------------------------------------------------------
 # データスレート
 
+# 45mm内寄せ。底面は装甲カラー上面Z=0.744へ接地。
 slate_root = make_prop_root(
     "prop_data_slate",
-    (0.592, -0.145, 0.750),
+    (0.547, -0.145, 0.742),
     rot=(0, 0, math.radians(11)),
 )
 
@@ -1509,9 +1838,10 @@ def add_rag_mesh(name, mat):
     return o
 
 
+# 約25mm内寄せ。低い頂点が卓面へ触れる高さまで下げる。
 rag_root = make_prop_root(
     "prop_rag",
-    (-0.520, -0.610, 0.755),
+    (-0.504, -0.591, 0.746),
     rot=(0, 0, math.radians(-8)),
 )
 rag = add_rag_mesh("dirty_rag", mat_rag)
