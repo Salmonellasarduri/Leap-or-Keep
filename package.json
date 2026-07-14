@@ -1,8 +1,7 @@
 {
   "name": "leap-or-keep",
-  "version": "1.0.0",
+  "version": "0.9.1",
   "description": "宇宙版カード型ローグライク。死んだ文明の遺物を回収する深宇宙サルベージャーとなり、「もう1ゾーン深く跳ぶか、戦利品を持って帰るか」を選び続ける。Gloomhavenリスペクトのカード消耗システム(カード=行動=寿命)+ Into the Breach式の敵行動予告 + 宇宙ならではの慣性(ドリフト)。",
-  "main": "index.js",
   "directories": {
     "doc": "docs",
     "test": "tests"
@@ -17,6 +16,18 @@
   "keywords": [],
   "author": "なばて (nabaaatee)",
   "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Salmonellasarduri/Leap-or-Keep.git"
+  },
+  "homepage": "https://salmonellasarduri.github.io/Leap-or-Keep/",
+  "bugs": {
+    "url": "https://github.com/Salmonellasarduri/Leap-or-Keep/issues"
+  },
   "type": "commonjs",
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -25,7 +36,6 @@
     "three": "^0.185.1",
     "zod": "^4.4.3"
   },
-  "private": "true",
   "dependencies": {
     "gifenc": "^1.0.3"
   }

@@ -1,0 +1,39 @@
+name: 不具合報告
+description: 再現可能な gameplay・表示・agent protocol の問題を報告する
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: セキュリティ問題は公開せず、Security の非公開報告を使ってください。
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release tag、commit SHA、または公開版 URL
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 環境
+      description: OS、browser と version、Node.js version（agent / 開発時）
+    validations:
+      required: true
+  - type: input
+    id: seed
+    attributes:
+      label: Seed
+      description: gameplay の問題なら URL の ?seed= の値
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 再現手順
+      description: 最小の操作手順。save data に個人情報があれば除去してください
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待した結果と実際の結果
+    validations:
+      required: true
