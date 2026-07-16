@@ -988,9 +988,57 @@ export function createHolo(ctx) {
       new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
     plane.rotation.x = -Math.PI / 2; plane.position.y = 0.002; root.add(plane);
     room.b3dPlane = plane; room.b3dPitch = pitch; room.b3dN = N;
+    room.b3dUnits = new Map(); // Stage3: id -> 3D駒レコード
     obj.add(root);
     room.board3d = root;
     installB3DShadow();
+    try { const { S } = dbg(); if (S && S.enc) syncBoard3D(S.enc); } catch (_) {} // GLB非同期構築後に現在状態から即同期(次のsync待ちにしない)
+  }
+  // Stage3: 駒を部屋空間の3Dホロ・オブジェへ(平面盤と同じ形状語彙をメートル化)。
+  // 「半透明シェル+実体コア」(Sol) + 光柱と接地リング(Gemini処方の静的版=投影されている読み)。
+  function makeB3DUnit(u) {
+    const spec = pieceSpec(u);                 // px寸ジオメトリを k でメートル化(語彙統一)
+    const k = room.b3dPitch / 100 * 2.2;
+    const col = u.side === "player" ? COL.player : (u.side === "hazard" ? COL.hazard : spec.color);
+    const group = new THREE.Group();
+    const h = spec.h * k, yBase = 0.035;       // タイルの3.5cm上に浮遊(Sol/concept)
+    const coreCol = new THREE.Color(col).multiplyScalar(0.42); // コア=陣営色の暗色版(黒でなく"暗く光る実体")
+    const core = new THREE.Mesh(spec.geo, new THREE.MeshBasicMaterial({ color: coreCol, transparent: true, opacity: 0.92 }));
+    core.scale.setScalar(k); core.position.y = yBase + h / 2; group.add(core);
+    const shell = new THREE.Mesh(spec.geo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.7, side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+    shell.scale.setScalar(k * 1.07); shell.position.y = core.position.y; group.add(shell);
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(spec.geo), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending }));
+    edges.scale.setScalar(k); edges.position.y = core.position.y; group.add(edges);
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(room.b3dPitch * 0.05, room.b3dPitch * 0.09, yBase, 8, 1, true),
+      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    pillar.position.y = yBase / 2; group.add(pillar);
+    const ring = new THREE.Mesh(new THREE.PlaneGeometry(room.b3dPitch * 0.5, room.b3dPitch * 0.5),
+      new THREE.MeshBasicMaterial({ map: bgRadialTex(64, "rgba(90,215,230,0.8)", "rgba(90,215,230,0)"), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.004; group.add(ring);
+    return { group, gx: -1, gy: -1, type: u.type, side: u.side };
+  }
+  function syncBoard3D(enc) {
+    if (!room.board3d || !room.b3dUnits || !enc) return;
+    const N = room.b3dN, pitch = room.b3dPitch;
+    let changed = false;
+    const seen = new Set();
+    for (const u of enc.units) {
+      if (!u.alive) continue;
+      seen.add(u.id);
+      let rec = room.b3dUnits.get(u.id);
+      if (!rec) { rec = makeB3DUnit(u); room.b3dUnits.set(u.id, rec); room.board3d.add(rec.group); changed = true; }
+      if (rec.gx !== u.x || rec.gy !== u.y) {
+        rec.group.position.set((u.x - (N - 1) / 2) * pitch, 0, (u.y - (N - 1) / 2) * pitch); // Stage3=スナップ(トゥイーンはStage4)
+        rec.gx = u.x; rec.gy = u.y; changed = true;
+      }
+    }
+    for (const [id, rec] of room.b3dUnits) if (!seen.has(id)) {
+      room.board3d.remove(rec.group);
+      rec.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+      room.b3dUnits.delete(id);
+      changed = true;
+    }
+    if (changed) room.drawn = false; // 状態変化時のみ部屋を1枚再描画=静止時dirty-skip維持(fps)
   }
   // Stage2: スクリーン座標→部屋カメラでraycast→盤ローカルへ逆変換→マス(x,y)。nullは盤外。
   let _b3dRay = null, _b3dNdc = null;
@@ -1334,6 +1382,7 @@ export function createHolo(ctx) {
       rec.raise = (calib.tiltDeg && sel.cells && sel.cells[u.x + "," + u.y]) ? 10 : 0; // R8
     }
     for (const [id, rec] of units) if (!seen.has(id)) { disposeUnit(rec); units.delete(id); }
+    if (BOARD3D) { try { syncBoard3D(enc); } catch (_) {} } // Stage3: 3D駒を同状態から駆動(失敗しても平面盤を巻き込まない)
 
     lastEnc = enc;
     lastStep = enc.step;
