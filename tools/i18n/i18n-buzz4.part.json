@@ -1,0 +1,35 @@
+{
+  "exact": {
+    "⚙ 設定": "⚙ Settings",
+    "⚙ たたむ": "⚙ Collapse",
+    "挑戦レベル・サウンド・盤面表示・演出などの設定": "Challenge level, sound, board view and FX settings",
+    "🚀 このまま初出撃": "🚀 First sortie, right now",
+    "出撃準備へ — 編成を選ぶ": "To preparations — choose your loadout",
+    "訓練の勢いのまま実戦へ。標準の船体と装備で出撃(編成はあとからいつでも変えられる)": "Ride the training momentum into a real run. Standard hull and gear (you can customize anytime later)",
+    "📤 共有 — カード付き": "📤 Share — card attached",
+    "OSの共有シートで、診断カード画像+文面+挑戦URLを一発送信": "One tap: OS share sheet with the diagnosis card image, text and challenge URL",
+    "✦ 精算完了 — 出港準備よし": "✦ Settlement complete — ready to depart",
+    "📡 この航海を自慢する": "📡 Brag about this voyage",
+    "記憶がいちばん熱いうちに — 診断カード+挑戦状URLで航海を残す": "While the memory is hot — save this voyage as a card + challenge URL",
+    "⚡ 同じ編成で再出撃": "⚡ Re-sortie, same loadout",
+    "前回と同じ船体・デッキ・契約で即再出撃(編成2画面スキップ・手札は自動選択済み)。シードは新しい宇宙": "Instant re-sortie with the same hull, deck and contracts (skips 2 prep screens, hand auto-picked). New seed = new universe",
+    "編成を変えて跳ぶ": "Change loadout and leap",
+    "この敗北と同じシード=同じ宇宙に再挑戦。敵も機雷も同じ配置 — 今度は全部わかってる": "Rematch the same seed = the same universe. Same enemies, same mines — this time you know everything",
+    "挑戦状ラン: 同じシード=同じ宇宙で、送り主のスコアと勝負している": "Challenge run: same seed = same universe, dueling the sender's score",
+    "失われたもの — それでも拾ったもの": "What Was Lost — and What Was Salvaged Anyway",
+    "それでも拾ったもの": "and what was salvaged anyway",
+    "全カード解放済み!": "All cards unlocked!",
+    "🔓 全カード解放済み!": "🔓 All cards unlocked!"
+  },
+  "rules": [
+    ["^— 『(.+)』解放\\(₢(\\d+)\\)まであと$", "— until '$1' unlocks (₢$2), remaining:"],
+    ["^🔓 『(.+)』解放\\(₢(\\d+)\\)まであと$", "🔓 until '$1' unlocks (₢$2), remaining:"],
+    ["^『(.+)』解放\\(₢(\\d+)\\)まであと$", "until '$1' unlocks (₢$2), remaining:"],
+    ["^⚔ 同じ宇宙に雪辱 — SEED (\\d+)$", "⚔ Revenge, same universe — SEED $1"],
+    ["^⚔ 挑戦状決着 — 『(.+)』のSCORE (\\d+) を \\+(\\d+) 上回った! 挑戦状を返してやれ$", "⚔ Challenge settled — beat '$1' (SCORE $2) by +$3! Send the challenge back"],
+    ["^⚔ 挑戦状決着 — 『(.+)』のSCORE (\\d+) と完全同点。宇宙が二人を測りかねている$", "⚔ Challenge settled — dead even with '$1' at SCORE $2. The universe can't tell you two apart"],
+    ["^⚔ 挑戦状 — 『(.+)』のSCORE (\\d+) まであと (\\d+)。同じ宇宙だ、配置はもう頭に入ってる$", "⚔ Challenge — $3 short of '$1' (SCORE $2). Same universe — you already know the layout"],
+    ["^🏆 歴代(\\d+)位$", "🏆 All-time #$1"],
+    ["^物理キル(\\d+)回 — 弾代をだいぶ浮かせたでしょ。$", "$1 physical kills — saved a fortune on ammo, didn't you."]
+  ]
+}

@@ -31,6 +31,13 @@ console.log("== rule checks ==");
   ok(LK.tdist({x:0,y:0},{x:3,y:3}) === 4, "tdist wraps both axes");
 }
 {
+  // L-052: 共有ペイロード(sd)と再出撃の源泉 — runは自分のseed/デッキ構成を必ず持つ
+  // (JSON.stringifyはundefinedキーを無言で落とす: run.seed欠落=挑戦状ボタン不出現がv0.9で実際に起きた)
+  const s = LK.newRun(4242, null, {});
+  ok(s.run.seed === 4242, "run.seed carries the seed (L-052 share payload sd)");
+  ok(Array.isArray(s.run.deckDefIds) && s.run.deckDefIds.length === s.run.cards.length, "run.deckDefIds records the sortie deck (L-052 resortie)");
+}
+{
   // encounter setup
   const s = LK.newRun(42);
   LK.startEncounter(s, null);
