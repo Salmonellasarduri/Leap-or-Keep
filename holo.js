@@ -982,8 +982,47 @@ export function createHolo(ctx) {
         color: 0x5fe6f0, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
       edge.rotation.x = -Math.PI / 2; edge.position.set(px, 0.001, pz); root.add(edge);
     }
+    // Stage2: 入力用の不可視盤平面(raycast対象)。visible=true+opacity0=見えないが確実に拾える。
+    // 卓の子なのでpositionTableの移動/scaleへ自動追従=変換ズレが構造的に無い。
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(span, span),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+    plane.rotation.x = -Math.PI / 2; plane.position.y = 0.002; root.add(plane);
+    room.b3dPlane = plane; room.b3dPitch = pitch; room.b3dN = N;
     obj.add(root);
     room.board3d = root;
+    installB3DShadow();
+  }
+  // Stage2: スクリーン座標→部屋カメラでraycast→盤ローカルへ逆変換→マス(x,y)。nullは盤外。
+  let _b3dRay = null, _b3dNdc = null;
+  function b3dCellAt(clientX, clientY) {
+    if (!room.b3dPlane || !bg.cam || !bg.canvas) return null;
+    if (!_b3dRay) { _b3dRay = new THREE.Raycaster(); _b3dNdc = new THREE.Vector2(); }
+    const rect = bg.canvas.getBoundingClientRect();
+    _b3dNdc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    _b3dRay.setFromCamera(_b3dNdc, bg.cam);
+    const hits = _b3dRay.intersectObject(room.b3dPlane, false);
+    if (!hits.length) return null;
+    const p = room.b3dPlane.parent.worldToLocal(hits[0].point.clone());
+    const N = room.b3dN, pitch = room.b3dPitch;
+    const cx = Math.round(p.x / pitch + (N - 1) / 2), cy = Math.round(p.z / pitch + (N - 1) / 2);
+    if (cx < 0 || cx >= N || cy < 0 || cy >= N) return null;
+    return { x: cx, y: cy };
+  }
+  // Stage2 影並走: クリック毎に「DOM判定のマス」vs「raycast判定のマス」を記録するだけ(入力へ一切介入しない)。
+  // 一致率が確認できるまで本入力は切り替えない(Sol移行手順)。
+  function installB3DShadow() {
+    if (room.b3dShadowOn || typeof document === "undefined") return;
+    room.b3dShadowOn = true;
+    window.__b3dShadow = [];
+    document.addEventListener("click", ev => {
+      if (!room.active || !room.b3dPlane) return;
+      const rc = b3dCellAt(ev.clientX, ev.clientY);
+      const el = ev.target && ev.target.closest ? ev.target.closest("[data-xy]") : null;
+      const dom = el ? el.getAttribute("data-xy") : null;
+      const ray = rc ? rc.x + "," + rc.y : null;
+      window.__b3dShadow.push({ dom, ray, match: dom === ray, cx: ev.clientX, cy: ev.clientY });
+      if (window.__b3dShadow.length > 400) window.__b3dShadow.shift();
+    }, true); // capture=DOMハンドラより先に記録・preventDefaultしない
   }
   function roomWanted() {
     let q = null; try { q = new URLSearchParams(location.search).get("room"); } catch (_) {}
