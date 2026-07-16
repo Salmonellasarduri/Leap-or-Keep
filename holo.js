@@ -1017,6 +1017,11 @@ export function createHolo(ctx) {
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.004; group.add(ring);
     return { group, gx: -1, gy: -1, type: u.type, side: u.side };
   }
+  function disposeB3DRec(id, rec) {
+    room.board3d.remove(rec.group);
+    rec.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+    room.b3dUnits.delete(id);
+  }
   function syncBoard3D(enc) {
     if (!room.board3d || !room.b3dUnits || !enc) return;
     const N = room.b3dN, pitch = room.b3dPitch;
@@ -1026,18 +1031,16 @@ export function createHolo(ctx) {
       if (!u.alive) continue;
       seen.add(u.id);
       let rec = room.b3dUnits.get(u.id);
+      if (rec && (rec.type !== u.type || rec.side !== u.side)) { // 敵対レビュー確認: IDは戦域毎に振り直される(h0=機雷→次戦域で岩塊等)→形/色が違えば作り直す
+        disposeB3DRec(u.id, rec); rec = null;
+      }
       if (!rec) { rec = makeB3DUnit(u); room.b3dUnits.set(u.id, rec); room.board3d.add(rec.group); changed = true; }
       if (rec.gx !== u.x || rec.gy !== u.y) {
         rec.group.position.set((u.x - (N - 1) / 2) * pitch, 0, (u.y - (N - 1) / 2) * pitch); // Stage3=スナップ(トゥイーンはStage4)
         rec.gx = u.x; rec.gy = u.y; changed = true;
       }
     }
-    for (const [id, rec] of room.b3dUnits) if (!seen.has(id)) {
-      room.board3d.remove(rec.group);
-      rec.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
-      room.b3dUnits.delete(id);
-      changed = true;
-    }
+    for (const [id, rec] of room.b3dUnits) if (!seen.has(id)) { disposeB3DRec(id, rec); changed = true; }
     if (changed) room.drawn = false; // 状態変化時のみ部屋を1枚再描画=静止時dirty-skip維持(fps)
   }
   // Stage2: スクリーン座標→部屋カメラでraycast→盤ローカルへ逆変換→マス(x,y)。nullは盤外。
