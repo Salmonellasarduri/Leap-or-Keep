@@ -38,9 +38,12 @@ while ($true) {
     exit 3
   }
 }
-$hit = Select-String -Path $log -Pattern $Marker -ErrorAction SilentlyContinue | Select-Object -First 1
-$boot = Select-String -Path $log -Pattern "\[BOOT\]|\[SCENE\]|Error: " -ErrorAction SilentlyContinue | Select-Object -Last 8
+# 判定はプロジェクト本ログを正とする(stdout捕捉はLogPython行を落とすことがある — 実測)
+$projLog = Join-Path (Split-Path $Project) ("Saved\Logs\" + [IO.Path]::GetFileNameWithoutExtension($Project) + ".log")
+$scan = @($log, $projLog) | Where-Object { Test-Path $_ }
+$hit = Select-String -Path $scan -Pattern $Marker -ErrorAction SilentlyContinue | Select-Object -First 1
+$boot = Select-String -Path $scan -Pattern "\[BOOT\]|\[SCENE\]|LogPython: Error" -ErrorAction SilentlyContinue | Select-Object -Last 8
 $boot | ForEach-Object { Write-Output $_.Line.Substring(0, [Math]::Min(160, $_.Line.Length)) }
 if ($hit) { Write-Output "[WATCHDOG] OK: マーカー検出・正常終了(exit $($p.ExitCode))。log=$log"; exit 0 }
 Write-Output "[WATCHDOG] FAILED: マーカー無しで終了(exit $($p.ExitCode))。log=$log"
-exit ($p.ExitCode -ne 0 ? $p.ExitCode : 1)
+if ($p.ExitCode -ne 0) { exit $p.ExitCode } else { exit 1 }  # 三項演算子はPS5.1非対応(L-046の系)
