@@ -1,10 +1,22 @@
 # tools/ue/warroom_scene.py
+#
+# Diagnostic white-material baseline.
+#
+# Important:
+#   warroom_capture.py currently creates MIDs for every StaticMeshActor whose
+#   label begins with "WR_". Therefore all visible geometry in this file uses
+#   BASE_ or GEO_ labels. One off-camera WR_ compatibility probe remains so the
+#   unchanged capture script does not fail its "created == 0" guard.
+#
+# No MID, MIC, post-process volume, or ExponentialHeightFog is created here.
+
 import math
 import traceback
 import unreal
 
 
 LEVEL_PATH = "/Game/Maps/WarRoom"
+
 SCREENSHOT_FILENAME = "warroom_ue.png"
 SCREENSHOT_WIDTH = 1280
 SCREENSHOT_HEIGHT = 800
@@ -14,11 +26,11 @@ _DEFER_QUIT = False
 _TICK_HANDLE = None
 _TICK_COUNT = 0
 _SCREENSHOT_TASK = None
-_MID_REFS = []
 
 
 try:
-    print("[SCENE] WarRoom scene build started")
+    print("[SCENE] WarRoom diagnostic scene build started")
+    print("[SCENE] mode=white-material-baseline no-MID no-fog no-PPV")
 
     level_subsystem = unreal.get_editor_subsystem(
         unreal.LevelEditorSubsystem
@@ -29,19 +41,21 @@ try:
 
     if level_subsystem is None:
         raise RuntimeError("LevelEditorSubsystem is unavailable")
+
     if actor_subsystem is None:
         raise RuntimeError("EditorActorSubsystem is unavailable")
 
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     # Helpers
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
 
     def vec(x, y, z):
         return unreal.Vector(float(x), float(y), float(z))
 
 
     def rot(pitch=0.0, yaw=0.0, roll=0.0):
-        return unreal.Rotator(float(pitch), float(yaw), float(roll))
+        # unreal.Rotatorの位置引数は(roll, pitch, yaw)順 — 事故防止のためキーワード指定(実測: pitch47が roll に入りカメラが空を向いた)
+        return unreal.Rotator(roll=float(roll), pitch=float(pitch), yaw=float(yaw))
 
 
     def scale(x, y, z):
@@ -49,11 +63,12 @@ try:
 
 
     def color8(r, g, b, a=255):
-        return unreal.Color(int(r), int(g), int(b), int(a))
-
-
-    def linear_color(r, g, b, a=1.0):
-        return unreal.LinearColor(float(r), float(g), float(b), float(a))
+        return unreal.Color(
+            int(r),
+            int(g),
+            int(b),
+            int(a),
+        )
 
 
     def safe_set(obj, property_name, value):
@@ -64,27 +79,45 @@ try:
             return False
 
 
-    def look_at_rotation(source, target):
-        dx = target.x - source.x
-        dy = target.y - source.y
-        dz = target.z - source.z
-        horizontal = math.sqrt(dx * dx + dy * dy)
-
-        yaw = math.degrees(math.atan2(dy, dx))
-        pitch = math.degrees(math.atan2(dz, horizontal))
-        return unreal.Rotator(pitch, yaw, 0.0)
+    def required_set(obj, property_name, value):
+        if not safe_set(obj, property_name, value):
+            raise RuntimeError(
+                "Failed to set {} on {}".format(
+                    property_name,
+                    obj.get_name(),
+                )
+            )
 
 
     def load_required_asset(path):
         asset = unreal.EditorAssetLibrary.load_asset(path)
+
         if asset is None:
             raise RuntimeError(
                 "Required asset could not be loaded: {}".format(path)
             )
+
         return asset
 
 
-    def spawn_actor(actor_class, label, location, rotation=None):
+    def look_at_rotation(source, target):
+        dx = target.x - source.x
+        dy = target.y - source.y
+        dz = target.z - source.z
+
+        horizontal = math.sqrt(dx * dx + dy * dy)
+        yaw = math.degrees(math.atan2(dy, dx))
+        pitch = math.degrees(math.atan2(dz, horizontal))
+
+        return rot(pitch, yaw, 0.0)
+
+
+    def spawn_actor(
+        actor_class,
+        label,
+        location,
+        rotation=None,
+    ):
         if rotation is None:
             rotation = rot()
 
@@ -104,9 +137,28 @@ try:
         return actor
 
 
-    BASIC_MATERIAL = load_required_asset(
-        "/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"
+    def set_movable(component):
+        try:
+            component.set_mobility(
+                unreal.ComponentMobility.MOVABLE
+            )
+            return
+        except Exception:
+            pass
+
+        required_set(
+            component,
+            "mobility",
+            unreal.ComponentMobility.MOVABLE,
+        )
+
+
+    BASIC_MATERIAL_PATH = (
+        "/Engine/BasicShapes/"
+        "BasicShapeMaterial.BasicShapeMaterial"
     )
+
+    BASIC_MATERIAL = load_required_asset(BASIC_MATERIAL_PATH)
     MESH_CUBE = load_required_asset(
         "/Engine/BasicShapes/Cube.Cube"
     )
@@ -120,58 +172,7 @@ try:
         "/Engine/BasicShapes/Sphere.Sphere"
     )
 
-    STYLE_VALUES = {
-        "floor": (
-            linear_color(0.012, 0.016, 0.020),
-            0.90,
-        ),
-        "wall": (
-            linear_color(0.018, 0.025, 0.031),
-            0.82,
-        ),
-        "metal_dark": (
-            linear_color(0.020, 0.027, 0.032),
-            0.72,
-        ),
-        "metal": (
-            linear_color(0.055, 0.065, 0.070),
-            0.60,
-        ),
-        "metal_edge": (
-            linear_color(0.115, 0.075, 0.028),
-            0.70,
-        ),
-        "well": (
-            linear_color(0.002, 0.025, 0.035),
-            0.35,
-        ),
-        "cyan": (
-            linear_color(0.000, 0.720, 1.000),
-            0.20,
-        ),
-        "cyan_dim": (
-            linear_color(0.000, 0.190, 0.260),
-            0.35,
-        ),
-        "amber": (
-            linear_color(1.000, 0.240, 0.018),
-            0.28,
-        ),
-        "mug": (
-            linear_color(0.090, 0.105, 0.100),
-            0.78,
-        ),
-        "tool": (
-            linear_color(0.120, 0.135, 0.140),
-            0.45,
-        ),
-        "rubber": (
-            linear_color(0.010, 0.012, 0.014),
-            0.96,
-        ),
-    }
-
-    styled_components = []
+    mesh_components = []
 
 
     def spawn_mesh(
@@ -180,7 +181,6 @@ try:
         location,
         actor_scale,
         rotation=None,
-        style="metal",
         cast_shadow=True,
     ):
         actor = spawn_actor(
@@ -194,11 +194,27 @@ try:
         component = actor.get_editor_property(
             "static_mesh_component"
         )
-        component.set_static_mesh(mesh)
-        component.set_material(0, BASIC_MATERIAL)
-        safe_set(component, "cast_shadow", bool(cast_shadow))
 
-        styled_components.append((component, style))
+        if component is None:
+            raise RuntimeError(
+                "{} has no StaticMeshComponent".format(label)
+            )
+
+        component.set_static_mesh(mesh)
+
+        # This is a direct reference to a persistent engine asset.
+        # It is not a MaterialInstanceDynamic.
+        component.set_material(0, BASIC_MATERIAL)
+
+        safe_set(
+            component,
+            "cast_shadow",
+            bool(cast_shadow),
+        )
+
+        mesh_components.append(
+            (label, component)
+        )
         return actor
 
 
@@ -207,7 +223,6 @@ try:
         location,
         actor_scale,
         rotation=None,
-        style="metal",
         cast_shadow=True,
     ):
         return spawn_mesh(
@@ -216,7 +231,6 @@ try:
             location,
             actor_scale,
             rotation,
-            style,
             cast_shadow,
         )
 
@@ -226,7 +240,6 @@ try:
         location,
         actor_scale,
         rotation=None,
-        style="metal",
         cast_shadow=True,
     ):
         return spawn_mesh(
@@ -235,7 +248,6 @@ try:
             location,
             actor_scale,
             rotation,
-            style,
             cast_shadow,
         )
 
@@ -245,7 +257,6 @@ try:
         location,
         actor_scale,
         rotation=None,
-        style="metal",
         cast_shadow=True,
     ):
         return spawn_mesh(
@@ -254,7 +265,6 @@ try:
             location,
             actor_scale,
             rotation,
-            style,
             cast_shadow,
         )
 
@@ -264,7 +274,6 @@ try:
         location,
         actor_scale,
         rotation=None,
-        style="metal",
         cast_shadow=True,
     ):
         return spawn_mesh(
@@ -273,7 +282,6 @@ try:
             location,
             actor_scale,
             rotation,
-            style,
             cast_shadow,
         )
 
@@ -283,13 +291,15 @@ try:
         start,
         end,
         radius_cm,
-        style="rubber",
         cast_shadow=True,
     ):
         dx = end.x - start.x
         dy = end.y - start.y
         dz = end.z - start.z
-        length = math.sqrt(dx * dx + dy * dy + dz * dz)
+
+        length = math.sqrt(
+            dx * dx + dy * dy + dz * dz
+        )
 
         if length <= 0.001:
             raise RuntimeError(
@@ -307,8 +317,9 @@ try:
             dy / length,
             dz / length,
         )
-        cylinder_rotation = unreal.MathLibrary.make_rot_from_z(
-            direction
+
+        cylinder_rotation = (
+            unreal.MathLibrary.make_rot_from_z(direction)
         )
 
         return spawn_cylinder(
@@ -320,33 +331,19 @@ try:
                 length / 100.0,
             ),
             cylinder_rotation,
-            style,
             cast_shadow,
         )
 
 
-    def configure_light_component(
+    def configure_local_light(
         component,
-        intensity,
+        intensity_lumens,
         light_color,
-        attenuation_radius=None,
+        attenuation_radius,
         casts_shadows=True,
     ):
-        try:
-            component.set_mobility(
-                unreal.ComponentMobility.MOVABLE
-            )
-        except Exception:
-            safe_set(
-                component,
-                "mobility",
-                unreal.ComponentMobility.MOVABLE,
-            )
+        set_movable(component)
 
-        # UE5 local-light intensity is physical: lumens/candelas, not the
-        # single/double-digit brightness scale common in Blender/three.js.
-        # Force lumens when the engine exposes LightUnits so values such as
-        # 50_000 and 150_000 have an explicit, stable meaning.
         if hasattr(unreal, "LightUnits"):
             safe_set(
                 component,
@@ -354,52 +351,45 @@ try:
                 unreal.LightUnits.LUMENS,
             )
 
-        safe_set(component, "use_inverse_squared_falloff", True)
-        safe_set(component, "affects_world", True)
-        safe_set(component, "visible", True)
-
-        if not safe_set(component, "intensity", float(intensity)):
-            raise RuntimeError(
-                "Failed to set required light intensity on {}".format(
-                    component.get_name()
-                )
-            )
-
-        if not safe_set(component, "light_color", light_color):
-            raise RuntimeError(
-                "Failed to set required light color on {}".format(
-                    component.get_name()
-                )
-            )
-
         safe_set(
+            component,
+            "use_inverse_squared_falloff",
+            True,
+        )
+        required_set(component, "affects_world", True)
+        required_set(component, "visible", True)
+        required_set(
+            component,
+            "intensity",
+            float(intensity_lumens),
+        )
+        required_set(
+            component,
+            "light_color",
+            light_color,
+        )
+        required_set(
+            component,
+            "attenuation_radius",
+            float(attenuation_radius),
+        )
+        required_set(
             component,
             "cast_shadows",
             bool(casts_shadows),
         )
+
         safe_set(
             component,
             "volumetric_scattering_intensity",
-            0.15,
+            0.0,
         )
-
-        if attenuation_radius is not None:
-            if not safe_set(
-                component,
-                "attenuation_radius",
-                float(attenuation_radius),
-            ):
-                raise RuntimeError(
-                    "Failed to set attenuation radius on {}".format(
-                        component.get_name()
-                    )
-                )
 
 
     def spawn_point_light(
         label,
         location,
-        intensity,
+        intensity_lumens,
         light_color,
         attenuation_radius,
         casts_shadows=False,
@@ -411,17 +401,19 @@ try:
             location,
             rot(),
         )
+
         component = actor.get_editor_property(
             "point_light_component"
         )
 
-        configure_light_component(
+        configure_local_light(
             component,
-            intensity,
+            intensity_lumens,
             light_color,
             attenuation_radius,
             casts_shadows,
         )
+
         safe_set(
             component,
             "source_radius",
@@ -432,6 +424,7 @@ try:
             "soft_source_radius",
             float(source_radius * 1.5),
         )
+
         return actor
 
 
@@ -439,7 +432,7 @@ try:
         label,
         location,
         target,
-        intensity,
+        intensity_lumens,
         light_color,
         attenuation_radius,
         inner_angle,
@@ -452,76 +445,39 @@ try:
             location,
             look_at_rotation(location, target),
         )
+
         component = actor.get_editor_property(
             "spot_light_component"
         )
 
-        configure_light_component(
+        configure_local_light(
             component,
-            intensity,
+            intensity_lumens,
             light_color,
             attenuation_radius,
             casts_shadows,
         )
 
-        component.set_inner_cone_angle(float(inner_angle))
-        component.set_outer_cone_angle(float(outer_angle))
+        component.set_inner_cone_angle(
+            float(inner_angle)
+        )
+        component.set_outer_cone_angle(
+            float(outer_angle)
+        )
 
         safe_set(component, "source_radius", 18.0)
         safe_set(component, "soft_source_radius", 28.0)
+
         return actor
 
 
-    def apply_dynamic_materials():
-        created = 0
+    # ---------------------------------------------------------------------
+    # Load and clear level
+    # ---------------------------------------------------------------------
 
-        for component, style_name in styled_components:
-            tint, roughness = STYLE_VALUES.get(
-                style_name,
-                STYLE_VALUES["metal"],
-            )
-
-            try:
-                mid = component.create_dynamic_material_instance(
-                    0,
-                    BASIC_MATERIAL,
-                )
-
-                if mid is None:
-                    mid = unreal.MaterialInstanceDynamic.create(
-                        BASIC_MATERIAL,
-                        component,
-                    )
-                    component.set_material(0, mid)
-
-                if mid is not None:
-                    # BasicShapeMaterial's Color is base color only.
-                    # It is deliberately not treated as emissive lighting.
-                    mid.set_vector_parameter_value("Color", tint)
-                    mid.set_scalar_parameter_value(
-                        "Roughness",
-                        roughness,
-                    )
-                    _MID_REFS.append(mid)
-                    created += 1
-            except Exception as material_error:
-                unreal.log_warning(
-                    "[SCENE] Dynamic material fallback on {}: {}".format(
-                        component.get_name(),
-                        material_error,
-                    )
-                )
-
-        print(
-            "[SCENE] Dynamic materials applied: {}".format(created)
-        )
-
-
-    # -------------------------------------------------------------------------
-    # Load and clear the target level
-    # -------------------------------------------------------------------------
-
+    print("[SCENE] progress 1/7: loading and clearing level")
     print("[SCENE] Loading {}".format(LEVEL_PATH))
+
     load_result = level_subsystem.load_level(LEVEL_PATH)
     print("[SCENE] load_level returned {}".format(load_result))
 
@@ -535,8 +491,7 @@ try:
             if actor_subsystem.destroy_actor(existing_actor):
                 destroyed_count += 1
         except Exception:
-            # WorldSettings, builder brushes, or other required actors may
-            # refuse destruction. Template scene actors are still removed.
+            # Required actors such as WorldSettings can refuse destruction.
             pass
 
     print(
@@ -544,18 +499,173 @@ try:
             destroyed_count
         )
     )
-    print("[SCENE] Building environment")
 
-    # -------------------------------------------------------------------------
-    # Floor and curved cockpit wall
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
+    # Absolute-visibility baseline
+    # ---------------------------------------------------------------------
 
-    spawn_cube(
-        "WR_Floor",
-        vec(0, 0, -10),
-        scale(8.0, 8.0, 0.20),
-        style="floor",
+    print("[SCENE] progress 2/7: building visibility baseline")
+    print(
+        "[SCENE] Baseline: DirectionalLight + SkyAtmosphere + "
+        "real-time SkyLight + white floor/cubes"
     )
+
+    sky_atmosphere = spawn_actor(
+        unreal.SkyAtmosphere,
+        "BASE_SkyAtmosphere",
+        vec(0, 0, 0),
+        rot(),
+    )
+
+    if sky_atmosphere is None:
+        raise RuntimeError("SkyAtmosphere could not be created")
+
+    directional = spawn_actor(
+        unreal.DirectionalLight,
+        "BASE_DirectionalLight",
+        vec(0, 0, 500),
+        rot(-45.0, -135.0, 0.0),
+    )
+
+    directional_component = directional.get_editor_property(
+        "directional_light_component"
+    )
+
+    set_movable(directional_component)
+    required_set(
+        directional_component,
+        "intensity",
+        10.0,
+    )
+    required_set(
+        directional_component,
+        "light_color",
+        color8(255, 250, 242),
+    )
+    required_set(
+        directional_component,
+        "affects_world",
+        True,
+    )
+    required_set(
+        directional_component,
+        "visible",
+        True,
+    )
+    required_set(
+        directional_component,
+        "cast_shadows",
+        True,
+    )
+    required_set(
+        directional_component,
+        "atmosphere_sun_light",
+        True,
+    )
+    safe_set(
+        directional_component,
+        "atmosphere_sun_light_index",
+        0,
+    )
+    safe_set(
+        directional_component,
+        "volumetric_scattering_intensity",
+        0.0,
+    )
+
+    skylight = spawn_actor(
+        unreal.SkyLight,
+        "BASE_SkyLight",
+        vec(0, 0, 300),
+        rot(),
+    )
+
+    skylight_component = skylight.get_component_by_class(
+        unreal.SkyLightComponent
+    )
+
+    if skylight_component is None:
+        skylight_component = skylight.get_editor_property(
+            "light_component"
+        )
+
+    if skylight_component is None:
+        raise RuntimeError("SkyLight has no SkyLightComponent")
+
+    set_movable(skylight_component)
+
+    if hasattr(unreal, "SkyLightSourceType"):
+        required_set(
+            skylight_component,
+            "source_type",
+            unreal.SkyLightSourceType.SLS_CAPTURED_SCENE,
+        )
+
+    required_set(
+        skylight_component,
+        "real_time_capture",
+        True,
+    )
+    required_set(
+        skylight_component,
+        "intensity",
+        1.0,
+    )
+    required_set(
+        skylight_component,
+        "light_color",
+        color8(255, 255, 255),
+    )
+    safe_set(
+        skylight_component,
+        "lower_hemisphere_is_solid_color",
+        False,
+    )
+
+    # Large white floor.
+    spawn_cube(
+        "BASE_VisibilityFloor",
+        vec(0, 0, -10),
+        scale(9.0, 9.0, 0.20),
+    )
+
+    # Deliberately obvious baseline cubes, separated from the main table.
+    spawn_cube(
+        "BASE_VisibilityCube_Left",
+        vec(-230, -80, 50),
+        scale(1.0, 1.0, 1.0),
+    )
+    spawn_cube(
+        "BASE_VisibilityCube_Right",
+        vec(230, -40, 75),
+        scale(0.9, 0.9, 1.5),
+    )
+    spawn_cube(
+        "BASE_VisibilityCube_Back",
+        vec(0, 260, 40),
+        scale(0.8, 0.8, 0.8),
+    )
+
+    # The unchanged capture script insists on creating at least one MID.
+    # Keep exactly one WR_ StaticMeshActor far outside the rendered scene.
+    # No visible mesh below uses a WR_ label.
+    spawn_cube(
+        "WR_MID_CompatibilityProbe",
+        vec(100000, 100000, -100000),
+        scale(0.1, 0.1, 0.1),
+        cast_shadow=False,
+    )
+
+    print(
+        "[SCENE] Capture isolation active: visible meshes use "
+        "BASE_/GEO_; WR_ MID probe is off-camera"
+    )
+
+    # ---------------------------------------------------------------------
+    # Cockpit wall and background geometry
+    # ---------------------------------------------------------------------
+
+    print("[SCENE] progress 3/7: building gray-white geometry")
 
     wall_radius = 310.0
     wall_angles = [22.0, 38.0, 54.0, 70.0, 86.0]
@@ -567,15 +677,14 @@ try:
         tangent_yaw = angle_deg + 90.0
 
         spawn_cube(
-            "WR_WallPanel_{:02d}".format(index),
+            "GEO_WallPanel_{:02d}".format(index),
             vec(wall_x, wall_y, 130),
             scale(1.10, 0.18, 2.60),
             rot(0, tangent_yaw, 0),
-            "wall",
         )
 
         spawn_cube(
-            "WR_WallRib_{:02d}".format(index),
+            "GEO_WallRib_{:02d}".format(index),
             vec(
                 wall_x - 3.0 * math.cos(angle_rad),
                 wall_y - 3.0 * math.sin(angle_rad),
@@ -583,39 +692,39 @@ try:
             ),
             scale(0.09, 0.30, 2.72),
             rot(0, tangent_yaw, 0),
-            "metal_edge",
         )
 
-    pipe_angles = [30.0, 33.0, 79.0, 82.0]
-
-    for index, angle_deg in enumerate(pipe_angles):
+    for index, angle_deg in enumerate(
+        [30.0, 33.0, 79.0, 82.0]
+    ):
         angle_rad = math.radians(angle_deg)
         radius = wall_radius - 23.0
 
         spawn_cylinder(
-            "WR_WallPipe_{:02d}".format(index),
+            "GEO_WallPipe_{:02d}".format(index),
             vec(
                 radius * math.cos(angle_rad),
                 radius * math.sin(angle_rad),
                 132,
             ),
             scale(0.055, 0.055, 2.35),
-            style="metal_dark",
         )
 
-    # Background console blocks and amber practicals.
-    for index, z_value in enumerate([62.0, 90.0, 118.0]):
+    for index, z_value in enumerate(
+        [62.0, 90.0, 118.0]
+    ):
         spawn_cube(
-            "WR_BackConsole_{:02d}".format(index),
+            "GEO_BackConsole_{:02d}".format(index),
             vec(214, 211, z_value),
             scale(0.62, 0.28, 0.22),
             rot(0, 135, 0),
-            "metal",
         )
 
-    for index, offset in enumerate([-18.0, 0.0, 18.0]):
+    for index, offset in enumerate(
+        [-18.0, 0.0, 18.0]
+    ):
         spawn_cube(
-            "WR_AmberPractical_{:02d}".format(index),
+            "GEO_BackPractical_{:02d}".format(index),
             vec(
                 210 + offset,
                 205 - offset,
@@ -623,213 +732,92 @@ try:
             ),
             scale(0.10, 0.035, 0.035),
             rot(0, 135, 0),
-            "amber",
             False,
         )
 
-    spawn_point_light(
-        "WR_AmberPracticalLight",
-        vec(196, 193, 156),
-        7500.0,
-        color8(255, 106, 28),
-        165.0,
-        False,
-        2.0,
-    )
-
-    # -------------------------------------------------------------------------
-    # Octagonal salvage command table
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
+    # Command table
+    # ---------------------------------------------------------------------
 
     print("[SCENE] Building command table")
 
     spawn_cylinder(
-        "WR_TableBase",
+        "GEO_TableBase",
         vec(0, 0, 42),
         scale(1.15, 1.15, 0.65),
-        style="metal_dark",
     )
-
     spawn_cylinder(
-        "WR_TableBaseLower",
+        "GEO_TableBaseLower",
         vec(0, 0, 14),
         scale(0.88, 0.88, 0.24),
-        style="metal_edge",
     )
-
-    # Under-well support.
     spawn_cube(
-        "WR_WellSupport",
+        "GEO_WellSupport",
         vec(0, 0, 76),
         scale(0.98, 0.98, 0.10),
-        style="metal_dark",
     )
 
-    # Eight chunky apron pieces.
     apron_specs = [
-        (
-            "N",
-            vec(0, 57, 80),
-            scale(0.92, 0.26, 0.20),
-            0.0,
-        ),
-        (
-            "S",
-            vec(0, -57, 80),
-            scale(0.92, 0.26, 0.20),
-            0.0,
-        ),
-        (
-            "E",
-            vec(57, 0, 80),
-            scale(0.26, 0.92, 0.20),
-            0.0,
-        ),
-        (
-            "W",
-            vec(-57, 0, 80),
-            scale(0.26, 0.92, 0.20),
-            0.0,
-        ),
-        (
-            "NE",
-            vec(49, 49, 80),
-            scale(0.36, 0.24, 0.20),
-            -45.0,
-        ),
-        (
-            "NW",
-            vec(-49, 49, 80),
-            scale(0.36, 0.24, 0.20),
-            45.0,
-        ),
-        (
-            "SE",
-            vec(49, -49, 80),
-            scale(0.36, 0.24, 0.20),
-            45.0,
-        ),
-        (
-            "SW",
-            vec(-49, -49, 80),
-            scale(0.36, 0.24, 0.20),
-            -45.0,
-        ),
+        ("N", vec(0, 57, 80), scale(0.92, 0.26, 0.20), 0.0),
+        ("S", vec(0, -57, 80), scale(0.92, 0.26, 0.20), 0.0),
+        ("E", vec(57, 0, 80), scale(0.26, 0.92, 0.20), 0.0),
+        ("W", vec(-57, 0, 80), scale(0.26, 0.92, 0.20), 0.0),
+        ("NE", vec(49, 49, 80), scale(0.36, 0.24, 0.20), -45.0),
+        ("NW", vec(-49, 49, 80), scale(0.36, 0.24, 0.20), 45.0),
+        ("SE", vec(49, -49, 80), scale(0.36, 0.24, 0.20), 45.0),
+        ("SW", vec(-49, -49, 80), scale(0.36, 0.24, 0.20), -45.0),
     ]
 
     for suffix, location, actor_scale, yaw in apron_specs:
         spawn_cube(
-            "WR_TableApron_{}".format(suffix),
+            "GEO_TableApron_{}".format(suffix),
             location,
             actor_scale,
             rot(0, yaw, 0),
-            "metal_dark",
         )
 
-    # Eight-piece upper rim, producing a clear octagonal silhouette.
     rim_specs = [
-        (
-            "N",
-            vec(0, 57, 92),
-            scale(0.92, 0.26, 0.12),
-            0.0,
-        ),
-        (
-            "S",
-            vec(0, -57, 92),
-            scale(0.92, 0.26, 0.12),
-            0.0,
-        ),
-        (
-            "E",
-            vec(57, 0, 92),
-            scale(0.26, 0.92, 0.12),
-            0.0,
-        ),
-        (
-            "W",
-            vec(-57, 0, 92),
-            scale(0.26, 0.92, 0.12),
-            0.0,
-        ),
-        (
-            "NE",
-            vec(49, 49, 92),
-            scale(0.36, 0.24, 0.12),
-            -45.0,
-        ),
-        (
-            "NW",
-            vec(-49, 49, 92),
-            scale(0.36, 0.24, 0.12),
-            45.0,
-        ),
-        (
-            "SE",
-            vec(49, -49, 92),
-            scale(0.36, 0.24, 0.12),
-            45.0,
-        ),
-        (
-            "SW",
-            vec(-49, -49, 92),
-            scale(0.36, 0.24, 0.12),
-            -45.0,
-        ),
+        ("N", vec(0, 57, 92), scale(0.92, 0.26, 0.12), 0.0),
+        ("S", vec(0, -57, 92), scale(0.92, 0.26, 0.12), 0.0),
+        ("E", vec(57, 0, 92), scale(0.26, 0.92, 0.12), 0.0),
+        ("W", vec(-57, 0, 92), scale(0.26, 0.92, 0.12), 0.0),
+        ("NE", vec(49, 49, 92), scale(0.36, 0.24, 0.12), -45.0),
+        ("NW", vec(-49, 49, 92), scale(0.36, 0.24, 0.12), 45.0),
+        ("SE", vec(49, -49, 92), scale(0.36, 0.24, 0.12), 45.0),
+        ("SW", vec(-49, -49, 92), scale(0.36, 0.24, 0.12), -45.0),
     ]
 
     for suffix, location, actor_scale, yaw in rim_specs:
         spawn_cube(
-            "WR_TableRim_{}".format(suffix),
+            "GEO_TableRim_{}".format(suffix),
             location,
             actor_scale,
             rot(0, yaw, 0),
-            "metal_edge",
         )
 
-    # Recessed 86 cm holographic well.
+    # Recessed well: still plain BasicShapeMaterial.
     spawn_cube(
-        "WR_HoloWell",
+        "GEO_HoloWell",
         vec(0, 0, 82),
         scale(0.86, 0.86, 0.02),
-        style="well",
         cast_shadow=False,
     )
 
-    # Cyan inner rim.
     inner_rim_specs = [
-        (
-            "N",
-            vec(0, 43, 84),
-            scale(0.86, 0.018, 0.012),
-        ),
-        (
-            "S",
-            vec(0, -43, 84),
-            scale(0.86, 0.018, 0.012),
-        ),
-        (
-            "E",
-            vec(43, 0, 84),
-            scale(0.018, 0.86, 0.012),
-        ),
-        (
-            "W",
-            vec(-43, 0, 84),
-            scale(0.018, 0.86, 0.012),
-        ),
+        ("N", vec(0, 43, 84), scale(0.86, 0.018, 0.012)),
+        ("S", vec(0, -43, 84), scale(0.86, 0.018, 0.012)),
+        ("E", vec(43, 0, 84), scale(0.018, 0.86, 0.012)),
+        ("W", vec(-43, 0, 84), scale(0.018, 0.86, 0.012)),
     ]
 
     for suffix, location, actor_scale in inner_rim_specs:
         spawn_cube(
-            "WR_HoloRim_{}".format(suffix),
+            "GEO_HoloRim_{}".format(suffix),
             location,
             actor_scale,
-            style="cyan",
             cast_shadow=False,
         )
 
-    # 5x5 grid: six divisions on each axis.
     grid_positions = [
         -42.0,
         -25.2,
@@ -841,74 +829,62 @@ try:
 
     for index, position in enumerate(grid_positions):
         spawn_cube(
-            "WR_GridX_{:02d}".format(index),
+            "GEO_GridX_{:02d}".format(index),
             vec(position, 0, 84.2),
             scale(0.008, 0.84, 0.008),
-            style="cyan",
             cast_shadow=False,
         )
-
         spawn_cube(
-            "WR_GridY_{:02d}".format(index),
+            "GEO_GridY_{:02d}".format(index),
             vec(0, position, 84.25),
             scale(0.84, 0.008, 0.008),
-            style="cyan",
             cast_shadow=False,
         )
 
-    # Holographic markers / ship-like tokens.
     spawn_cone(
-        "WR_HoloToken_Cyan_01",
+        "GEO_HoloToken_01",
         vec(-23, 20, 90),
         scale(0.060, 0.060, 0.120),
         rot(0, -18, 0),
-        "cyan",
         False,
     )
     spawn_cone(
-        "WR_HoloToken_Cyan_02",
+        "GEO_HoloToken_02",
         vec(24, -21, 89),
         scale(0.050, 0.050, 0.100),
         rot(0, 35, 0),
-        "cyan",
         False,
     )
     spawn_cube(
-        "WR_HoloToken_Amber_01",
+        "GEO_HoloToken_03",
         vec(14, 19, 87),
         scale(0.095, 0.045, 0.045),
         rot(0, 72, 0),
-        "amber",
         False,
     )
 
-    # A simple multi-part cyan ship marker.
     spawn_cube(
-        "WR_HoloShip_Core",
+        "GEO_HoloShip_Core",
         vec(-8, -15, 88),
         scale(0.150, 0.040, 0.050),
         rot(0, 18, 0),
-        "cyan",
         False,
     )
     spawn_cube(
-        "WR_HoloShip_LeftWing",
+        "GEO_HoloShip_LeftWing",
         vec(-11, -18, 87.5),
         scale(0.055, 0.130, 0.025),
         rot(0, 18, 0),
-        "cyan_dim",
         False,
     )
     spawn_cube(
-        "WR_HoloShip_RightWing",
+        "GEO_HoloShip_RightWing",
         vec(-5, -12, 87.5),
         scale(0.055, 0.130, 0.025),
         rot(0, 18, 0),
-        "cyan_dim",
         False,
     )
 
-    # Rim bolts.
     bolt_positions = [
         (-54, -54),
         (-54, 54),
@@ -924,99 +900,86 @@ try:
         bolt_positions
     ):
         spawn_cylinder(
-            "WR_RimBolt_{:02d}".format(index),
+            "GEO_RimBolt_{:02d}".format(index),
             vec(bolt_x, bolt_y, 98.6),
             scale(0.026, 0.026, 0.016),
-            style="tool",
         )
 
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     # Tabletop props
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
 
     print("[SCENE] Adding tabletop props")
 
-    # Mug.
     spawn_cylinder(
-        "WR_MugBody",
+        "GEO_MugBody",
         vec(-27, -61, 104),
         scale(0.095, 0.095, 0.120),
-        style="mug",
     )
     spawn_cylinder(
-        "WR_MugOpening",
+        "GEO_MugOpening",
         vec(-27, -61, 110.2),
         scale(0.068, 0.068, 0.006),
-        style="rubber",
         cast_shadow=False,
     )
     spawn_cube(
-        "WR_MugHandleTop",
+        "GEO_MugHandleTop",
         vec(-18, -61, 107),
         scale(0.070, 0.025, 0.022),
-        style="mug",
     )
     spawn_cube(
-        "WR_MugHandleSide",
+        "GEO_MugHandleSide",
         vec(-15, -61, 103),
         scale(0.020, 0.025, 0.075),
-        style="mug",
     )
     spawn_cube(
-        "WR_MugHandleBottom",
+        "GEO_MugHandleBottom",
         vec(-18, -61, 99.5),
         scale(0.070, 0.025, 0.022),
-        style="mug",
     )
 
-    # Tools on the right rim.
     spawn_cube(
-        "WR_ToolDriverShaft",
+        "GEO_ToolDriverShaft",
         vec(58, 11, 102),
         scale(0.035, 0.250, 0.025),
         rot(0, 8, 0),
-        "tool",
     )
     spawn_cylinder(
-        "WR_ToolDriverHandle",
+        "GEO_ToolDriverHandle",
         vec(56, -4, 102),
         scale(0.038, 0.038, 0.120),
         rot(90, 8, 0),
-        "amber",
     )
     spawn_cube(
-        "WR_ToolBar",
+        "GEO_ToolBar",
         vec(58, 35, 101.5),
         scale(0.045, 0.280, 0.030),
         rot(0, -12, 0),
-        "tool",
     )
     spawn_cube(
-        "WR_ToolBarHead",
+        "GEO_ToolBarHead",
         vec(61, 48, 102),
         scale(0.120, 0.055, 0.040),
         rot(0, -12, 0),
-        "tool",
     )
 
-    # Loose hardware.
+    loose_fasteners = [
+        (53, -27),
+        (59, -34),
+        (48, -39),
+        (64, -20),
+    ]
+
     for index, (x_value, y_value) in enumerate(
-        [
-            (53, -27),
-            (59, -34),
-            (48, -39),
-            (64, -20),
-        ]
+        loose_fasteners
     ):
         spawn_cylinder(
-            "WR_LooseFastener_{:02d}".format(index),
+            "GEO_LooseFastener_{:02d}".format(index),
             vec(x_value, y_value, 101),
             scale(0.026, 0.026, 0.075),
             rot(90, 20 * index, 0),
-            "tool",
         )
 
-    # Segmented cables draped across near rim and floor-facing edge.
     cable_paths = [
         [
             vec(-67, -39, 103),
@@ -1045,24 +1008,32 @@ try:
             len(cable_points) - 1
         ):
             spawn_cylinder_between(
-                "WR_Cable_{:02d}_{:02d}".format(
+                "GEO_Cable_{:02d}_{:02d}".format(
                     cable_index,
                     segment_index,
                 ),
                 cable_points[segment_index],
                 cable_points[segment_index + 1],
                 1.25 if cable_index < 2 else 0.9,
-                "rubber",
             )
 
-    # -------------------------------------------------------------------------
-    # Lighting
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
+    # Physical-scale local lighting
+    # ---------------------------------------------------------------------
 
-    print("[SCENE] Creating high-output physical lighting")
+    print("[SCENE] progress 4/7: creating physical-scale lights")
     print(
-        "[SCENE] Local-light intensity units are lumens; "
-        "single/double-digit values are effectively dark in this UE setup"
+        "[SCENE] Directional=10 lux; local light values are lumens"
+    )
+
+    spawn_point_light(
+        "WR_AmberPracticalLight",
+        vec(196, 193, 156),
+        7500.0,
+        color8(255, 106, 28),
+        165.0,
+        False,
+        2.0,
     )
 
     spawn_spot_light(
@@ -1117,10 +1088,6 @@ try:
             2.5,
         )
 
-    # Fail-safe work light. BasicShapeMaterial's "Color" parameter is base
-    # color, not emissive, so the cyan/amber MIDs cannot be trusted to glow.
-    # This shadowless overhead point light guarantees that the table and well
-    # receive direct light even if every decorative light/material path fails.
     spawn_point_light(
         "WR_FailSafeWorkLight",
         vec(0, -20, 225),
@@ -1131,295 +1098,48 @@ try:
         20.0,
     )
 
-    # A weak, cool directional light raises the whole scene floor without
-    # becoming the visual key. Directional-light intensity uses lux, unlike
-    # the lumen-based local lights above.
-    directional = spawn_actor(
-        unreal.DirectionalLight,
-        "WR_CoolDirectionalFill",
-        vec(0, 0, 300),
-        rot(-52.0, -135.0, 0.0),
-    )
-    directional_component = (
-        directional.get_editor_property(
-            "directional_light_component"
-        )
-    )
-
-    try:
-        directional_component.set_mobility(
-            unreal.ComponentMobility.MOVABLE
-        )
-    except Exception:
-        safe_set(
-            directional_component,
-            "mobility",
-            unreal.ComponentMobility.MOVABLE,
-        )
-
-    safe_set(
-        directional_component,
-        "intensity",
-        4.0,
-    )
-    safe_set(
-        directional_component,
-        "light_color",
-        color8(92, 132, 190),
-    )
-    safe_set(
-        directional_component,
-        "cast_shadows",
-        False,
-    )
-    safe_set(
-        directional_component,
-        "volumetric_scattering_intensity",
-        0.10,
-    )
-
-    skylight = spawn_actor(
-        unreal.SkyLight,
-        "WR_SkyLight",
-        vec(0, 0, 210),
-        rot(),
-    )
-    skylight_component = skylight.get_editor_property(
-        "light_component"
-    )
-
-    try:
-        skylight_component.set_mobility(
-            unreal.ComponentMobility.MOVABLE
-        )
-    except Exception:
-        safe_set(
-            skylight_component,
-            "mobility",
-            unreal.ComponentMobility.MOVABLE,
-        )
-
-    # Capture the scene instead of depending on a specified cubemap.
-    if hasattr(unreal, "SkyLightSourceType"):
-        safe_set(
-            skylight_component,
-            "source_type",
-            unreal.SkyLightSourceType.SLS_CAPTURED_SCENE,
-        )
-
-    safe_set(
-        skylight_component,
-        "intensity_scale",
-        1.0,
-    )
-    safe_set(
-        skylight_component,
-        "light_color",
-        color8(92, 122, 148),
-    )
-    safe_set(
-        skylight_component,
-        "lower_hemisphere_is_solid_color",
-        True,
-    )
-    safe_set(
-        skylight_component,
-        "lower_hemisphere_color",
-        linear_color(0.005, 0.008, 0.012),
-    )
-
+    # Capture after the sky, sun, geometry, and lights all exist.
     try:
         skylight_component.recapture_sky()
-    except Exception:
-        pass
-
-    # -------------------------------------------------------------------------
-    # Post process
-    # -------------------------------------------------------------------------
-
-    print("[SCENE] Configuring post process")
-
-    post_process = spawn_actor(
-        unreal.PostProcessVolume,
-        "WR_PostProcess",
-        vec(0, 0, 0),
-        rot(),
-    )
-    safe_set(post_process, "unbound", True)
-    safe_set(post_process, "enabled", True)
-    safe_set(post_process, "blend_weight", 1.0)
-    safe_set(post_process, "priority", 10.0)
-
-    pp_settings = post_process.get_editor_property(
-        "settings"
-    )
-
-    safe_set(
-        pp_settings,
-        "override_bloom_intensity",
-        True,
-    )
-    safe_set(pp_settings, "bloom_intensity", 2.1)
-    safe_set(
-        pp_settings,
-        "override_bloom_threshold",
-        True,
-    )
-    safe_set(pp_settings, "bloom_threshold", 0.15)
-
-    # WR_PostProcess is the sole exposure owner. Do not add exposure
-    # overrides to WR_Camera_Main: MRQ must see the same fixed exposure
-    # through CameraCut. Legacy brightness and EV100 names are both
-    # attempted for UE-version tolerance; safe_set silently ignores
-    # properties absent in this version.
-    if hasattr(unreal, "AutoExposureMethod"):
-        safe_set(
-            pp_settings,
-            "override_auto_exposure_method",
-            True,
-        )
-        safe_set(
-            pp_settings,
-            "auto_exposure_method",
-            unreal.AutoExposureMethod.AEM_MANUAL,
+        print("[SCENE] SkyLight recapture requested")
+    except Exception as recapture_error:
+        unreal.log_warning(
+            "[SCENE] SkyLight recapture call failed; "
+            "real-time capture remains enabled: {}".format(
+                recapture_error
+            )
         )
 
-    safe_set(
-        pp_settings,
-        "override_auto_exposure_min_brightness",
-        True,
-    )
-    safe_set(
-        pp_settings,
-        "auto_exposure_min_brightness",
-        1.0,
-    )
-    safe_set(
-        pp_settings,
-        "override_auto_exposure_max_brightness",
-        True,
-    )
-    safe_set(
-        pp_settings,
-        "auto_exposure_max_brightness",
-        1.0,
-    )
-
-    safe_set(
-        pp_settings,
-        "override_auto_exposure_min_ev100",
-        True,
-    )
-    safe_set(
-        pp_settings,
-        "auto_exposure_min_ev100",
-        0.0,
-    )
-    safe_set(
-        pp_settings,
-        "override_auto_exposure_max_ev100",
-        True,
-    )
-    safe_set(
-        pp_settings,
-        "auto_exposure_max_ev100",
-        0.0,
-    )
-
-    safe_set(
-        pp_settings,
-        "override_auto_exposure_apply_physical_camera_exposure",
-        True,
-    )
-    safe_set(
-        pp_settings,
-        "auto_exposure_apply_physical_camera_exposure",
-        False,
-    )
-    safe_set(
-        pp_settings,
-        "override_auto_exposure_bias",
-        True,
-    )
-    safe_set(
-        pp_settings,
-        "auto_exposure_bias",
-        0.0,
-    )
-
-    safe_set(
-        pp_settings,
-        "override_vignette_intensity",
-        True,
-    )
-    safe_set(
-        pp_settings,
-        "vignette_intensity",
-        0.34,
-    )
-
-    safe_set(
-        pp_settings,
-        "override_ambient_occlusion_intensity",
-        True,
-    )
-    safe_set(
-        pp_settings,
-        "ambient_occlusion_intensity",
-        1.15,
-    )
-    safe_set(
-        pp_settings,
-        "override_ambient_occlusion_radius",
-        True,
-    )
-    safe_set(
-        pp_settings,
-        "ambient_occlusion_radius",
-        125.0,
-    )
-
-    safe_set(
-        pp_settings,
-        "override_color_saturation",
-        True,
-    )
-    safe_set(
-        pp_settings,
-        "color_saturation",
-        unreal.Vector4(0.92, 0.96, 1.02, 1.0),
-    )
-
-    post_process.set_editor_property(
-        "settings",
-        pp_settings,
-    )
-
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     # Camera
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
 
-    print("[SCENE] Creating screenshot camera")
+    print("[SCENE] progress 5/7: creating external camera")
 
-    camera_location = vec(-300, -360, 650)
-    camera_target = vec(0, 0, 86)
+    camera_location = vec(-650, -700, 480)
+    camera_target = vec(0, 0, 84)
+    camera_rotation = look_at_rotation(
+        camera_location,
+        camera_target,
+    )
 
     camera = spawn_actor(
         unreal.CameraActor,
         "WR_Camera_Main",
         camera_location,
-        look_at_rotation(
-            camera_location,
-            camera_target,
-        ),
+        camera_rotation,
     )
 
     print(
-        "[SCENE] camera at ({:.1f}, {:.1f}, {:.1f}) looking at "
-        "({:.1f}, {:.1f}, {:.1f})".format(
+        "[SCENE] camera pos=({:.1f}, {:.1f}, {:.1f}) "
+        "rot=(pitch={:.3f}, yaw={:.3f}, roll={:.3f}) "
+        "target=({:.1f}, {:.1f}, {:.1f})".format(
             camera_location.x,
             camera_location.y,
             camera_location.z,
+            camera_rotation.pitch,
+            camera_rotation.yaw,
+            camera_rotation.roll,
             camera_target.x,
             camera_target.y,
             camera_target.z,
@@ -1429,7 +1149,13 @@ try:
     camera_component = camera.get_editor_property(
         "camera_component"
     )
-    camera_component.set_field_of_view(50.0)
+
+    if camera_component is None:
+        raise RuntimeError(
+            "WR_Camera_Main has no CameraComponent"
+        )
+
+    camera_component.set_field_of_view(48.0)
     safe_set(camera_component, "aspect_ratio", 1.6)
     safe_set(
         camera_component,
@@ -1437,16 +1163,57 @@ try:
         True,
     )
 
-    # Camera exposure is intentionally untouched. WR_PostProcess is the
-    # only actor allowed to control exposure.
+    # No camera exposure override and no PostProcessVolume.
+    # Default eye adaptation is intentionally retained for this baseline.
 
-    # -------------------------------------------------------------------------
-    # Save persistent geometry, lights, post process, and camera first.
-    # Dynamic material instances are applied afterward for this render
-    # session.
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
+    # Material invariant and save
+    # ---------------------------------------------------------------------
+
+    print("[SCENE] progress 6/7: validating persistent materials")
+
+    expected_material_path = BASIC_MATERIAL.get_path_name()
+    validated_count = 0
+
+    for label, component in mesh_components:
+        assigned_material = component.get_material(0)
+
+        if assigned_material is None:
+            raise RuntimeError(
+                "{} has a NULL material before save".format(label)
+            )
+
+        assigned_path = assigned_material.get_path_name()
+
+        if assigned_path != expected_material_path:
+            raise RuntimeError(
+                "{} has unexpected material {}; expected {}".format(
+                    label,
+                    assigned_path,
+                    expected_material_path,
+                )
+            )
+
+        if isinstance(
+            assigned_material,
+            unreal.MaterialInstanceDynamic,
+        ):
+            raise RuntimeError(
+                "{} unexpectedly has a MID".format(label)
+            )
+
+        validated_count += 1
+
+    print(
+        "[SCENE] material invariant OK: {}/{} meshes use {}".format(
+            validated_count,
+            len(mesh_components),
+            expected_material_path,
+        )
+    )
 
     print("[SCENE] Saving current level")
+
     save_result = level_subsystem.save_current_level()
 
     if not save_result:
@@ -1455,14 +1222,15 @@ try:
         )
 
     print("[SCENE] Level saved")
+    print(
+        "[SCENE] no ExponentialHeightFog or PostProcessVolume created"
+    )
 
-    apply_dynamic_materials()
+    # ---------------------------------------------------------------------
+    # Preview screenshot and deferred shutdown
+    # ---------------------------------------------------------------------
 
-    # -------------------------------------------------------------------------
-    # Screenshot and deferred shutdown
-    # -------------------------------------------------------------------------
-
-    print("[SCENE] Requesting high-resolution screenshot")
+    print("[SCENE] progress 7/7: requesting preview screenshot")
 
     _SCREENSHOT_TASK = (
         unreal.AutomationLibrary.take_high_res_screenshot(
