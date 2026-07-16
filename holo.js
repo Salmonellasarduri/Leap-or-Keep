@@ -1036,12 +1036,46 @@ export function createHolo(ctx) {
       }
       if (!rec) { rec = makeB3DUnit(u); room.b3dUnits.set(u.id, rec); room.board3d.add(rec.group); changed = true; }
       if (rec.gx !== u.x || rec.gy !== u.y) {
-        rec.group.position.set((u.x - (N - 1) / 2) * pitch, 0, (u.y - (N - 1) / 2) * pitch); // Stage3=スナップ(トゥイーンはStage4)
+        const tx = (u.x - (N - 1) / 2) * pitch, tz = (u.y - (N - 1) / 2) * pitch;
+        if (rec.gx < 0 || reducedMotionFx()) rec.group.position.set(tx, 0, tz); // 初回配置/減モーション=スナップ
+        else rec.tw = { fx: rec.group.position.x, fz: rec.group.position.z, tx, tz, t0: performance.now(), dur: 420 }; // Stage4: 浮上→バンク→着地
         rec.gx = u.x; rec.gy = u.y; changed = true;
       }
     }
     for (const [id, rec] of room.b3dUnits) if (!seen.has(id)) { disposeB3DRec(id, rec); changed = true; }
     if (changed) room.drawn = false; // 状態変化時のみ部屋を1枚再描画=静止時dirty-skip維持(fps)
+  }
+  // Stage4: 3D駒のアニメ(移動トゥイーン=浮上→バンク→着地 / 微浮遊ボブ30fps上限)。
+  // 戻り値true=部屋の再描画が必要。トゥイーン/ボブが動く間だけ描画=Solのfps規律(常時uTime更新をしない)。
+  let _b3dLastBob = 0;
+  function stepBoard3D(now) {
+    if (!room.board3d || !room.b3dUnits) return false;
+    let live = false;
+    for (const [, rec] of room.b3dUnits) {
+      if (rec.tw) {
+        const tw = rec.tw, t = Math.min(1, (now - tw.t0) / tw.dur);
+        const e = 1 - Math.pow(1 - t, 3); // easeOutCubic
+        const x = tw.fx + (tw.tx - tw.fx) * e, z = tw.fz + (tw.tz - tw.fz) * e;
+        const lift = Math.sin(Math.PI * t) * 0.045;                      // 浮上→着地の弧
+        rec.group.position.set(x, lift, z);
+        const dx = tw.tx - tw.fx, dz = tw.tz - tw.fz, n = Math.hypot(dx, dz) || 1;
+        const lean = Math.sin(Math.PI * t) * 0.14;                       // 進行方向へバンク
+        rec.group.rotation.set((dz / n) * lean, 0, -(dx / n) * lean);
+        if (t >= 1) { rec.group.position.set(tw.tx, 0, tw.tz); rec.group.rotation.set(0, 0, 0); rec.tw = null; }
+        live = true;
+      }
+    }
+    // ボブ(微浮遊): 30fps上限・reduced-motion/fxLiteでは停止。実験フラグ経路のみ(既定昇格時にfpsゲート再判定)
+    if (!reducedMotionFx() && now - _b3dLastBob > 33) {
+      _b3dLastBob = now;
+      for (const [, rec] of room.b3dUnits) {
+        if (rec.tw) continue;
+        if (rec.phase === undefined) rec.phase = Math.random() * TAU;
+        rec.group.position.y = Math.sin(now / 900 + rec.phase) * 0.006 + 0.003;
+      }
+      live = true;
+    }
+    return live;
   }
   // Stage2: スクリーン座標→部屋カメラでraycast→盤ローカルへ逆変換→マス(x,y)。nullは盤外。
   let _b3dRay = null, _b3dNdc = null;
@@ -1480,6 +1514,7 @@ export function createHolo(ctx) {
       } else rec.body.material.color.setHex(rec.spec.color); // チャージ明滅後の色戻し
     }
     if (wellRing.visible && amb) wellRing.rotation.z = now / 1200; // Sol #5: 0.7-1.0 rad/s
+    if (BOARD3D) { try { if (stepBoard3D(now)) room.drawn = false; } catch (_) {} } // Stage4: 3D駒アニメ中のみ部屋再描画を要求
     try { bgDraw(now, dt, amb); } catch (e) { bgKill(); } // 背景シーンは死んでも盤ホロを巻き込まない
     try { stepCabin(now, dt); } catch (_) {}              // Phase2: 反応する船内(CSS変形/赤アラート=三再描画なし)
 
